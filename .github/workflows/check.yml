@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Check CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['*']
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-swift-format:
+    name: Check swift-format
+    runs-on: macos-26
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Print swift-format version
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift format --version
+
+      - name: Check Swift format
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift format lint --recursive --strict .
+
+  check-json:
+    name: Check JSON
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check JSON format
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          for file in Package.resolved Schemas/*.json; do
+            jq --indent 2 . "$file" | cmp --silent "$file" -
+          done
+
+  check-reuse:
+    name: Check REUSE
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install REUSE with pipx
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          pipx install reuse
+          printf '%s/.local/bin\n' "$HOME" >> "$GITHUB_PATH"
+
+      - name: Check REUSE compliance
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: reuse lint
+
+  accept-check:
+    name: Accept Check CI
+    if: always()
+    needs:
+      - check-swift-format
+      - check-json
+      - check-reuse
+    runs-on: ubuntu-slim
+    permissions: {}
+
+    steps:
+      - name: Check workflow results
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          [[ '${{ needs.check-swift-format.result }}' == 'success' ]] &&
+          [[ '${{ needs.check-json.result }}' == 'success' ]] &&
+          [[ '${{ needs.check-reuse.result }}' == 'success' ]]

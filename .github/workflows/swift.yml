@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Swift CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ['*']
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-build-and-test:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Print Xcode version
+        id: xcode
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          printf 'version=%s\n' "$(xcodebuild -version | awk '{print $NF}' | paste -s -d _ -)" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftPM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+            swiftpm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build release configuration
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift build --configuration release
+
+      - name: Test
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift test
