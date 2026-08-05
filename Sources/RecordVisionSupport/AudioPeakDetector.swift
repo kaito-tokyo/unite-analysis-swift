@@ -51,22 +51,29 @@ public enum AudioPeakDetector {
   static let minimumPeakSeparation = 0.75
   static let peakDilation = 0.5
 
-  public static func mainMixAudioURL(in bundleURL: URL) throws -> URL {
+  public static func audioURL(in bundleURL: URL) throws -> URL {
     let infoURL = bundleURL.appendingPathComponent("Info.plist")
     guard let data = try? Data(contentsOf: infoURL),
       let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
-      let dictionary = plist as? [String: Any],
-      let tracks = dictionary["LDTXRecordingAudioTracks"] as? [[String: Any]],
-      let track = tracks.first(where: { ($0["Identifier"] as? String) == "main-mix" }),
-      let relativePath = track["MediaFile"] as? String,
-      !relativePath.isEmpty
+      let dictionary = plist as? [String: Any]
     else {
       throw AudioPeakDetectorError.message(
-        "Info.plist has no main-mix audio track: \(infoURL.path)")
+        "Could not read LDTX recording metadata: \(infoURL.path)")
     }
+
+    let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
+    guard formatVersion == 2 else {
+      throw AudioPeakDetectorError.message(
+        "audio-peaks requires LDTX recording format version 2: \(infoURL.path)")
+    }
+
+    // Recording format v2 defines the main media name independently of whether the redundant
+    // LDTXRecordingMainMediaFile metadata is present.
+    let relativePath = "main.fragmented.mp4"
     let audioURL = bundleURL.appendingPathComponent(relativePath).standardizedFileURL
     guard FileManager.default.fileExists(atPath: audioURL.path) else {
-      throw AudioPeakDetectorError.message("Main-mix audio file was not found: \(audioURL.path)")
+      throw AudioPeakDetectorError.message(
+        "Recording format v2 main media file was not found: \(audioURL.path)")
     }
     return audioURL
   }

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import AVFoundation
 import Foundation
 import LDTXRecordingSupport
 import Testing
@@ -13,6 +14,123 @@ import Testing
   #expect(message.contains("VideoToolbox"))
   #expect(message.contains("outside an application sandbox"))
   #expect(message.contains("before treating the media as invalid"))
+}
+
+private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {
+  let bundle = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathComponent("sample.ldtxrecord")
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  let data = try PropertyListSerialization.data(
+    fromPropertyList: info, format: .xml, options: 0)
+  try data.write(to: bundle.appendingPathComponent("Info.plist"))
+  for file in files {
+    FileManager.default.createFile(
+      atPath: bundle.appendingPathComponent(file).path, contents: Data())
+  }
+  return bundle
+}
+
+private func writeSilentVideoWithoutAudio(to url: URL) async throws {
+  let writer = try AVAssetWriter(url: url, fileType: .mp4)
+  let input = AVAssetWriterInput(
+    mediaType: .video,
+    outputSettings: [
+      AVVideoCodecKey: AVVideoCodecType.h264,
+      AVVideoWidthKey: 16,
+      AVVideoHeightKey: 16,
+    ])
+  let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+    assetWriterInput: input,
+    sourcePixelBufferAttributes: [
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+      kCVPixelBufferWidthKey as String: 16,
+      kCVPixelBufferHeightKey as String: 16,
+    ])
+  #expect(writer.canAdd(input))
+  writer.add(input)
+  #expect(writer.startWriting())
+  writer.startSession(atSourceTime: .zero)
+  var pixelBuffer: CVPixelBuffer?
+  let status = CVPixelBufferCreate(
+    nil, 16, 16, kCVPixelFormatType_32BGRA, nil, &pixelBuffer)
+  #expect(status == kCVReturnSuccess)
+  guard let pixelBuffer else { return }
+  #expect(adaptor.append(pixelBuffer, withPresentationTime: .zero))
+  input.markAsFinished()
+  await writer.finishWriting()
+  #expect(writer.status == .completed)
+}
+
+@Test func audioPeakInputUsesFixedV2MainMediaWithoutMainMixMetadata() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 2,
+      "LDTXRecordingMainMediaFile": "main.fragmented.mp4",
+    ],
+    files: ["main.fragmented.mp4"])
+  #expect(
+    try AudioPeakDetector.audioURL(in: bundle)
+      == bundle.appendingPathComponent("main.fragmented.mp4"))
+}
+
+@Test func audioPeakInputUsesV2FixedNameInsteadOfConflictingMetadata() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 2,
+      "LDTXRecordingMainMediaFile": "unexpected.mp4",
+      "LDTXRecordingAudioTracks": [
+        ["Identifier": "main-mix", "MediaFile": "legacy.m4a"]
+      ],
+    ],
+    files: ["main.fragmented.mp4", "unexpected.mp4", "legacy.m4a"])
+  #expect(
+    try AudioPeakDetector.audioURL(in: bundle)
+      == bundle.appendingPathComponent("main.fragmented.mp4"))
+}
+
+@Test func audioPeakInputRejectsV1MainMixRecording() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 1,
+      "LDTXRecordingAudioTracks": [
+        ["Identifier": "other", "MediaFile": "other.m4a"],
+        ["Identifier": "main-mix", "MediaFile": "main-mix.m4a"],
+      ],
+    ],
+    files: ["main-mix.m4a"])
+  #expect(throws: AudioPeakDetectorError.self) {
+    try AudioPeakDetector.audioURL(in: bundle)
+  }
+  do {
+    _ = try AudioPeakDetector.audioURL(in: bundle)
+    Issue.record("Expected recording format v1 to be rejected")
+  } catch {
+    #expect(
+      String(describing: error)
+        == "audio-peaks requires LDTX recording format version 2: \(bundle.appendingPathComponent("Info.plist").path)"
+    )
+  }
+}
+
+@Test func audioPeakDetectorDiagnosesV2MainMediaWithoutAudioTrack() async throws {
+  let bundle = try audioPeakTestBundle(
+    info: ["LDTXRecordingFormatVersion": 2], files: [])
+  let videoURL = bundle.appendingPathComponent("main.fragmented.mp4")
+  try await writeSilentVideoWithoutAudio(to: videoURL)
+  let resolvedURL = try AudioPeakDetector.audioURL(in: bundle)
+  do {
+    _ = try await AudioPeakDetector.detect(
+      audioURL: resolvedURL,
+      globalId: "test",
+      matchStartPTS: .zero,
+      inmatchStart: 0,
+      duration: 0.01,
+      gain: 1)
+    Issue.record("Expected video without audio to be rejected")
+  } catch {
+    #expect(String(describing: error) == "No audio track: \(videoURL.path)")
+  }
 }
 
 @Test func drawTextScriptReturnExpressionUsesSharedContext() throws {

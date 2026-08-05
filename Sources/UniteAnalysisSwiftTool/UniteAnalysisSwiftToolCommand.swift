@@ -254,7 +254,7 @@ private struct UniteAnalysisSwiftTool: AsyncParsableCommand {
       Requires macOS 26 or later. OCR uses Apple Vision locally. The input video is never a Vision
       JPEG. Commands print machine-readable results or output paths to stdout and diagnostics,
       resolved inputs, timestamps, and unfinished-recording warnings to stderr.
-      Audio peak detection uses the main-mix track only
+      Audio peak detection uses recording format v2 main-media audio
       to propose visually interesting times; it does not classify events. Run `batch-frame --help`, `precise-frame --help`,
       `contact-sheet --help`, `continuous-ocr --help`, `ocr-input-frame --help`, `detect-chroma-events --help`,
       `audio-peaks --help`, `result-scan --help`, `eval-draw-text-script --help`, or `config --help`
@@ -402,10 +402,12 @@ private struct ResultScan: ParsableCommand {
 private struct AudioPeaks: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "audio-peaks",
-    abstract: "Print visually interesting main-mix SE peak times as JSON.",
+    abstract: "Print visually interesting recording-audio SE peak times as JSON.",
     discussion: """
-      Reads the main-mix audio track named by the enclosing .ldtxrecord/Info.plist and runs a
-      fixed Pokémon UNITE onset detector. The detector uses 10ms integer power blocks and a
+      For recording format v2, reads the audio track embedded in main.fragmented.mp4. The v2
+      filename is fixed by the format; LDTXRecordingMainMediaFile normally records the same name
+      but is not required for input resolution. Other recording format versions are rejected.
+      It then runs a fixed Pokémon UNITE onset detector. The detector uses 10ms integer power blocks and a
       fixed 50ms-versus-200ms FIR. It proposes times for later source-video or contact-sheet
       analysis and never labels a peak as KO, ping, announcement, or any other event.
 
@@ -418,8 +420,8 @@ private struct AudioPeaks: AsyncParsableCommand {
       to analyze the full match. --gain is a fixed linear gain applied before Int16 power
       calculation; there is no automatic gain control. Detector windows, threshold, and peak
       separation are intentionally not configurable. JSON is written to stdout. Input paths and
-      unfinished-recording warnings are written to stderr. Missing Info.plist main-mix metadata, a
-      missing main-mix file, or an undecodable interval is an error. No other audio track is used.
+      unfinished-recording warnings are written to stderr. Missing input metadata or media, a v2
+      main media file with no audio track, or an undecodable interval is an error.
       """
   )
 
@@ -469,7 +471,7 @@ private struct AudioPeaks: AsyncParsableCommand {
     {
       RecordVisionInputLogger.unfinishedRecording(bundleURL)
     }
-    let audioURL = try AudioPeakDetector.mainMixAudioURL(in: bundleURL)
+    let audioURL = try AudioPeakDetector.audioURL(in: bundleURL)
     RecordVisionInputLogger.sourceAudio(audioURL)
     let result = try await AudioPeakDetector.detect(
       audioURL: audioURL,
