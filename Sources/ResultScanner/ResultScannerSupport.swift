@@ -22,17 +22,17 @@ enum ScannerError: Error, CustomStringConvertible {
   }
 }
 
-struct NormalizedRect: Codable {
-  let x: Double
-  let y: Double
-  let width: Double
-  let height: Double
+public struct NormalizedRect: Codable, Sendable {
+  public let x: Double
+  public let y: Double
+  public let width: Double
+  public let height: Double
 }
 
-struct TextObservation: Codable {
-  let text: String
-  let confidence: Float
-  let box: NormalizedRect
+public struct TextObservation: Codable, Sendable {
+  public let text: String
+  public let confidence: Float
+  public let box: NormalizedRect
 }
 
 struct OCRCell: Codable {
@@ -71,6 +71,7 @@ struct ScreenResult: Codable {
 struct ScanResult: Codable {
   let input: String
   let generatedAt: String
+  let ocrOptions: [String: OCRRecognitionOptions]
   let screens: [ScreenResult]
   let warnings: [String]
 }
@@ -80,17 +81,122 @@ public enum ResultScreenType: String {
   case battleData
 }
 
-enum StillImageInput {
+public struct OCRRecognitionOptions: Codable, Sendable {
+  public let recognitionLanguages: [String]
+  public let customWords: [String]?
+
+  public init(recognitionLanguages: [String], customWords: [String]? = nil) {
+    self.recognitionLanguages = recognitionLanguages
+    self.customWords = customWords
+  }
+}
+
+public struct OCRRecognitionOptionsDocument: Decodable, Sendable {
+  public static let schemaURL =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json"
+
+  public let schema: String
+  public let regions: [String: OCRRecognitionOptions]
+
+  private struct DynamicCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int? = nil
+
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+    let schemaKey = DynamicCodingKey(stringValue: "$schema")!
+    schema = try container.decode(String.self, forKey: schemaKey)
+    regions = try Dictionary(
+      uniqueKeysWithValues: container.allKeys.compactMap { key in
+        guard key.stringValue != "$schema" else { return nil }
+        return (key.stringValue, try container.decode(OCRRecognitionOptions.self, forKey: key))
+      })
+  }
+}
+
+public enum ScanResultOCRRegion {
+  public static let screenText = "result-screen.text"
+  public static let playerName = "player-name"
+  public static let numeric = "result-screen.numeric"
+}
+
+public enum OCRInputType: String, Codable, Sendable {
+  case text
+  case playerName = "player-name"
+  case numeric
+}
+
+public struct OCRInputResult: Codable, Sendable {
+  public let observations: [TextObservation]
+  public let values: [String]
+}
+
+public enum OCRInput {
+  static func readingOrder(_ observations: [TextObservation]) -> [TextObservation] {
+    let verticallyOrdered = observations.sorted {
+      if $0.box.y != $1.box.y { return $0.box.y > $1.box.y }
+      return $0.box.x < $1.box.x
+    }
+    var rows: [[TextObservation]] = []
+    var rowAnchorY: Double?
+    for observation in verticallyOrdered {
+      if let rowAnchorY, abs(rowAnchorY - observation.box.y) <= 0.02 {
+        rows[rows.count - 1].append(observation)
+      } else {
+        rows.append([observation])
+        rowAnchorY = observation.box.y
+      }
+    }
+    return rows.flatMap { $0.sorted { $0.box.x < $1.box.x } }
+  }
+
+  static func interpreted(
+    _ observations: [TextObservation], type: OCRInputType
+  ) -> OCRInputResult {
+    let ordered = readingOrder(observations)
+    let values: [String]
+    switch type {
+    case .text:
+      values = ordered.map(\.text)
+    case .playerName:
+      let joined = ordered.map(\.text).joined(separator: " ")
+      values = joined.isEmpty ? [] : [OCR.cleanName(joined)]
+    case .numeric:
+      values = ordered.flatMap { OCR.numberTokens(in: $0.text) }
+    }
+    return OCRInputResult(observations: ordered, values: values)
+  }
+
+  public static func recognize(
+    _ image: CGImage,
+    type: OCRInputType,
+    options: OCRRecognitionOptions
+  ) throws -> OCRInputResult {
+    let observations = try OCR.recognize(
+      image,
+      languages: options.recognitionLanguages,
+      customWords: options.customWords ?? [],
+      correction: false
+    )
+    return interpreted(observations, type: type)
+  }
+}
+
+public enum StillImageInput {
   private static let extensions = Set(["bmp", "gif", "heic", "jpeg", "jpg", "png", "tif", "tiff"])
 
-  static func supports(_ url: URL) -> Bool {
+  public static func supports(_ url: URL) -> Bool {
     extensions.contains(url.pathExtension.lowercased())
   }
 
-  static func load(_ url: URL) throws -> CGImage {
+  public static func load(_ url: URL) throws -> CGImage {
     guard supports(url) else {
       throw ScannerError.message(
-        "result-scan accepts only still images (BMP, GIF, HEIC, JPEG, PNG, or TIFF): \(url.path)"
+        "Still-image input accepts only BMP, GIF, HEIC, JPEG, PNG, or TIFF: \(url.path)"
       )
     }
     let data = try Data(contentsOf: url)
@@ -99,11 +205,6 @@ enum StillImageInput {
       let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     else {
       throw ScannerError.message("Could not decode still image: \(url.path)")
-    }
-    guard image.width == 1632, image.height == 918 else {
-      throw ScannerError.message(
-        "Still-image input must be the 1632x918 cropped game screen produced by batch-frame or precise-frame; got \(image.width)x\(image.height): \(url.path)"
-      )
     }
     return image
   }
@@ -116,11 +217,15 @@ enum GameScreenInput {
 
 enum OCR {
   static func recognize(
-    _ image: CGImage, languages: [String] = ["ja-JP", "en-US"], correction: Bool = false
+    _ image: CGImage,
+    languages: [String],
+    customWords: [String] = [],
+    correction: Bool = false
   ) throws -> [TextObservation] {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.recognitionLanguages = languages
+    request.customWords = customWords
     request.usesLanguageCorrection = correction
     request.minimumTextHeight = 0.008
     try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
@@ -135,13 +240,23 @@ enum OCR {
     }
   }
 
-  static func cell(_ image: CGImage, rect: CGRect, numeric: Bool) throws -> OCRCell {
+  static func cell(
+    _ image: CGImage,
+    rect: CGRect,
+    numeric: Bool,
+    languages: [String],
+    customWords: [String]
+  ) throws -> OCRCell {
     guard let crop = image.cropping(to: rect.integral) else {
       return OCRCell(text: nil, confidence: nil, alternatives: [])
     }
     // Player names are proper nouns and mixed-script handles, so language
     // correction is more likely to change a valid name than repair it.
-    let observations = try recognize(crop, correction: false)
+    let observations = try recognize(
+      crop,
+      languages: languages,
+      customWords: customWords,
+      correction: false)
     let joined =
       observations
       .sorted { $0.box.x < $1.box.x }
@@ -160,11 +275,19 @@ enum OCR {
       alternatives: candidates.map { numeric ? $0 : cleanName($0) })
   }
 
-  static func numericCells(_ image: CGImage, rect: CGRect, count: Int) throws -> [OCRCell] {
+  static func numericCells(
+    _ image: CGImage,
+    rect: CGRect,
+    count: Int,
+    languages: [String],
+    customWords: [String]
+  ) throws -> [OCRCell] {
     guard let crop = image.cropping(to: rect.integral) else {
       return Array(repeating: OCRCell(text: nil, confidence: nil, alternatives: []), count: count)
     }
-    let observations = try recognize(crop).sorted { $0.box.x < $1.box.x }
+    let observations = try recognize(
+      crop, languages: languages, customWords: customWords
+    ).sorted { $0.box.x < $1.box.x }
     var cells: [OCRCell] = []
     for observation in observations {
       for token in numberTokens(in: observation.text) {
@@ -253,8 +376,11 @@ enum OCR {
     value.trimmingCharacters(in: CharacterSet(charactersIn: "「『| "))
   }
 
-  static func recognizeResultScreen(_ image: CGImage) throws -> [TextObservation] {
-    var observations = try recognize(image, correction: true)
+  static func recognizeResultScreen(
+    _ image: CGImage, languages: [String], customWords: [String]
+  ) throws -> [TextObservation] {
+    var observations = try recognize(
+      image, languages: languages, customWords: customWords, correction: true)
     let sx = CGFloat(image.width) / CGFloat(GameScreenInput.width)
     let sy = CGFloat(image.height) / CGFloat(GameScreenInput.height)
     let regions = [
@@ -263,7 +389,9 @@ enum OCR {
     ]
     for region in regions {
       if let crop = image.cropping(to: region.integral) {
-        observations.append(contentsOf: try recognize(crop, correction: true))
+        observations.append(
+          contentsOf: try recognize(
+            crop, languages: languages, customWords: customWords, correction: true))
       }
     }
     return observations
@@ -360,7 +488,11 @@ func detectionScores(_ observations: [TextObservation]) -> (battle: Int, summary
   return (battle, summary)
 }
 
-func battleRows(from image: CGImage) throws -> [BattleDataRow] {
+func battleRows(
+  from image: CGImage,
+  nameOptions: OCRRecognitionOptions,
+  numericOptions: OCRRecognitionOptions
+) throws -> [BattleDataRow] {
   var rows: [BattleDataRow] = []
   for (side, columns) in [("ally", Layout.battleLeft), ("enemy", Layout.battleRight)] {
     for row in 0..<5 {
@@ -371,28 +503,43 @@ func battleRows(from image: CGImage) throws -> [BattleDataRow] {
           name: try OCR.cell(
             image,
             rect: Layout.rect(columns.name, row: row, rowTops: Layout.battleRowTops, image: image),
-            numeric: false),
+            numeric: false,
+            languages: nameOptions.recognitionLanguages,
+            customWords: nameOptions.customWords ?? []),
           damageDealt: try OCR.cell(
             image,
             rect: Layout.rect(columns.first, row: row, rowTops: Layout.battleRowTops, image: image),
-            numeric: true),
+            numeric: true,
+            languages: numericOptions.recognitionLanguages,
+            customWords: numericOptions.customWords ?? []),
           damageTaken: try OCR.cell(
             image,
             rect: Layout.rect(
-              columns.second, row: row, rowTops: Layout.battleRowTops, image: image), numeric: true),
+              columns.second, row: row, rowTops: Layout.battleRowTops, image: image), numeric: true,
+            languages: numericOptions.recognitionLanguages,
+            customWords: numericOptions.customWords ?? []),
           healing: try OCR.cell(
             image,
             rect: Layout.rect(columns.third, row: row, rowTops: Layout.battleRowTops, image: image),
-            numeric: true)
+            numeric: true,
+            languages: numericOptions.recognitionLanguages,
+            customWords: numericOptions.customWords ?? [])
         ))
     }
   }
   return rows
 }
 
-func summaryRows(from image: CGImage) throws -> [SummaryRow] {
+func summaryRows(
+  from image: CGImage,
+  nameOptions: OCRRecognitionOptions,
+  numericOptions: OCRRecognitionOptions
+) throws -> [SummaryRow] {
   var rows: [SummaryRow] = []
-  let fullObservations = try OCR.recognize(image)
+  let fullObservations = try OCR.recognize(
+    image,
+    languages: numericOptions.recognitionLanguages,
+    customWords: numericOptions.customWords ?? [])
   for (side, columns) in [("ally", Layout.summaryLeft), ("enemy", Layout.summaryRight)] {
     for row in 0..<5 {
       let scaleX = CGFloat(image.width) / CGFloat(GameScreenInput.width)
@@ -415,7 +562,9 @@ func summaryRows(from image: CGImage) throws -> [SummaryRow] {
       let rowWide = try OCR.numericCells(
         image,
         rect: Layout.rect(numericBase, row: row, rowTops: Layout.summaryRowTops, image: image),
-        count: 4
+        count: 4,
+        languages: numericOptions.recognitionLanguages,
+        customWords: numericOptions.customWords ?? []
       )
       if rowWide.allSatisfy({ $0.text != nil }) {
         for index in numbers.indices where numbers[index].text == nil {
@@ -434,7 +583,9 @@ func summaryRows(from image: CGImage) throws -> [SummaryRow] {
           name: try OCR.cell(
             image,
             rect: Layout.rect(columns.name, row: row, rowTops: Layout.summaryRowTops, image: image),
-            numeric: false),
+            numeric: false,
+            languages: nameOptions.recognitionLanguages,
+            customWords: nameOptions.customWords ?? []),
           scored: numbers[0],
           knockouts: numbers[1],
           assists: numbers[2],
@@ -449,12 +600,24 @@ public enum ResultScannerRunner {
   public static func run(
     input: String,
     type: ResultScreenType,
+    ocrOptions: [String: OCRRecognitionOptions],
     output: String? = nil
   ) throws {
+    guard let screenTextOptions = ocrOptions[ScanResultOCRRegion.screenText],
+      let playerNameOptions = ocrOptions[ScanResultOCRRegion.playerName],
+      let numericOptions = ocrOptions[ScanResultOCRRegion.numeric]
+    else {
+      throw ScannerError.message(
+        "scan-result requires OCR options for \(ScanResultOCRRegion.screenText), \(ScanResultOCRRegion.playerName), and \(ScanResultOCRRegion.numeric)"
+      )
+    }
     let arguments = Arguments(input: input, output: output)
     let inputURL = URL(fileURLWithPath: arguments.input).standardizedFileURL
     let image = try StillImageInput.load(inputURL)
-    let raw = try OCR.recognizeResultScreen(image)
+    let raw = try OCR.recognizeResultScreen(
+      image,
+      languages: screenTextOptions.recognitionLanguages,
+      customWords: screenTextOptions.customWords ?? [])
     let scores = detectionScores(raw)
 
     let screen: ScreenResult
@@ -465,7 +628,10 @@ public enum ResultScannerRunner {
         kind: "battleData",
         detectionScore: scores.battle,
         rawText: raw,
-        battleData: try battleRows(from: image),
+        battleData: try battleRows(
+          from: image,
+          nameOptions: playerNameOptions,
+          numericOptions: numericOptions),
         summary: nil
       )
       if scores.battle < 4 {
@@ -477,7 +643,10 @@ public enum ResultScannerRunner {
         detectionScore: scores.summary,
         rawText: raw,
         battleData: nil,
-        summary: try summaryRows(from: image)
+        summary: try summaryRows(
+          from: image,
+          nameOptions: playerNameOptions,
+          numericOptions: numericOptions)
       )
       if scores.summary < 3 {
         warnings.append("The input image has a low summary-screen detection score.")
@@ -491,6 +660,11 @@ public enum ResultScannerRunner {
     let result = ScanResult(
       input: inputURL.path,
       generatedAt: formatter.string(from: Date()),
+      ocrOptions: [
+        ScanResultOCRRegion.screenText: screenTextOptions,
+        ScanResultOCRRegion.playerName: playerNameOptions,
+        ScanResultOCRRegion.numeric: numericOptions,
+      ],
       screens: [screen],
       warnings: warnings
     )

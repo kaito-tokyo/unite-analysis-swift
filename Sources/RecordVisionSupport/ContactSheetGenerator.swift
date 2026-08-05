@@ -33,15 +33,6 @@ public enum RecordVisionInputLogger {
     write("source audio", url)
   }
 
-  public static func continuousOCRFrames(requested: Int, distinct: Int, maximumError: Double) {
-    let line = String(
-      format:
-        "unite-analysis-swift: continuous OCR actual frames: %d distinct / %d requested, maximum time error %.3fs\n",
-      distinct, requested, maximumError
-    )
-    FileHandle.standardError.write(Data(line.utf8))
-  }
-
   public static func unfinishedRecording(_ url: URL) {
     let line =
       "unite-analysis-swift: warning: recording is not finalized (missing .finalized): " + url.path
@@ -83,19 +74,47 @@ public struct ContactSheetDefinition: Codable {
     public let destination: Rectangle?
     public let drawText: Text?
   }
-  public struct Frame: Codable {
-    public let inmatch: Double?
-    public let beforeStart: Double?
-    public let afterEnd: Double?
-  }
-
   public let cell: Size
   public let columns: Int
   public let backgroundColor: String?
   public let placements: [Placement]
-  public let frames: [Frame]
+  public let matchTimestamps: [Double]
+  /// Required and validated by the command-line JSONL jobs interface.
+  public let jobId: String?
   /// Required by the command-line jobs interface; ignored by the renderer itself.
   public let output: String?
+
+  private enum CodingKeys: String, CodingKey {
+    case jobId, cell, columns, backgroundColor, placements, matchTimestamps, output, frames
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    if container.contains(.frames) {
+      throw DecodingError.dataCorruptedError(
+        forKey: .frames,
+        in: container,
+        debugDescription: "frames is no longer supported; use matchTimestamps")
+    }
+    cell = try container.decode(Size.self, forKey: .cell)
+    columns = try container.decode(Int.self, forKey: .columns)
+    backgroundColor = try container.decodeIfPresent(String.self, forKey: .backgroundColor)
+    placements = try container.decode([Placement].self, forKey: .placements)
+    matchTimestamps = try container.decode([Double].self, forKey: .matchTimestamps)
+    jobId = try container.decodeIfPresent(String.self, forKey: .jobId)
+    output = try container.decodeIfPresent(String.self, forKey: .output)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(cell, forKey: .cell)
+    try container.encode(columns, forKey: .columns)
+    try container.encodeIfPresent(backgroundColor, forKey: .backgroundColor)
+    try container.encode(placements, forKey: .placements)
+    try container.encode(matchTimestamps, forKey: .matchTimestamps)
+    try container.encodeIfPresent(jobId, forKey: .jobId)
+    try container.encodeIfPresent(output, forKey: .output)
+  }
 }
 
 public enum DrawTextScriptEngine {
@@ -129,7 +148,7 @@ public enum DrawTextScriptEngine {
     let size = try await track.load(.naturalSize)
     return try evaluate(
       script: script, index: index, inmatch: inmatch, beforeStart: beforeStart, afterEnd: afterEnd,
-      matchDuration: record.duration, recordGlobalID: record.globalId,
+      matchDuration: record.duration, recordMatchId: record.matchId,
       videoWidth: Int(size.width), videoHeight: Int(size.height),
       videoFrameRate: Double(try await track.load(.nominalFrameRate)),
       videoDuration: try await asset.load(.duration).seconds
@@ -144,7 +163,7 @@ public enum DrawTextScriptEngine {
     afterEnd: Double?,
     actualInmatch: Double? = nil,
     matchDuration: Double,
-    recordGlobalID: String,
+    recordMatchId: String,
     videoWidth: Int,
     videoHeight: Int,
     videoFrameRate: Double,
@@ -162,7 +181,7 @@ public enum DrawTextScriptEngine {
         "actualInmatch": actualInmatch as Any,
       ], forKeyedSubscript: "FRAME" as NSString)
     context.setObject(["duration": matchDuration], forKeyedSubscript: "MATCH" as NSString)
-    context.setObject(["globalId": recordGlobalID], forKeyedSubscript: "RECORD" as NSString)
+    context.setObject(["matchId": recordMatchId], forKeyedSubscript: "RECORD" as NSString)
     context.setObject(
       [
         "width": videoWidth, "height": videoHeight, "frameRate": videoFrameRate,
@@ -217,10 +236,10 @@ public enum ContactSheetGenerator {
       throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
     }
     guard definition.cell.width > 0, definition.cell.height > 0, definition.columns > 0,
-      !definition.placements.isEmpty, !definition.frames.isEmpty
+      !definition.placements.isEmpty, !definition.matchTimestamps.isEmpty
     else {
       throw ContactSheetGeneratorError.message(
-        "cell, columns, placements, and frames must not be empty or non-positive")
+        "cell, columns, placements, and matchTimestamps must not be empty or non-positive")
     }
     for placement in definition.placements {
       if let source = placement.source, let destination = placement.destination,
@@ -246,9 +265,8 @@ public enum ContactSheetGenerator {
           "Each placement must be exactly one image placement or drawText placement")
       }
     }
-    let frameOffsets = try validatedOffsets(
-      frames: definition.frames, duration: recordSpec.duration)
-    let rows = Int(ceil(Double(definition.frames.count) / Double(definition.columns)))
+    let frameOffsets = try validatedOffsets(matchTimestamps: definition.matchTimestamps)
+    let rows = Int(ceil(Double(definition.matchTimestamps.count) / Double(definition.columns)))
     let width =
       definition.columns * definition.cell.width + max(0, definition.columns - 1) * cellSeparator
     let height = rows * definition.cell.height + max(0, rows - 1) * cellSeparator
@@ -321,7 +339,7 @@ public enum ContactSheetGenerator {
           "Source-video image generation returned an unknown or duplicate requested time: \(requestedTime.seconds)s"
         )
       }
-      let frameDefinition = definition.frames[index]
+      let frameDefinition = definition.matchTimestamps[index]
       let actualInmatch = CMTimeSubtract(actualTime, start).seconds
       let column = index % definition.columns
       let row = index / definition.columns
@@ -338,7 +356,7 @@ public enum ContactSheetGenerator {
         } else if let text = placement.drawText {
           let renderedText = try resolveText(
             text, frame: frameDefinition, index: index, actualInmatch: actualInmatch,
-            matchDuration: recordSpec.duration, recordGlobalID: recordSpec.globalId, video: video
+            matchDuration: recordSpec.duration, recordMatchId: recordSpec.matchId, video: video
           )
           try draw(
             text, renderedText: renderedText, in: context, cellX: cellX, cellY: cellY,
@@ -357,35 +375,22 @@ public enum ContactSheetGenerator {
     try FileManager.default.createDirectory(
       at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
-    print(outputURL.path)
   }
 
-  private static func offset(for frame: ContactSheetDefinition.Frame, duration: Double) throws
-    -> Double
-  {
-    let values = [frame.inmatch, frame.beforeStart, frame.afterEnd].compactMap { $0 }
-    guard values.count == 1, let value = values.first, value.isFinite else {
-      throw ContactSheetGeneratorError.message(
-        "Each frame must specify exactly one finite inmatch, beforeStart, or afterEnd value")
-    }
-    if frame.inmatch != nil { return value }
-    if frame.beforeStart != nil { return -value }
-    return duration + value
-  }
-
-  static func validatedOffsets(frames: [ContactSheetDefinition.Frame], duration: Double) throws
-    -> [Double]
-  {
+  static func validatedOffsets(matchTimestamps: [Double]) throws -> [Double] {
     var offsets: [Double] = []
-    offsets.reserveCapacity(frames.count)
-    for (index, frame) in frames.enumerated() {
-      let current = try offset(for: frame, duration: duration)
-      if let previous = offsets.last, current <= previous {
+    offsets.reserveCapacity(matchTimestamps.count)
+    for (index, frame) in matchTimestamps.enumerated() {
+      guard frame.isFinite else {
         throw ContactSheetGeneratorError.message(
-          "frames must resolve to strictly increasing source times: frames[\(index)] = \(current)s is not later than frames[\(index - 1)] = \(previous)s"
+          "matchTimestamps must contain only finite values")
+      }
+      if let previous = offsets.last, frame <= previous {
+        throw ContactSheetGeneratorError.message(
+          "matchTimestamps must be strictly increasing: matchTimestamps[\(index)] = \(frame)s is not later than matchTimestamps[\(index - 1)] = \(previous)s"
         )
       }
-      offsets.append(current)
+      offsets.append(frame)
     }
     return offsets
   }
@@ -481,22 +486,25 @@ public enum ContactSheetGenerator {
 
   private static func resolveText(
     _ text: ContactSheetDefinition.Text,
-    frame: ContactSheetDefinition.Frame,
+    frame: Double,
     index: Int,
     actualInmatch: Double,
     matchDuration: Double,
-    recordGlobalID: String,
+    recordMatchId: String,
     video: VideoMetadata
   ) throws -> String {
     if let value = text.text { return value }
     guard let script = text.script else {
       throw ContactSheetGeneratorError.message("drawText has neither text nor script")
     }
+    let inmatch = (0...matchDuration).contains(frame) ? frame : nil
+    let beforeStart = frame < 0 ? -frame : nil
+    let afterEnd = frame > matchDuration ? frame - matchDuration : nil
     return try DrawTextScriptEngine.evaluate(
-      script: script.return, index: index, inmatch: frame.inmatch, beforeStart: frame.beforeStart,
-      afterEnd: frame.afterEnd,
+      script: script.return, index: index, inmatch: inmatch, beforeStart: beforeStart,
+      afterEnd: afterEnd,
       actualInmatch: actualInmatch,
-      matchDuration: matchDuration, recordGlobalID: recordGlobalID,
+      matchDuration: matchDuration, recordMatchId: recordMatchId,
       videoWidth: video.width, videoHeight: video.height, videoFrameRate: video.frameRate,
       videoDuration: video.duration
     )

@@ -30,7 +30,8 @@ let package = Package(
     .testTarget(
       name: "LDTXRecordingSupportTests",
       dependencies: [
-        "LDTXRecordingSupport", "RecordVisionSupport", "UniteAnalysisConfiguration",
+        "LDTXRecordingSupport", "RecordVisionSupport", "ResultScannerSupport",
+        "UniteAnalysisConfiguration",
       ]),
   ]
 )

@@ -4,13 +4,13 @@
 
 import Foundation
 
-public struct RecordVisionRecordSpec: Decodable {
-  public struct StartPTS: Decodable {
+public struct RecordVisionRecordSpec: Decodable, Sendable {
+  public struct StartPTS: Decodable, Sendable {
     public let value: Int64
     public let timescale: Int32
   }
 
-  public struct VideoComponent: Decodable {
+  public struct VideoComponent: Decodable, Sendable {
     public let name: String
     public let x: Int
     public let y: Int
@@ -18,8 +18,7 @@ public struct RecordVisionRecordSpec: Decodable {
     public let height: Int
   }
 
-  public let globalId: String
-  public let isCompleted: Bool
+  public let matchId: String
   public let startPTS: StartPTS
   public let duration: Double
   public let videoComponents: [VideoComponent]

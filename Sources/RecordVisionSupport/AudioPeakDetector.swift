@@ -33,13 +33,62 @@ public struct AudioPeakInterval: Codable, Equatable, Sendable {
 }
 
 public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
-  public let globalId: String
+  public static let schema =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json"
+
+  public let matchId: String
   public let inmatchStart: Double
   public let duration: Double
   public let gain: Double
   public let dilation: Double
   public let peaks: [AudioPeak]
   public let intervals: [AudioPeakInterval]
+
+  private enum CodingKeys: String, CodingKey {
+    case schema = "$schema"
+    case matchId, inmatchStart, duration, gain, dilation, peaks, intervals
+  }
+
+  public init(
+    matchId: String,
+    inmatchStart: Double,
+    duration: Double,
+    gain: Double,
+    dilation: Double,
+    peaks: [AudioPeak],
+    intervals: [AudioPeakInterval]
+  ) {
+    self.matchId = matchId
+    self.inmatchStart = inmatchStart
+    self.duration = duration
+    self.gain = gain
+    self.dilation = dilation
+    self.peaks = peaks
+    self.intervals = intervals
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    matchId = try container.decode(String.self, forKey: .matchId)
+    inmatchStart = try container.decode(Double.self, forKey: .inmatchStart)
+    duration = try container.decode(Double.self, forKey: .duration)
+    gain = try container.decode(Double.self, forKey: .gain)
+    dilation = try container.decode(Double.self, forKey: .dilation)
+    peaks = try container.decode([AudioPeak].self, forKey: .peaks)
+    intervals = try container.decode([AudioPeakInterval].self, forKey: .intervals)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(Self.schema, forKey: .schema)
+    try container.encode(matchId, forKey: .matchId)
+    try container.encode(inmatchStart, forKey: .inmatchStart)
+    try container.encode(duration, forKey: .duration)
+    try container.encode(gain, forKey: .gain)
+    try container.encode(dilation, forKey: .dilation)
+    try container.encode(peaks, forKey: .peaks)
+    try container.encode(intervals, forKey: .intervals)
+  }
 }
 
 public enum AudioPeakDetector {
@@ -80,7 +129,7 @@ public enum AudioPeakDetector {
 
   public static func detect(
     audioURL: URL,
-    globalId: String,
+    matchId: String,
     matchStartPTS: CMTime,
     inmatchStart: Double,
     duration: Double,
@@ -180,7 +229,7 @@ public enum AudioPeakDetector {
       requestedInmatchEnd: inmatchStart + duration
     )
     return AudioPeakDetectionResult(
-      globalId: globalId,
+      matchId: matchId,
       inmatchStart: inmatchStart,
       duration: duration,
       gain: gain,

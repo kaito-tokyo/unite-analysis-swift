@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json",
+  "title": "unite-analysis-swift detect-chroma-events output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "inputSampleDirectory",
+    "inputSampleCount",
+    "firstInputFilename",
+    "lastInputFilename",
+    "fps",
+    "sampledWidth",
+    "sampledHeight",
+    "samples"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json"
+    },
+    "inputSampleDirectory": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inputSampleCount": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "firstInputFilename": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lastInputFilename": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "sampledWidth": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sampledHeight": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/sample"
+      }
+    }
+  },
+  "$defs": {
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestedInmatch",
+        "actualInmatch",
+        "score",
+        "cbThreshold",
+        "crThreshold",
+        "cbChangedPixelCount",
+        "crChangedPixelCount",
+        "bothChangedPixelCount",
+        "changedPixelCount"
+      ],
+      "properties": {
+        "requestedInmatch": {
+          "type": "number",
+          "minimum": 0
+        },
+        "actualInmatch": {
+          "type": "number",
+          "minimum": 0
+        },
+        "score": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cbThreshold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "crThreshold": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cbChangedPixelCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "crChangedPixelCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bothChangedPixelCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changedPixelCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
