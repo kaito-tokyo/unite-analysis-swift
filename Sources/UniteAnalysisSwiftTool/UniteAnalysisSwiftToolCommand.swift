@@ -250,6 +250,7 @@ private struct UniteAnalysisSwiftTool: AsyncParsableCommand {
       Reads record-spec.json as the physical match-to-recording mapping used to locate the
       enclosing .ldtxrecord and its main video. Match-relative inmatch, beforeStart, and afterEnd
       times are converted through that mapping before frames are decoded.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
       Requires macOS 26 or later. OCR uses Apple Vision locally. The input video is never a Vision
       JPEG. Commands print machine-readable results or output paths to stdout and diagnostics,
       resolved inputs, timestamps, and unfinished-recording warnings to stderr.
@@ -368,6 +369,9 @@ private struct ResultScan: ParsableCommand {
       is always returned even when its detection score is low; that condition is added to warnings.
       Output records the input image, generation time, selected screen type, recognized values,
       confidence, and warnings. It does not invent video timestamps or scan metadata.
+
+      This command reads a still image and does not decode video itself. When producing its input
+      with a video-decoding command, note: \(VideoFrameSupport.sandboxDecodingGuidance)
 
       Battle-data uses fixed cell OCR. Summary combines full-screen and row OCR. Japanese and English
       recognition are enabled; language correction is disabled for numeric and proper-name fields. A
@@ -498,6 +502,7 @@ private struct BatchFrame: AsyncParsableCommand {
       The resolved record-spec.json and main video are logged to stderr; output paths are printed to
       stdout. An unfinished recording is allowed with a warning, but callers should request only
       finalized time ranges. Decode failures never fall back to another image source.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
 
       Example:
       [
@@ -557,6 +562,7 @@ private struct PreciseFrame: AsyncParsableCommand {
       Unlike batch-frame, it accepts no jobs JSON. The explicit source rectangle is cropped without resizing and output is baseline 8-bit RGB JPEG.
       The default JPEG quality is 0.6. Progressive JPEG is not used. Decode failures never fall back
       to another image source.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
       """
   )
 
@@ -675,6 +681,7 @@ private struct ContactSheet: AsyncParsableCommand {
       rows * cell.height + (rows - 1) * 8, where rows is ceil(frames.count / columns).
       Output is always baseline 8-bit RGB JPEG without alpha, regardless of its filename extension.
       Existing outputs are rejected unless --force is supplied.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
       """
   )
 
@@ -740,6 +747,7 @@ private struct ContinuousOCRCommand: AsyncParsableCommand {
       requested frame so adjacent 2fps requests do not collapse onto one distant frame. Duplicate
       actual timestamps are OCRed once. Plain-text output starts with the recording ID, sampling rate,
       and scanned-frame count. Existing outputs are rejected unless --force is supplied.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
       """
   )
 
@@ -812,6 +820,7 @@ private struct DetectChromaEvents: AsyncParsableCommand {
       signals: the explicit score field is max(cbThreshold, crThreshold), since a UI can be vivid in only one
       chroma plane. The changed-pixel counts remain diagnostic only. Output deliberately applies no domain
       cutoff, so recordings can establish one. $schema is not used. Relative output paths resolve from the jobs file's directory.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
       """
   )
 
@@ -851,6 +860,7 @@ private struct OCRInputFrame: AsyncParsableCommand {
       orientation, and AVAssetImageGenerator behavior as continuous-ocr. Supply one or more
       match-relative --inmatch values. PNG export happens after preprocessing and is only an
       inspection copy of one cell before twelve cells are assembled into the batched Vision image.
+      \(VideoFrameSupport.sandboxDecodingGuidance)
       """
   )
 

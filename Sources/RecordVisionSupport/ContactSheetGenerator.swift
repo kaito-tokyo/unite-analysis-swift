@@ -309,7 +309,9 @@ public enum ContactSheetGenerator {
         actualTime = valueActualTime
       case .failure(let valueRequestedTime, let error):
         throw ContactSheetGeneratorError.message(
-          "Source-video image generation failed at \(valueRequestedTime.seconds)s: \(error.localizedDescription)"
+          VideoFrameSupport.decodingFailureMessage(
+            "Source-video image generation failed at \(valueRequestedTime.seconds)s: \(error.localizedDescription)"
+          )
         )
       }
       guard let index = sourceTimes.firstIndex(where: { CMTimeCompare($0, requestedTime) == 0 }),
