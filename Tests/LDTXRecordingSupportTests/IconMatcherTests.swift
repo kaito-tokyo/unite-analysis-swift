@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import CoreGraphics
 import CxxStdlib
 import Foundation
 import IconMatcherNative
+import RecordVisionSupport
 import Testing
 
 @testable import UniteAnalysisSwiftTool
@@ -35,8 +37,8 @@ import Testing
   #expect(matcher.count() == 2)
   #expect(String(matcher.entryName(0)) == "held-fixture")
   #expect(String(matcher.entryName(1)) == "battle-fixture")
-  #expect(matcher.entryDescriptorCount(0) == 1)
-  #expect(matcher.entryDescriptorCount(1) == 1)
+  #expect(matcher.entryDescriptorCount(0) == 2)
+  #expect(matcher.entryDescriptorCount(1) == 2)
 }
 
 @Test func ratioRejectedDescriptorsDoNotProduceCandidates() throws {
@@ -84,6 +86,26 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(result.chromaticFraction == 0)
 }
 
+@Test func normalizesDeclaredGameScreenComponent() throws {
+  let context = try #require(
+    CGContext(
+      data: nil,
+      width: 100,
+      height: 80,
+      bitsPerComponent: 8,
+      bytesPerRow: 0,
+      space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+  let image = try #require(context.makeImage())
+  let component = RecordSpec.VideoComponent(
+    name: "game-screen", x: 10, y: 20, width: 50, height: 30)
+
+  let normalized = try normalizedGameScreen(image, component: component)
+
+  #expect(normalized.width == 1920)
+  #expect(normalized.height == 1080)
+}
+
 private func descriptorDatabaseFixture() -> Data {
   let configuration = protobufMessage([
     protobufVarintField(1, 8),
@@ -104,9 +126,9 @@ private func descriptorEntry(name: String, category: UInt64, byte: UInt8) -> Dat
   protobufMessage([
     protobufBytesField(1, Data(name.utf8)),
     protobufVarintField(2, category),
-    protobufVarintField(3, 1),
+    protobufVarintField(3, 2),
     protobufVarintField(4, 1),
-    protobufBytesField(5, Data([byte])),
+    protobufBytesField(5, Data([byte, byte])),
   ])
 }
 

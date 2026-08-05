@@ -261,6 +261,8 @@ std::string validate(const DescriptorDatabase &database) {
     return "descriptor database contains too many entries";
   }
 
+  std::uint64_t heldDescriptors = 0;
+  std::uint64_t battleDescriptors = 0;
   for (const auto &entry : database.entries) {
     if (entry.name.empty()) {
       return "descriptor entry has an empty name";
@@ -290,6 +292,19 @@ std::string validate(const DescriptorDatabase &database) {
     if (!view.isContinuous()) {
       return "descriptor matrix is not continuous";
     }
+    switch (entry.category) {
+    case ItemCategory::held:
+      heldDescriptors += entry.rows;
+      break;
+    case ItemCategory::battle:
+      battleDescriptors += entry.rows;
+      break;
+    case ItemCategory::unspecified:
+      return "descriptor entry has an unspecified category";
+    }
+  }
+  if (heldDescriptors == 1 || battleDescriptors == 1) {
+    return "each populated descriptor category needs at least two descriptors";
   }
   return {};
 }

@@ -18,6 +18,14 @@ public struct RecordVisionRecordSpec: Decodable, Sendable {
     public let y: Int
     public let width: Int
     public let height: Int
+
+    public init(name: String, x: Int, y: Int, width: Int, height: Int) {
+      self.name = name
+      self.x = x
+      self.y = y
+      self.width = width
+      self.height = height
+    }
   }
 
   public let version: Int

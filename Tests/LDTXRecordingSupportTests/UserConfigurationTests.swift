@@ -61,3 +61,17 @@ import Testing
     "/Library/Application Support/tokyo.kaito.unite-analysis-swift/config.json"
   #expect(UserConfigurationStore.defaultFileURL.path.hasSuffix(expectedSuffix))
 }
+
+@Test func loadsLegacyConfigurationWhenApplicationSupportConfigurationIsAbsent() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  let applicationSupport = root.appendingPathComponent("Application Support/config.json")
+  let legacy = root.appendingPathComponent(".config/unite-analysis-swift/config.json")
+  defer { try? FileManager.default.removeItem(at: root) }
+  try FileManager.default.createDirectory(
+    at: legacy.deletingLastPathComponent(), withIntermediateDirectories: true)
+  try Data(#"{"obsidianMatchReportsRoot":"/reports"}"#.utf8).write(to: legacy)
+
+  let store = UserConfigurationStore(fileURL: applicationSupport, legacyFileURL: legacy)
+
+  #expect(try store.load().obsidianMatchReportsRoot == "/reports")
+}

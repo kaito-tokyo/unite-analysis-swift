@@ -48,7 +48,7 @@ private func loadoutInputs(
   recordSpec recordSpecPath: String?,
   input inputPath: String?,
   matchTimes: [Double]
-) async throws -> (video: URL, bundle: URL, frames: [CGImage]) {
+) async throws -> (video: URL, outputDirectory: URL, frames: [CGImage]) {
   guard matchTimes.allSatisfy(\.isFinite) else {
     throw ValidationError("Recognition times must be finite match-relative seconds")
   }
@@ -59,7 +59,8 @@ private func loadoutInputs(
     throw ValidationError("Specify exactly one of --record-spec or --input")
   }
   let recording: ResolvedRecordingInput
-  let bundle: URL
+  let outputDirectory: URL
+  let component: RecordSpec.VideoComponent?
   let times: [CMTime]
   if let recordSpecPath {
     let recordSpecURL = resolveRecordSpec(recordSpecPath)
@@ -67,8 +68,17 @@ private func loadoutInputs(
     guard spec.startPTS.timescale > 0 else {
       throw ValidationError("startPTS.timescale must be positive")
     }
-    bundle = try recordingBundle(above: recordSpecURL)
+    guard let gameScreen = spec.videoComponents.first(where: { $0.name == "game-screen" }) else {
+      throw ValidationError("record-spec.json has no game-screen video component")
+    }
+    let bundle = try recordingBundle(above: recordSpecURL)
+    if !FileManager.default.fileExists(atPath: bundle.appendingPathComponent(".finalized").path) {
+      RecordVisionInputLogger.unfinishedRecording(bundle)
+    }
     recording = try ResolvedRecordingInput.resolve(bundle.path, allowUnfinished: true)
+    outputDirectory = recordSpecURL.deletingLastPathComponent()
+      .appendingPathComponent("_PokemonUniteAnalysis", isDirectory: true)
+    component = gameScreen
     let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
     times = matchTimes.map {
       CMTimeAdd(start, CMTime(seconds: $0, preferredTimescale: spec.startPTS.timescale))
@@ -78,7 +88,12 @@ private func loadoutInputs(
     guard let bundleURL = recording.bundleURL else {
       throw ValidationError("--input must identify a .ldtxrecord bundle")
     }
-    bundle = bundleURL
+    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
+    {
+      RecordVisionInputLogger.unfinishedRecording(bundleURL)
+    }
+    outputDirectory = bundleURL.appendingPathComponent("_PokemonUniteAnalysis", isDirectory: true)
+    component = nil
     times = matchTimes.map { CMTime(seconds: $0, preferredTimescale: 600) }
   }
   let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
@@ -91,27 +106,42 @@ private func loadoutInputs(
           .utf8))
   }
   return (
-    recording.videoURL, bundle,
+    recording.videoURL, outputDirectory,
     try frames.map { frame in
       guard let frame else {
         throw UniteAnalysisSwiftToolError.message("Missing decoded loadout frame")
       }
-      return frame
+      return try normalizedGameScreen(frame, component: component)
     }
   )
+}
+
+func normalizedGameScreen(
+  _ image: CGImage,
+  component: RecordSpec.VideoComponent?
+) throws -> CGImage {
+  guard let component else { return image }
+  guard component.x >= 0, component.y >= 0, component.width > 0, component.height > 0,
+    component.x <= image.width - component.width,
+    component.y <= image.height - component.height,
+    let cropped = image.cropping(
+      to: CGRect(x: component.x, y: component.y, width: component.width, height: component.height))
+  else {
+    throw ValidationError("game-screen video component is outside the decoded frame")
+  }
+  return try VideoFrameSupport.resized(cropped, width: 1920, height: 1080)
 }
 
 private func writeLoadout(
   _ document: LoadoutOutputDocument,
   defaultName: String,
-  bundle: URL,
+  outputDirectory: URL,
   output: String?,
   force: Bool
 ) throws {
   let outputURL =
     output.map(resolvePath)
-    ?? bundle.appendingPathComponent("_PokemonUniteAnalysis", isDirectory: true)
-    .appendingPathComponent(defaultName)
+    ?? outputDirectory.appendingPathComponent(defaultName)
   guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
     throw ValidationError("Output exists: \(outputURL.path). Pass --force to overwrite")
   }
@@ -164,7 +194,8 @@ struct RecognizeDraftLoadout: AsyncParsableCommand {
         format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
         finalPrepTime: finalPreparationTime, versusTime: versusTime, prepTime: nil,
         recognizer: .init(), allies: result.allies, enemies: result.enemies),
-      defaultName: "draft-loadout.json", bundle: inputs.bundle, output: output, force: force)
+      defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
+      force: force)
   }
 }
 
@@ -201,6 +232,7 @@ struct RecognizeBlindLoadout: AsyncParsableCommand {
         format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
         finalPrepTime: nil, versusTime: nil, prepTime: prepTime, recognizer: .init(),
         allies: result.allies, enemies: result.enemies),
-      defaultName: "blind-loadout.json", bundle: inputs.bundle, output: output, force: force)
+      defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
+      force: force)
   }
 }
