@@ -92,7 +92,7 @@ StrategyBooksのルートディレクトリは次の優先順位で決める。
 
 コピー元とミラーの対象数が一致すること、すべての相対リンクが解決すること、旧配置が残っていないこと、保存先が重複していないことを確認する。
 
-`publication.json`は[publication.schema.json](publication.schema.json)に適合させる。MatchReportsとGoogle Driveについて、最後に同期した相対パス、同期時刻、同期元レポートの`Report-Updated-At`を記録する。Google Driveでは文書IDと検証時刻も記録する。
+`publication.json`は`https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json`を正本Schemaとし、`$schema`へこのURL、`schemaVersion`へ`1`を記録する。リポジトリ内の原本は`docs/publication.schema.json`とする。MatchReportsとGoogle Driveについて、最後に同期した相対パス、同期時刻、同期元レポートの`Report-Updated-At`を記録する。Google Driveでは文書IDと検証時刻も記録する。
 
 記録済みの相対パスは分類の正本には使わない。再同期時には現在確認できる試合メタデータから`taxonomyPath`を算出し直す。算出した保存先が`lastRelativePath`と異なる場合は、同期成功後に旧保存先を取り除き、重複がないことを確認してから新しい相対パスを記録する。
 

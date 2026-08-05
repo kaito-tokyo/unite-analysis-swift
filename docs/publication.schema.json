@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
   "title": "Pokémon UNITE match publication state",
   "type": "object",
   "additionalProperties": false,
@@ -10,7 +11,7 @@
   ],
   "properties": {
     "$schema": {
-      "const": "publication.schema.json"
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json"
     },
     "schemaVersion": {
       "const": 1

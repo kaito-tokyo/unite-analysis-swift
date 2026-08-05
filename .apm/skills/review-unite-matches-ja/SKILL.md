@@ -32,7 +32,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - 録画を調べる前、または分析ツールを実行・変更する前に、[recording-workflow.md](references/recording-workflow.md)を読む。
 - 完全な試合スタッツを表示する前、またはレポートを作成・更新する前に、[report-contract.md](references/report-contract.md)を読む。持ち物名を表示する場合は[item-abbreviations.md](references/item-abbreviations.md)も読む。
-- 正本ファイルの作成・移行、Obsidian同期、Drive公開、分類体系の変更前に、[storage-publication.md](references/storage-publication.md)を読む。`publication.json`を作成または更新する場合は[publication.schema.json](references/publication.schema.json)に適合させる。
+- 正本ファイルの作成・移行、Obsidian同期、Drive公開、分類体系の変更前に、[storage-publication.md](references/storage-publication.md)を読む。
 - ランク分類または公開前には、[ranked-season-registry.md](references/ranked-season-registry.md)と[ranked-seasons.json](references/ranked-seasons.json)も読む。台帳は読み取り専用として扱い、試合レビュー中に変更しない。
 
 ## 分析方針

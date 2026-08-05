@@ -9,7 +9,7 @@ SPDX-License-Identifier = "CC0-1.0"
 path = [
   "Package.resolved",
   "Package.swift",
-  "Schemas/*.json",
+  "docs/*.json",
 ]
 SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
 SPDX-License-Identifier = "Apache-2.0"

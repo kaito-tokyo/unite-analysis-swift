@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/continuous-ocr.schema.json",
   "title": "unite-analysis-swift continuous OCR definition",
   "type": "object",
   "additionalProperties": false,
