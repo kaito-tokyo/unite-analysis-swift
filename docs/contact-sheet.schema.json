@@ -1,18 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/contact-sheet.schema.json",
-  "title": "unite-analysis-swift contact sheet",
+  "title": "unite-analysis-swift contact sheet job",
   "type": "object",
   "required": [
+    "jobId",
     "cell",
     "columns",
     "placements",
-    "frames"
+    "matchTimestamps",
+    "output"
   ],
-  "additionalProperties": false,
   "properties": {
-    "$schema": {
-      "type": "string"
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
     },
     "cell": {
       "$ref": "#/$defs/size"
@@ -32,12 +35,16 @@
         "$ref": "#/$defs/placement"
       }
     },
-    "frames": {
+    "matchTimestamps": {
       "type": "array",
       "minItems": 1,
       "items": {
-        "$ref": "#/$defs/frame"
+        "type": "number"
       }
+    },
+    "output": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "$defs": {
@@ -47,7 +54,6 @@
         "width",
         "height"
       ],
-      "additionalProperties": false,
       "properties": {
         "width": {
           "type": "integer",
@@ -67,7 +73,6 @@
         "width",
         "height"
       ],
-      "additionalProperties": false,
       "properties": {
         "x": {
           "type": "integer",
@@ -95,7 +100,6 @@
             "source",
             "destination"
           ],
-          "additionalProperties": false,
           "properties": {
             "source": {
               "$ref": "#/$defs/rectangle"
@@ -110,7 +114,6 @@
           "required": [
             "drawText"
           ],
-          "additionalProperties": false,
           "properties": {
             "drawText": {
               "$ref": "#/$defs/drawText"
@@ -126,7 +129,6 @@
         "y",
         "fontSize"
       ],
-      "additionalProperties": false,
       "properties": {
         "text": {
           "type": "string"
@@ -136,7 +138,6 @@
           "required": [
             "return"
           ],
-          "additionalProperties": false,
           "properties": {
             "return": {
               "type": "string"
@@ -181,44 +182,6 @@
           "required": [
             "script"
           ]
-        }
-      ]
-    },
-    "frame": {
-      "type": "object",
-      "oneOf": [
-        {
-          "required": [
-            "inmatch"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "inmatch": {
-              "type": "number"
-            }
-          }
-        },
-        {
-          "required": [
-            "beforeStart"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "beforeStart": {
-              "type": "number"
-            }
-          }
-        },
-        {
-          "required": [
-            "afterEnd"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "afterEnd": {
-              "type": "number"
-            }
-          }
         }
       ]
     }

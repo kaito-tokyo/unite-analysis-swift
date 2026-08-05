@@ -223,6 +223,31 @@ public enum VideoFrameSupport {
     return cropped
   }
 
+  public static func resized(_ image: CGImage, width: Int, height: Int) throws -> CGImage {
+    guard width > 0, height > 0 else {
+      throw VideoFrameSupportError.message("Output dimensions must be positive")
+    }
+    let colorSpace = image.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+    guard
+      let context = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    else {
+      throw VideoFrameSupportError.message("Could not allocate \(width)x\(height) image")
+    }
+    context.interpolationQuality = .high
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    guard let resized = context.makeImage() else {
+      throw VideoFrameSupportError.message("Could not create \(width)x\(height) image")
+    }
+    return resized
+  }
+
   public static func writeBaselineJPEG(_ image: CGImage, to url: URL, quality: Double) throws {
     guard
       let destination = CGImageDestinationCreateWithURL(

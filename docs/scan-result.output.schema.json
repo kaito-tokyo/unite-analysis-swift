@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json",
+  "title": "unite-analysis-swift scan-result output",
+  "type": "object",
+  "required": [
+    "$schema",
+    "input",
+    "generatedAt",
+    "ocrOptions",
+    "screens",
+    "warnings"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json"
+    },
+    "input": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ocrOptions": {
+      "type": "object",
+      "patternProperties": {
+        ".*": {
+          "$ref": "#/$defs/ocrOptions"
+        }
+      }
+    },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/screen"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "ocrOptions": {
+      "type": "object",
+      "required": [
+        "recognitionLanguages"
+      ],
+      "properties": {
+        "recognitionLanguages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "customWords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "box": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "required": [
+        "text",
+        "confidence",
+        "box"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "box": {
+          "$ref": "#/$defs/box"
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": [
+        "alternatives"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "battleDataRow": {
+      "type": "object",
+      "required": [
+        "side",
+        "row",
+        "name",
+        "damageDealt",
+        "damageTaken",
+        "healing"
+      ],
+      "properties": {
+        "side": {
+          "type": "string"
+        },
+        "row": {
+          "type": "integer"
+        },
+        "name": {
+          "$ref": "#/$defs/cell"
+        },
+        "damageDealt": {
+          "$ref": "#/$defs/cell"
+        },
+        "damageTaken": {
+          "$ref": "#/$defs/cell"
+        },
+        "healing": {
+          "$ref": "#/$defs/cell"
+        }
+      }
+    },
+    "summaryRow": {
+      "type": "object",
+      "required": [
+        "side",
+        "row",
+        "name",
+        "scored",
+        "knockouts",
+        "assists",
+        "rating"
+      ],
+      "properties": {
+        "side": {
+          "type": "string"
+        },
+        "row": {
+          "type": "integer"
+        },
+        "name": {
+          "$ref": "#/$defs/cell"
+        },
+        "scored": {
+          "$ref": "#/$defs/cell"
+        },
+        "knockouts": {
+          "$ref": "#/$defs/cell"
+        },
+        "assists": {
+          "$ref": "#/$defs/cell"
+        },
+        "rating": {
+          "$ref": "#/$defs/cell"
+        }
+      }
+    },
+    "screen": {
+      "type": "object",
+      "required": [
+        "kind",
+        "detectionScore",
+        "rawText"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "summary",
+            "battleData"
+          ]
+        },
+        "detectionScore": {
+          "type": "integer"
+        },
+        "rawText": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observation"
+          }
+        },
+        "battleData": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/battleDataRow"
+          }
+        },
+        "summary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/summaryRow"
+          }
+        }
+      }
+    }
+  }
+}

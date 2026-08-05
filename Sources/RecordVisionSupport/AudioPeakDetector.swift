@@ -33,13 +33,62 @@ public struct AudioPeakInterval: Codable, Equatable, Sendable {
 }
 
 public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
-  public let globalId: String
+  public static let schema =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json"
+
+  public let matchId: String
   public let inmatchStart: Double
   public let duration: Double
   public let gain: Double
   public let dilation: Double
   public let peaks: [AudioPeak]
   public let intervals: [AudioPeakInterval]
+
+  private enum CodingKeys: String, CodingKey {
+    case schema = "$schema"
+    case matchId, inmatchStart, duration, gain, dilation, peaks, intervals
+  }
+
+  public init(
+    matchId: String,
+    inmatchStart: Double,
+    duration: Double,
+    gain: Double,
+    dilation: Double,
+    peaks: [AudioPeak],
+    intervals: [AudioPeakInterval]
+  ) {
+    self.matchId = matchId
+    self.inmatchStart = inmatchStart
+    self.duration = duration
+    self.gain = gain
+    self.dilation = dilation
+    self.peaks = peaks
+    self.intervals = intervals
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    matchId = try container.decode(String.self, forKey: .matchId)
+    inmatchStart = try container.decode(Double.self, forKey: .inmatchStart)
+    duration = try container.decode(Double.self, forKey: .duration)
+    gain = try container.decode(Double.self, forKey: .gain)
+    dilation = try container.decode(Double.self, forKey: .dilation)
+    peaks = try container.decode([AudioPeak].self, forKey: .peaks)
+    intervals = try container.decode([AudioPeakInterval].self, forKey: .intervals)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(Self.schema, forKey: .schema)
+    try container.encode(matchId, forKey: .matchId)
+    try container.encode(inmatchStart, forKey: .inmatchStart)
+    try container.encode(duration, forKey: .duration)
+    try container.encode(gain, forKey: .gain)
+    try container.encode(dilation, forKey: .dilation)
+    try container.encode(peaks, forKey: .peaks)
+    try container.encode(intervals, forKey: .intervals)
+  }
 }
 
 public enum AudioPeakDetector {
@@ -51,29 +100,36 @@ public enum AudioPeakDetector {
   static let minimumPeakSeparation = 0.75
   static let peakDilation = 0.5
 
-  public static func mainMixAudioURL(in bundleURL: URL) throws -> URL {
+  public static func audioURL(in bundleURL: URL) throws -> URL {
     let infoURL = bundleURL.appendingPathComponent("Info.plist")
     guard let data = try? Data(contentsOf: infoURL),
       let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
-      let dictionary = plist as? [String: Any],
-      let tracks = dictionary["LDTXRecordingAudioTracks"] as? [[String: Any]],
-      let track = tracks.first(where: { ($0["Identifier"] as? String) == "main-mix" }),
-      let relativePath = track["MediaFile"] as? String,
-      !relativePath.isEmpty
+      let dictionary = plist as? [String: Any]
     else {
       throw AudioPeakDetectorError.message(
-        "Info.plist has no main-mix audio track: \(infoURL.path)")
+        "Could not read LDTX recording metadata: \(infoURL.path)")
     }
+
+    let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
+    guard formatVersion == 2 else {
+      throw AudioPeakDetectorError.message(
+        "audio-peaks requires LDTX recording format version 2: \(infoURL.path)")
+    }
+
+    // Recording format v2 defines the main media name independently of whether the redundant
+    // LDTXRecordingMainMediaFile metadata is present.
+    let relativePath = "main.fragmented.mp4"
     let audioURL = bundleURL.appendingPathComponent(relativePath).standardizedFileURL
     guard FileManager.default.fileExists(atPath: audioURL.path) else {
-      throw AudioPeakDetectorError.message("Main-mix audio file was not found: \(audioURL.path)")
+      throw AudioPeakDetectorError.message(
+        "Recording format v2 main media file was not found: \(audioURL.path)")
     }
     return audioURL
   }
 
   public static func detect(
     audioURL: URL,
-    globalId: String,
+    matchId: String,
     matchStartPTS: CMTime,
     inmatchStart: Double,
     duration: Double,
@@ -173,7 +229,7 @@ public enum AudioPeakDetector {
       requestedInmatchEnd: inmatchStart + duration
     )
     return AudioPeakDetectionResult(
-      globalId: globalId,
+      matchId: matchId,
       inmatchStart: inmatchStart,
       duration: duration,
       gain: gain,

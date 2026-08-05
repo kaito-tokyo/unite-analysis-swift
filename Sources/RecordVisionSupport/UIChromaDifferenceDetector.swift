@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import AVFoundation
 import CoreGraphics
-import CoreMedia
 import Foundation
+import ImageIO
 import LDTXRecordingSupport
 
 public enum ChromaEventError: Error, CustomStringConvertible {
@@ -16,19 +15,6 @@ public enum ChromaEventError: Error, CustomStringConvertible {
     case .message(let value): value
     }
   }
-}
-
-public struct ChromaEventDefinition: Codable, Equatable, Sendable {
-  public struct Rectangle: Codable, Equatable, Sendable {
-    public let x: Int
-    public let y: Int
-    public let width: Int
-    public let height: Int
-  }
-
-  public let source: Rectangle
-  /// Required by the command-line jobs interface; ignored by the detector itself.
-  public let output: String?
 }
 
 public struct ChromaEventSample: Codable, Equatable, Sendable {
@@ -45,17 +31,73 @@ public struct ChromaEventSample: Codable, Equatable, Sendable {
 }
 
 public struct ChromaEventResult: Codable, Equatable, Sendable {
-  public let globalId: String
-  public let source: ChromaEventDefinition.Rectangle
+  public static let schema =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json"
+
+  public let inputSampleDirectory: String
+  public let inputSampleCount: Int
+  public let firstInputFilename: String
+  public let lastInputFilename: String
+  public let fps: Double
   public let sampledWidth: Int
   public let sampledHeight: Int
   public let samples: [ChromaEventSample]
+
+  private enum CodingKeys: String, CodingKey {
+    case schema = "$schema"
+    case inputSampleDirectory, inputSampleCount, firstInputFilename, lastInputFilename, fps,
+      sampledWidth, sampledHeight, samples
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    inputSampleDirectory = try container.decode(String.self, forKey: .inputSampleDirectory)
+    inputSampleCount = try container.decode(Int.self, forKey: .inputSampleCount)
+    firstInputFilename = try container.decode(String.self, forKey: .firstInputFilename)
+    lastInputFilename = try container.decode(String.self, forKey: .lastInputFilename)
+    fps = try container.decode(Double.self, forKey: .fps)
+    sampledWidth = try container.decode(Int.self, forKey: .sampledWidth)
+    sampledHeight = try container.decode(Int.self, forKey: .sampledHeight)
+    samples = try container.decode([ChromaEventSample].self, forKey: .samples)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(Self.schema, forKey: .schema)
+    try container.encode(inputSampleDirectory, forKey: .inputSampleDirectory)
+    try container.encode(inputSampleCount, forKey: .inputSampleCount)
+    try container.encode(firstInputFilename, forKey: .firstInputFilename)
+    try container.encode(lastInputFilename, forKey: .lastInputFilename)
+    try container.encode(fps, forKey: .fps)
+    try container.encode(sampledWidth, forKey: .sampledWidth)
+    try container.encode(sampledHeight, forKey: .sampledHeight)
+    try container.encode(samples, forKey: .samples)
+  }
+
+  init(
+    inputSampleDirectory: String,
+    inputSampleCount: Int,
+    firstInputFilename: String,
+    lastInputFilename: String,
+    fps: Double,
+    sampledWidth: Int,
+    sampledHeight: Int,
+    samples: [ChromaEventSample]
+  ) {
+    self.inputSampleDirectory = inputSampleDirectory
+    self.inputSampleCount = inputSampleCount
+    self.firstInputFilename = firstInputFilename
+    self.lastInputFilename = lastInputFilename
+    self.fps = fps
+    self.sampledWidth = sampledWidth
+    self.sampledHeight = sampledHeight
+    self.samples = samples
+  }
 }
 
 /// Each consecutive chroma-difference plane receives its own Otsu threshold. The maximum is exposed
 /// as a scalar score so ordinary threshold-filter commands can consume this result directly.
 public enum ChromaEventDetector {
-  static let downscale = 8
   public static let candidateContextSeconds = 0.5
 
   /// Expands each selected temporal difference to cover both its appearance and disappearance side.
@@ -71,9 +113,7 @@ public enum ChromaEventDetector {
       throw ChromaEventError.message("match duration must be positive and finite")
     }
     let offsets = [-candidateContextSeconds, 0, candidateContextSeconds]
-    // Decode requests stay on the detector's fixed sampling lattice. `actualInmatch` records the
-    // AVAssetImageGenerator response for evidence, but re-requesting that arbitrary PTS is less
-    // reliable for fragmented MP4 than the original requested time.
+    // Candidate expansion stays on the JPEG sequence's fixed sampling lattice.
     let times = samples.lazy
       .filter { $0.score >= minimumScore }
       .flatMap { sample in offsets.map { sample.requestedInmatch + $0 } }
@@ -81,107 +121,70 @@ public enum ChromaEventDetector {
     return Array(Set(times)).sorted()
   }
 
+  public static func jpegURLs(in directoryURL: URL) throws -> [URL] {
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory),
+      isDirectory.boolValue
+    else {
+      throw ChromaEventError.message("JPEG input directory was not found: \(directoryURL.path)")
+    }
+    return try FileManager.default.contentsOfDirectory(
+      at: directoryURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+    )
+    .filter { ["jpg", "jpeg"].contains($0.pathExtension.lowercased()) }
+    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+  }
+
   public static func run(
-    definitionData: Data,
-    recordSpecURL: URL,
+    inputSampleDirectoryURL: URL,
+    fps: Double,
     outputURL: URL,
     force: Bool
-  ) async throws {
+  ) throws {
     guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
       throw ChromaEventError.message(
         "Output already exists: \(outputURL.path). Pass --force to overwrite.")
     }
-    let definition = try JSONDecoder().decode(ChromaEventDefinition.self, from: definitionData)
-    guard definition.source.x >= 0, definition.source.y >= 0,
-      definition.source.width >= downscale, definition.source.height >= downscale
-    else {
+    guard fps.isFinite, fps > 0 else {
+      throw ChromaEventError.message("fps must be positive and finite")
+    }
+    let imageURLs = try jpegURLs(in: inputSampleDirectoryURL)
+    guard imageURLs.count >= 2 else {
       throw ChromaEventError.message(
-        "source must be at least \(downscale)x\(downscale) with a nonnegative top-left origin")
+        "JPEG input directory must contain at least two .jpg or .jpeg files: \(inputSampleDirectoryURL.path)"
+      )
     }
-
-    let spec = try JSONDecoder().decode(
-      RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
-    RecordVisionInputLogger.recordSpec(recordSpecURL)
-    guard spec.startPTS.timescale > 0, spec.duration.isFinite, spec.duration > 0 else {
-      throw ChromaEventError.message(
-        "record-spec must have a positive startPTS timescale and duration")
-    }
-    let bundleURL = try bundleURL(above: recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
-    {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
-    }
-    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
-    RecordVisionInputLogger.sourceVideo(recording.videoURL)
-    let asset = AVURLAsset(url: recording.videoURL)
-    guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-      throw ChromaEventError.message("No video track: \(recording.videoURL.path)")
-    }
-    let size = try await track.load(.naturalSize)
-    guard definition.source.x + definition.source.width <= Int(size.width),
-      definition.source.y + definition.source.height <= Int(size.height)
-    else {
-      throw ChromaEventError.message(
-        "source exceeds encoded video dimensions \(Int(size.width))x\(Int(size.height))")
-    }
-
-    let requestedOffsets = ContinuousOCR.sampleOffsets(duration: spec.duration)
-    let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
-    let sourceTimes = requestedOffsets.map {
-      CMTimeAdd(start, CMTime(seconds: $0, preferredTimescale: spec.startPTS.timescale))
-    }
-    let generator = AVAssetImageGenerator(asset: asset)
-    generator.apertureMode = .encodedPixels
-    generator.appliesPreferredTrackTransform = false
-    generator.maximumSize = CGSize(width: CGFloat(size.width) / CGFloat(downscale), height: 0)
-    generator.requestedTimeToleranceBefore = CMTime(
-      seconds: ContinuousOCR.recognitionTolerance, preferredTimescale: 600)
-    generator.requestedTimeToleranceAfter = CMTime(
-      seconds: ContinuousOCR.recognitionTolerance, preferredTimescale: 600)
-
-    let sampledWidth = definition.source.width / downscale
-    let sampledHeight = definition.source.height / downscale
+    var sampledWidth = 0
+    var sampledHeight = 0
     var previous: ChromaPlane?
     var samples: [ChromaEventSample] = []
-    var renderedIndices = Set<Int>()
-    for await result in generator.images(for: sourceTimes) {
-      let requestedTime: CMTime
-      let image: CGImage
-      let actualTime: CMTime
-      switch result {
-      case .success(let request, let valueImage, let actual):
-        requestedTime = request
-        image = valueImage
-        actualTime = actual
-      case .failure(let requested, let error):
-        throw ChromaEventError.message(
-          VideoFrameSupport.decodingFailureMessage(
-            "Source-video image generation failed at \(requested.seconds)s: \(error.localizedDescription)"
-          )
-        )
-      }
-      guard let index = sourceTimes.firstIndex(where: { CMTimeCompare($0, requestedTime) == 0 }),
-        renderedIndices.insert(index).inserted
+    for (index, imageURL) in imageURLs.enumerated() {
+      guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+        let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
       else {
+        throw ChromaEventError.message("Could not decode JPEG: \(imageURL.path)")
+      }
+      if index == 0 {
+        sampledWidth = image.width
+        sampledHeight = image.height
+      } else if image.width != sampledWidth || image.height != sampledHeight {
         throw ChromaEventError.message(
-          "Source-video image generation returned an unknown or duplicate requested time")
+          "JPEG dimensions changed at \(imageURL.path): expected \(sampledWidth)x\(sampledHeight), found \(image.width)x\(image.height)"
+        )
       }
       let plane = try chromaPlane(
         image: image,
-        source: scaledRectangle(
-          definition.source,
-          image: image,
-          encodedSize: size
-        ),
+        source: CGRect(x: 0, y: 0, width: image.width, height: image.height),
         width: sampledWidth,
         height: sampledHeight
       )
       if let previous {
         let analysis = analyze(previous: previous, current: plane)
+        let inmatch = Double(index) / fps
         samples.append(
           ChromaEventSample(
-            requestedInmatch: requestedOffsets[index],
-            actualInmatch: CMTimeSubtract(actualTime, start).seconds,
+            requestedInmatch: inmatch,
+            actualInmatch: inmatch,
             score: max(analysis.cbThreshold, analysis.crThreshold),
             cbThreshold: analysis.cbThreshold,
             crThreshold: analysis.crThreshold,
@@ -193,14 +196,12 @@ public enum ChromaEventDetector {
       }
       previous = plane
     }
-    guard renderedIndices.count == sourceTimes.count else {
-      throw ChromaEventError.message(
-        "Source-video image generation returned \(renderedIndices.count) of \(sourceTimes.count) requested frames"
-      )
-    }
     let result = ChromaEventResult(
-      globalId: spec.globalId,
-      source: definition.source,
+      inputSampleDirectory: inputSampleDirectoryURL.path,
+      inputSampleCount: imageURLs.count,
+      firstInputFilename: imageURLs[0].lastPathComponent,
+      lastInputFilename: imageURLs[imageURLs.count - 1].lastPathComponent,
+      fps: fps,
       sampledWidth: sampledWidth,
       sampledHeight: sampledHeight,
       samples: samples
@@ -215,20 +216,6 @@ public enum ChromaEventDetector {
   struct ChromaPlane {
     let cb: [Int16]
     let cr: [Int16]
-  }
-
-  static func scaledRectangle(
-    _ source: ChromaEventDefinition.Rectangle,
-    image: CGImage,
-    encodedSize: CGSize
-  ) -> CGRect {
-    let scaleX = CGFloat(image.width) / encodedSize.width
-    let scaleY = CGFloat(image.height) / encodedSize.height
-    let minX = floor(CGFloat(source.x) * scaleX)
-    let minY = floor(CGFloat(source.y) * scaleY)
-    let maxX = ceil(CGFloat(source.x + source.width) * scaleX)
-    let maxY = ceil(CGFloat(source.y + source.height) * scaleY)
-    return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
   }
 
   static func chromaPlane(
@@ -329,14 +316,4 @@ public enum ChromaEventDetector {
     return bestThreshold
   }
 
-  private static func bundleURL(above recordSpecURL: URL) throws -> URL {
-    let matchURL = recordSpecURL.deletingLastPathComponent()
-    let namespaceURL = matchURL.deletingLastPathComponent()
-    let bundleURL = namespaceURL.deletingLastPathComponent()
-    guard bundleURL.pathExtension == "ldtxrecord" else {
-      throw ChromaEventError.message(
-        "record-spec.json must be inside a .ldtxrecord bundle: \(recordSpecURL.path)")
-    }
-    return bundleURL
-  }
 }

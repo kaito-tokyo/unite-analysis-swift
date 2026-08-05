@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json",
+  "title": "unite-analysis-swift audio-peaks output",
+  "type": "object",
+  "required": [
+    "$schema",
+    "matchId",
+    "inmatchStart",
+    "duration",
+    "gain",
+    "dilation",
+    "peaks",
+    "intervals"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json"
+    },
+    "matchId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inmatchStart": {
+      "type": "number"
+    },
+    "duration": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "gain": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "dilation": {
+      "const": 0.5
+    },
+    "peaks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/peak"
+      }
+    },
+    "intervals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/interval"
+      }
+    }
+  },
+  "$defs": {
+    "peak": {
+      "type": "object",
+      "required": [
+        "recordingPTS",
+        "inmatch",
+        "score"
+      ],
+      "properties": {
+        "recordingPTS": {
+          "type": "number",
+          "minimum": 0
+        },
+        "inmatch": {
+          "type": "number"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "required": [
+        "recordingPTSStart",
+        "recordingPTSEnd",
+        "inmatchStart",
+        "inmatchEnd",
+        "peakCount",
+        "strongestPeakInmatch",
+        "strongestPeakScore"
+      ],
+      "properties": {
+        "recordingPTSStart": {
+          "type": "number",
+          "minimum": 0
+        },
+        "recordingPTSEnd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "inmatchStart": {
+          "type": "number"
+        },
+        "inmatchEnd": {
+          "type": "number"
+        },
+        "peakCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "strongestPeakInmatch": {
+          "type": "number"
+        },
+        "strongestPeakScore": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

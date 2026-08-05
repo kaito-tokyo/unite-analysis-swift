@@ -2,11 +2,15 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import AVFoundation
+import CoreGraphics
 import Foundation
 import LDTXRecordingSupport
 import Testing
 
+@testable import LDTXRecordingSupport
 @testable import RecordVisionSupport
+@testable import ResultScannerSupport
 
 @Test func videoDecodingFailureIncludesSandboxRecoveryGuidance() {
   let message = VideoFrameSupport.decodingFailureMessage("Cannot Decode")
@@ -15,17 +19,283 @@ import Testing
   #expect(message.contains("before treating the media as invalid"))
 }
 
+@Test func scanResultEncodesOutputSchemaURL() throws {
+  let result = ScanResult(
+    input: "/tmp/result.jpg",
+    generatedAt: "2026-08-06T00:00:00Z",
+    ocrOptions: [:],
+    screens: [
+      ScreenResult(
+        kind: "summary", detectionScore: 0, rawText: [], battleData: nil, summary: [])
+    ],
+    warnings: []
+  )
+  let object = try #require(
+    JSONSerialization.jsonObject(with: JSONEncoder().encode(result)) as? [String: Any])
+  #expect(object["$schema"] as? String == ScanResult.schemaURL)
+}
+
+private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {
+  let bundle = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathComponent("sample.ldtxrecord")
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  let data = try PropertyListSerialization.data(
+    fromPropertyList: info, format: .xml, options: 0)
+  try data.write(to: bundle.appendingPathComponent("Info.plist"))
+  for file in files {
+    FileManager.default.createFile(
+      atPath: bundle.appendingPathComponent(file).path, contents: Data())
+  }
+  return bundle
+}
+
+@Test func recordSpecRequiresMatchIdAndVideoComponents() throws {
+  let data = Data(
+    #"""
+    {
+      "matchId": "match-01",
+      "startPTS": {"value": 180000, "timescale": 600},
+      "duration": 600,
+      "videoComponents": [
+        {"name": "game-screen", "x": 0, "y": 0, "width": 1920, "height": 1080}
+      ]
+    }
+    """#.utf8)
+  let spec = try JSONDecoder().decode(RecordVisionRecordSpec.self, from: data)
+
+  #expect(spec.matchId == "match-01")
+  #expect(spec.videoComponents.map(\.name) == ["game-screen"])
+}
+
+@Test func recordSpecRejectsMissingVideoComponents() {
+  let data = Data(
+    #"""
+    {
+      "matchId": "match-01",
+      "startPTS": {"value": 180000, "timescale": 600},
+      "duration": 600
+    }
+    """#.utf8)
+
+  #expect(throws: DecodingError.self) {
+    try JSONDecoder().decode(RecordVisionRecordSpec.self, from: data)
+  }
+}
+
+@Test func sampledFrameResizeUsesExactRequestedResolution() throws {
+  let colorSpace = CGColorSpaceCreateDeviceRGB()
+  let context = try #require(
+    CGContext(
+      data: nil,
+      width: 2,
+      height: 2,
+      bitsPerComponent: 8,
+      bytesPerRow: 0,
+      space: colorSpace,
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+  context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+  context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+  let source = try #require(context.makeImage())
+
+  let resized = try VideoFrameSupport.resized(source, width: 7, height: 3)
+
+  #expect(resized.width == 7)
+  #expect(resized.height == 3)
+}
+
+@Test func sampleFrameOffsetsMatchFFmpegFPSGrid() throws {
+  #expect(try SampleFrameSequence.sampleOffsets(duration: 1.2, fps: 2) == [0, 0.5, 1.0])
+  #expect(try SampleFrameSequence.sampleOffsets(duration: 1, fps: 4) == [0, 0.25, 0.5, 0.75])
+}
+
+@Test func namedOCROptionsIgnoreUnrelatedFields() throws {
+  let data = Data(
+    """
+    {
+      "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json",
+      "result-screen.text": {
+        "recognitionLanguages": ["ja-JP"],
+        "customWords": ["バトルデータ"],
+        "futureOption": true
+      },
+      "unrelated-region": {
+        "recognitionLanguages": ["en-US"]
+      }
+    }
+    """.utf8)
+  let document = try JSONDecoder().decode(OCRRecognitionOptionsDocument.self, from: data)
+  let options = document.regions
+
+  #expect(document.schema == OCRRecognitionOptionsDocument.schemaURL)
+  #expect(options["result-screen.text"]?.recognitionLanguages == ["ja-JP"])
+  #expect(options["result-screen.text"]?.customWords == ["バトルデータ"])
+  #expect(options["unrelated-region"]?.recognitionLanguages == ["en-US"])
+}
+
+@Test func playerNameOCRRegionIsSharedAcrossCommands() {
+  #expect(ScanResultOCRRegion.playerName == "player-name")
+}
+
+@Test func genericOCRInterpretsEachTypeInReadingOrder() {
+  let observations = [
+    TextObservation(
+      text: "I2O", confidence: 0.8,
+      box: .init(x: 0.1, y: 0.2, width: 0.2, height: 0.1)),
+    TextObservation(
+      text: "「Player", confidence: 0.9,
+      box: .init(x: 0.1, y: 0.8, width: 0.2, height: 0.1)),
+    TextObservation(
+      text: "One", confidence: 0.85,
+      box: .init(x: 0.4, y: 0.8, width: 0.2, height: 0.1)),
+  ]
+  #expect(
+    OCRInput.interpreted(observations, type: .text).values == ["「Player", "One", "I2O"])
+  #expect(
+    OCRInput.interpreted(Array(observations.suffix(2)), type: .playerName).values == ["Player One"])
+  #expect(OCRInput.interpreted([observations[0]], type: .numeric).values == ["120"])
+}
+
+@Test func genericOCRReadingOrderClustersRowsBeforeSortingColumns() {
+  let observations = [
+    TextObservation(
+      text: "A", confidence: 1,
+      box: .init(x: 0.1, y: 0.77, width: 0.1, height: 0.1)),
+    TextObservation(
+      text: "B", confidence: 1,
+      box: .init(x: 0.2, y: 0.79, width: 0.1, height: 0.1)),
+    TextObservation(
+      text: "C", confidence: 1,
+      box: .init(x: 0.3, y: 0.8, width: 0.1, height: 0.1)),
+  ]
+
+  #expect(OCRInput.readingOrder(observations).map(\.text) == ["B", "C", "A"])
+}
+
+@Test func scanResultDoesNotFallbackToUnrelatedOCRRegions() {
+  #expect(throws: ScannerError.self) {
+    try ResultScannerRunner.run(
+      input: "missing.jpg",
+      type: .summary,
+      ocrOptions: [
+        "unrelated-region": OCRRecognitionOptions(recognitionLanguages: ["ja-JP"])
+      ])
+  }
+}
+
+private func writeSilentVideoWithoutAudio(to url: URL) async throws {
+  let writer = try AVAssetWriter(url: url, fileType: .mp4)
+  let input = AVAssetWriterInput(
+    mediaType: .video,
+    outputSettings: [
+      AVVideoCodecKey: AVVideoCodecType.h264,
+      AVVideoWidthKey: 16,
+      AVVideoHeightKey: 16,
+    ])
+  let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+    assetWriterInput: input,
+    sourcePixelBufferAttributes: [
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+      kCVPixelBufferWidthKey as String: 16,
+      kCVPixelBufferHeightKey as String: 16,
+    ])
+  #expect(writer.canAdd(input))
+  writer.add(input)
+  #expect(writer.startWriting())
+  writer.startSession(atSourceTime: .zero)
+  var pixelBuffer: CVPixelBuffer?
+  let status = CVPixelBufferCreate(
+    nil, 16, 16, kCVPixelFormatType_32BGRA, nil, &pixelBuffer)
+  #expect(status == kCVReturnSuccess)
+  guard let pixelBuffer else { return }
+  #expect(adaptor.append(pixelBuffer, withPresentationTime: .zero))
+  input.markAsFinished()
+  await writer.finishWriting()
+  #expect(writer.status == .completed)
+}
+
+@Test func audioPeakInputUsesFixedV2MainMediaWithoutMainMixMetadata() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 2,
+      "LDTXRecordingMainMediaFile": "main.fragmented.mp4",
+    ],
+    files: ["main.fragmented.mp4"])
+  #expect(
+    try AudioPeakDetector.audioURL(in: bundle)
+      == bundle.appendingPathComponent("main.fragmented.mp4"))
+}
+
+@Test func audioPeakInputUsesV2FixedNameInsteadOfConflictingMetadata() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 2,
+      "LDTXRecordingMainMediaFile": "unexpected.mp4",
+      "LDTXRecordingAudioTracks": [
+        ["Identifier": "main-mix", "MediaFile": "legacy.m4a"]
+      ],
+    ],
+    files: ["main.fragmented.mp4", "unexpected.mp4", "legacy.m4a"])
+  #expect(
+    try AudioPeakDetector.audioURL(in: bundle)
+      == bundle.appendingPathComponent("main.fragmented.mp4"))
+}
+
+@Test func audioPeakInputRejectsV1MainMixRecording() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 1,
+      "LDTXRecordingAudioTracks": [
+        ["Identifier": "other", "MediaFile": "other.m4a"],
+        ["Identifier": "main-mix", "MediaFile": "main-mix.m4a"],
+      ],
+    ],
+    files: ["main-mix.m4a"])
+  #expect(throws: AudioPeakDetectorError.self) {
+    try AudioPeakDetector.audioURL(in: bundle)
+  }
+  do {
+    _ = try AudioPeakDetector.audioURL(in: bundle)
+    Issue.record("Expected recording format v1 to be rejected")
+  } catch {
+    #expect(
+      String(describing: error)
+        == "audio-peaks requires LDTX recording format version 2: \(bundle.appendingPathComponent("Info.plist").path)"
+    )
+  }
+}
+
+@Test func audioPeakDetectorDiagnosesV2MainMediaWithoutAudioTrack() async throws {
+  let bundle = try audioPeakTestBundle(
+    info: ["LDTXRecordingFormatVersion": 2], files: [])
+  let videoURL = bundle.appendingPathComponent("main.fragmented.mp4")
+  try await writeSilentVideoWithoutAudio(to: videoURL)
+  let resolvedURL = try AudioPeakDetector.audioURL(in: bundle)
+  do {
+    _ = try await AudioPeakDetector.detect(
+      audioURL: resolvedURL,
+      matchId: "test",
+      matchStartPTS: .zero,
+      inmatchStart: 0,
+      duration: 0.01,
+      gain: 1)
+    Issue.record("Expected video without audio to be rejected")
+  } catch {
+    #expect(String(describing: error) == "No audio track: \(videoURL.path)")
+  }
+}
+
 @Test func drawTextScriptReturnExpressionUsesSharedContext() throws {
   let value = try DrawTextScriptEngine.evaluate(
     script:
-      "'#' + (FRAME.index + 1) + ' / ' + FRAME.actualInmatch + ' / ' + MATCH.duration + ' / ' + RECORD.globalId + ' / ' + VIDEO.width",
+      "'#' + (FRAME.index + 1) + ' / ' + FRAME.actualInmatch + ' / ' + MATCH.duration + ' / ' + RECORD.matchId + ' / ' + VIDEO.width",
     index: 2,
     inmatch: 45.25,
     beforeStart: nil,
     afterEnd: nil,
     actualInmatch: 44.5,
     matchDuration: 600,
-    recordGlobalID: "record-01",
+    recordMatchId: "record-01",
     videoWidth: 1920,
     videoHeight: 1080,
     videoFrameRate: 60,
@@ -39,6 +309,7 @@ import Testing
     """
     {
       "cell": { "width": 100, "height": 50 },
+      "jobId": "sheet-1",
       "columns": 1,
       "placements": [{
         "drawText": {
@@ -47,39 +318,36 @@ import Testing
           "backgroundColor": "#00000099", "borderColor": "#FFFFFFFF"
         }
       }],
-      "frames": [{ "inmatch": 0 }]
+      "matchTimestamps": [0]
     }
     """.utf8)
   let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: data)
+  #expect(definition.jobId == "sheet-1")
   #expect(definition.placements[0].drawText?.script?.return == "FRAME.index")
   #expect(definition.placements[0].drawText?.backgroundColor == "#00000099")
   #expect(definition.placements[0].drawText?.borderColor == "#FFFFFFFF")
 }
 
-@Test func contactSheetFramesResolveInStrictSourceOrder() throws {
+@Test func contactSheetMatchTimestampsResolveInStrictSourceOrder() throws {
   let data = Data(
     """
     {
       "cell": { "width": 100, "height": 50 },
       "columns": 1,
       "placements": [{ "drawText": { "text": ".", "x": 0, "y": 0, "fontSize": 1 } }],
-      "frames": [
-        { "beforeStart": 5 },
-        { "beforeStart": 1 },
-        { "inmatch": 0 },
-        { "afterEnd": 1 }
-      ]
+      "matchTimestamps": [-5, -1, 0, 601]
     }
     """.utf8)
   let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: data)
-  let offsets = try ContactSheetGenerator.validatedOffsets(frames: definition.frames, duration: 600)
+  let offsets = try ContactSheetGenerator.validatedOffsets(
+    matchTimestamps: definition.matchTimestamps)
   #expect(offsets == [-5, -1, 0, 601])
 }
 
 @Test func contactSheetRejectsDuplicateOrReverseSourceTimes() throws {
-  for frames in [
-    "[{ \"inmatch\": 1 }, { \"inmatch\": 1 }]",
-    "[{ \"inmatch\": 2 }, { \"inmatch\": 1 }]",
+  for matchTimestamps in [
+    "[1, 1]",
+    "[2, 1]",
   ] {
     let data = Data(
       """
@@ -87,49 +355,79 @@ import Testing
         "cell": { "width": 100, "height": 50 },
         "columns": 1,
         "placements": [{ "drawText": { "text": ".", "x": 0, "y": 0, "fontSize": 1 } }],
-        "frames": \(frames)
+        "matchTimestamps": \(matchTimestamps)
       }
       """.utf8)
     let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: data)
     do {
-      _ = try ContactSheetGenerator.validatedOffsets(frames: definition.frames, duration: 600)
+      _ = try ContactSheetGenerator.validatedOffsets(
+        matchTimestamps: definition.matchTimestamps)
       Issue.record("Expected non-increasing frames to be rejected")
     } catch {
-      #expect(String(describing: error).contains("strictly increasing source times"))
+      #expect(String(describing: error).contains("strictly increasing"))
     }
   }
 }
 
-@Test func continuousOCRDefinitionIgnoresSchemaAndDecodesSource() throws {
+@Test func contactSheetRejectsLegacyFramesField() {
   let data = Data(
     """
     {
-      "$schema": "/tmp/continuous-ocr.schema.json",
-      "source": { "x": 300, "y": 80, "width": 1030, "height": 300 },
-      "recognitionLanguages": ["ja-JP"],
-      "customWords": ["カイオーガ", "うみれおん"]
-    }
-    """.utf8)
-  let definition = try JSONDecoder().decode(ContinuousOCRDefinition.self, from: data)
-  #expect(definition.source == .init(x: 300, y: 80, width: 1030, height: 300))
-  #expect(definition.recognitionLanguages == ["ja-JP"])
-  #expect(definition.customWords == ["カイオーガ", "うみれおん"])
-}
-
-@Test func continuousOCRDefinitionRequiresRecognitionLanguages() {
-  let data = Data(
-    """
-    {
-      "source": { "x": 300, "y": 80, "width": 1030, "height": 300 }
+      "cell": { "width": 100, "height": 50 },
+      "columns": 1,
+      "placements": [{ "drawText": { "text": ".", "x": 0, "y": 0, "fontSize": 1 } }],
+      "frames": [0],
+      "matchTimestamps": [0]
     }
     """.utf8)
   #expect(throws: DecodingError.self) {
-    _ = try JSONDecoder().decode(ContinuousOCRDefinition.self, from: data)
+    _ = try JSONDecoder().decode(ContactSheetDefinition.self, from: data)
   }
 }
 
-@Test func continuousOCRUsesFixedTwoFPSOffsets() {
-  #expect(ContinuousOCR.sampleOffsets(duration: 1.2) == [0.25, 0.75, 1.1999999999999997])
+@Test func chromaEventProcessesJPEGsInDictionaryOrder() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let context = try #require(
+    CGContext(
+      data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+  for (name, color) in [
+    ("frame-000003.JPEG", CGColor(red: 0, green: 0, blue: 1, alpha: 1)),
+    ("frame-000001.jpg", CGColor(red: 1, green: 0, blue: 0, alpha: 1)),
+    ("frame-000002.jpg", CGColor(red: 0, green: 1, blue: 0, alpha: 1)),
+  ] {
+    context.setFillColor(color)
+    context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+    try VideoFrameSupport.writeBaselineJPEG(
+      try #require(context.makeImage()), to: directory.appendingPathComponent(name), quality: 0.95)
+  }
+  FileManager.default.createFile(
+    atPath: directory.appendingPathComponent("ignored.png").path, contents: Data())
+
+  let ordered = try ChromaEventDetector.jpegURLs(in: directory)
+  #expect(
+    ordered.map(\.lastPathComponent) == [
+      "frame-000001.jpg", "frame-000002.jpg", "frame-000003.JPEG",
+    ])
+  let output = directory.appendingPathComponent("events.json")
+  try ChromaEventDetector.run(
+    inputSampleDirectoryURL: directory, fps: 2, outputURL: output, force: false)
+  let result = try JSONDecoder().decode(
+    ChromaEventResult.self, from: Data(contentsOf: output))
+  #expect(result.inputSampleDirectory == directory.path)
+  #expect(result.inputSampleCount == 3)
+  #expect(result.firstInputFilename == "frame-000001.jpg")
+  #expect(result.lastInputFilename == "frame-000003.JPEG")
+  #expect(result.sampledWidth == 4)
+  #expect(result.sampledHeight == 4)
+  #expect(result.samples.map(\.requestedInmatch) == [0.5, 1.0])
+  #expect(result.samples.map(\.actualInmatch) == [0.5, 1.0])
+  let object = try #require(
+    JSONSerialization.jsonObject(with: Data(contentsOf: output)) as? [String: Any])
+  #expect(object["$schema"] as? String == ChromaEventResult.schema)
 }
 
 @Test func chromaEventUsesIndependentOtsuThresholds() {
@@ -162,77 +460,6 @@ import Testing
     try ChromaEventDetector.expandedCandidateTimes(samples, minimumScore: 60, duration: 5) == [
       3.5, 4, 4.5,
     ])
-}
-
-@Test func continuousOCRUsesNativeSourceGeometry() {
-  #expect(ContinuousOCR.sourcePadding == 0)
-  #expect(ContinuousOCR.recognitionScale == 1)
-  #expect(ContinuousOCR.recognitionTolerance == 0.2)
-  #expect(ContinuousOCR.acceptedObservationCenterX == 0.45...0.55)
-  #expect(ContinuousOCR.recognitionBatchSize == 12)
-  #expect(ContinuousOCR.recognitionBatchSeparatorPixels == 8)
-  #expect(
-    ContinuousOCR.expandedSourceRect(
-      .init(x: 100, y: 50, width: 200, height: 80),
-      videoWidth: 400,
-      videoHeight: 200
-    ) == CGRect(x: 100, y: 50, width: 200, height: 80))
-  #expect(
-    ContinuousOCR.expandedSourceRect(
-      .init(x: 0, y: 0, width: 100, height: 50),
-      videoWidth: 120,
-      videoHeight: 60
-    ) == CGRect(x: 0, y: 0, width: 100, height: 50))
-}
-
-@Test func continuousOCRUnitesAdjacentSimilarSamples() {
-  func sample(_ time: Double, _ text: String, _ confidence: Float) -> ContinuousOCRSample {
-    ContinuousOCRSample(
-      requestedInmatch: time,
-      actualInmatch: time,
-      observations: [
-        .init(
-          text: text,
-          confidence: confidence,
-          boundingBox: .init(x: 0, y: 0, width: 1, height: 1)
-        )
-      ]
-    )
-  }
-  let intervals = ContinuousOCR.mergedIntervals(samples: [
-    sample(1.0, "かなりリードしているぞ!", 0.8),
-    sample(1.5, "かなりリードしているぞ！", 0.9),
-    sample(3.0, "接戦だ!", 0.7),
-  ])
-  #expect(intervals.count == 2)
-  #expect(intervals[0].inmatchStart == 1.0)
-  #expect(intervals[0].inmatchEnd == 2.0)
-  #expect(intervals[0].sampleCount == 2)
-  #expect(intervals[0].representativeText == "かなりリードしているぞ！")
-  #expect(intervals[1].representativeText == "接戦だ!")
-}
-
-@Test func continuousOCRRendersReadableMatchClockTextWithoutVisionMetadata() {
-  let box = ContinuousOCRObservation.Rectangle(x: 0.1, y: 0.2, width: 0.3, height: 0.1)
-  let result = ContinuousOCRResult(
-    globalId: "record-match-01",
-    samplesPerSecond: 2,
-    source: .init(x: 0, y: 0, width: 100, height: 50),
-    scannedSampleCount: 1200,
-    samples: [],
-    intervals: [
-      .init(
-        inmatchStart: 299.25, inmatchEnd: 303.25, representativeText: "かなり苦しい戦いだ", confidence: 1,
-        sampleCount: 8, boundingBox: box),
-      .init(
-        inmatchStart: 299.25, inmatchEnd: 303.25, representativeText: "注目", confidence: 0.5,
-        sampleCount: 4, boundingBox: box),
-    ]
-  )
-  let text = ContinuousOCR.renderText(result, matchDuration: 600)
-  #expect(text.contains("[05:00.750–04:56.750] かなり苦しい戦いだ / 注目"))
-  #expect(!text.contains("confidence"))
-  #expect(!text.contains("boundingBox"))
 }
 
 @Test func audioPeakDetectorFindsAndMergesFixedPowerRise() {
@@ -281,6 +508,16 @@ import Testing
   #expect(AudioPeakDetector.minimumNormalizedRise == 0.000_005)
   #expect(AudioPeakDetector.minimumPeakSeparation == 0.75)
   #expect(AudioPeakDetector.peakDilation == 0.5)
+}
+
+@Test func audioPeakResultEncodesOutputSchemaURL() throws {
+  let result = AudioPeakDetectionResult(
+    matchId: "recording", inmatchStart: 0, duration: 600, gain: 1, dilation: 0.5,
+    peaks: [], intervals: [])
+  let object = try #require(
+    JSONSerialization.jsonObject(with: JSONEncoder().encode(result)) as? [String: Any])
+
+  #expect(object["$schema"] as? String == AudioPeakDetectionResult.schema)
 }
 
 @Test func audioPeakDetectorDilatesAndUnionsPeakIntervals() {
