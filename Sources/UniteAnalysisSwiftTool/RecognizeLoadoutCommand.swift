@@ -39,7 +39,8 @@ private func defaultDescriptorDatabaseURL() -> URL {
 private func loadIconMatcher(from url: URL) throws -> unite_analysis.IconMatcher {
   let matcher = unite_analysis.IconMatcher(std.string(url.path))
   guard matcher.isValid() else {
-    throw ValidationError(String(matcher.errorMessage()))
+    let errorMessage = matcher.errorMessage()
+    throw ValidationError(swiftString(from: errorMessage))
   }
   return matcher
 }

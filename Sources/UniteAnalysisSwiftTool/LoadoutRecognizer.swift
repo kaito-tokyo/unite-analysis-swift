@@ -3,12 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import CoreGraphics
+import CxxStdlib
 import Foundation
 import IconMatcherNative
 
 struct IconMatch: Codable, Sendable, Equatable {
   var name: String
   var distance: Float
+}
+
+func swiftString(from value: std.string) -> String {
+  String(decoding: value.map { UInt8(bitPattern: $0) }, as: UTF8.self)
 }
 
 enum LoadoutRecognitionError: Error, Equatable {
@@ -99,7 +104,11 @@ extension unite_analysis.IconMatcher {
 
   private func iconMatches(_ results: unite_analysis.IconMatchResults) -> [IconMatch] {
     (0..<results.count()).map { index in
-      IconMatch(name: String(results.name(index)), distance: results.distance(index))
+      let name = results.name(index)
+      return IconMatch(
+        name: swiftString(from: name),
+        distance: results.distance(index)
+      )
     }
   }
 }

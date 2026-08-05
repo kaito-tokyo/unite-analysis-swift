@@ -18,7 +18,8 @@ import Testing
 @Test func missingDescriptorDatabaseIsRejected() {
   let matcher = unite_analysis.IconMatcher(std.string("/definitely-missing/descriptors.pb"))
   #expect(!matcher.isValid())
-  #expect(!String(matcher.errorMessage()).isEmpty)
+  let errorMessage = matcher.errorMessage()
+  #expect(!swiftString(from: errorMessage).isEmpty)
 }
 
 @Test func validDescriptorDatabaseLoadsMetadata() throws {
@@ -35,8 +36,10 @@ import Testing
   #expect(abs(matcher.akazeThreshold() - 0.001) < 0.000_001)
   #expect(matcher.akazeImageHeight() == 64)
   #expect(matcher.count() == 2)
-  #expect(String(matcher.entryName(0)) == "held-fixture")
-  #expect(String(matcher.entryName(1)) == "battle-fixture")
+  let heldName = matcher.entryName(0)
+  let battleName = matcher.entryName(1)
+  #expect(swiftString(from: heldName) == "held-fixture")
+  #expect(swiftString(from: battleName) == "battle-fixture")
   #expect(matcher.entryDescriptorCount(0) == 2)
   #expect(matcher.entryDescriptorCount(1) == 2)
 }
