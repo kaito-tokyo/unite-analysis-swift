@@ -39,7 +39,9 @@ jobs:
 
       - name: Check Swift format
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: swift format lint --recursive --strict .
+        # Vendor contains upstream Swift samples that are outside this repository's
+        # formatting policy. Keep this list aligned with the SwiftPM source roots.
+        run: swift format lint --recursive --strict Package.swift Sources Tests
 
   check-json:
     name: Check JSON

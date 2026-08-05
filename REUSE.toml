@@ -1,7 +1,7 @@
 version = 1
 
 [[annotations]]
-path = [".swift-format", "NOTICE"]
+path = [".gitattributes", ".gitmodules", ".swift-format", "NOTICE"]
 SPDX-FileCopyrightText = ""
 SPDX-License-Identifier = "CC0-1.0"
 
@@ -10,6 +10,8 @@ path = [
   "Package.resolved",
   "Package.swift",
   "docs/*.json",
+  "Sources/IconMatcherNative/Generated/*.pb.c",
+  "Sources/IconMatcherNative/Generated/*.pb.h",
 ]
 SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
 SPDX-License-Identifier = "Apache-2.0"

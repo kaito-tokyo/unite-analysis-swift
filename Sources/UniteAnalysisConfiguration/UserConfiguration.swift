@@ -39,8 +39,9 @@ public struct UserConfigurationStore: Sendable {
 
   public static var defaultFileURL: URL {
     FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".config", isDirectory: true)
-      .appendingPathComponent("unite-analysis-swift", isDirectory: true)
+      .appendingPathComponent("Library", isDirectory: true)
+      .appendingPathComponent("Application Support", isDirectory: true)
+      .appendingPathComponent("tokyo.kaito.unite-analysis-swift", isDirectory: true)
       .appendingPathComponent("config.json")
   }
 

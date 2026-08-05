@@ -1,0 +1,9 @@
+[submodule "Vendor/opencv"]
+	path = Vendor/opencv
+	url = https://github.com/opencv/opencv.git
+[submodule "Vendor/opencv_contrib"]
+	path = Vendor/opencv_contrib
+	url = https://github.com/opencv/opencv_contrib.git
+[submodule "Vendor/nanopb"]
+	path = Vendor/nanopb
+	url = https://github.com/nanopb/nanopb.git

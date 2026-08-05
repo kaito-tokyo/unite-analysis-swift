@@ -1,0 +1,33 @@
+// SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+//
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package tokyo.kaito.unite_analysis.descriptors.v1;
+
+message DescriptorDatabase {
+  uint32 format_version = 1;
+  AkazeConfiguration akaze = 2;
+  repeated DescriptorEntry entries = 3;
+}
+
+message AkazeConfiguration {
+  uint32 descriptor_size = 1;
+  float threshold = 2;
+  uint32 image_height = 3;
+}
+
+message DescriptorEntry {
+  string name = 1;
+  ItemCategory category = 2;
+  uint32 rows = 3;
+  uint32 columns = 4;
+  bytes descriptors = 5;
+}
+
+enum ItemCategory {
+  ITEM_CATEGORY_UNSPECIFIED = 0;
+  ITEM_CATEGORY_HELD = 1;
+  ITEM_CATEGORY_BATTLE = 2;
+}

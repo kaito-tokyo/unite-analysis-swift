@@ -12,3 +12,13 @@ Original project:
 
 Swift Argument Parser is licensed under the Apache License, Version 2.0,
 with the Runtime Library Exception.
+
+This product includes OpenCV 5.0.0 and opencv_contrib 5.0.0.
+Copyright OpenCV contributors.
+OpenCV is licensed under the Apache License, Version 2.0. The AKAZE and KAZE
+implementations additionally carry BSD 3-Clause notices in the corresponding
+opencv_contrib source files.
+
+This product includes nanopb 0.4.9.1.
+Copyright (c) 2011 Petteri Aimonen.
+nanopb is licensed under the zlib License included in its source distribution.

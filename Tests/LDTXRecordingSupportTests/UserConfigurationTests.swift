@@ -55,3 +55,9 @@ import Testing
     try UserConfigurationStore(fileURL: configurationURL).load()
   }
 }
+
+@Test func defaultConfigurationUsesBundleIdentifierApplicationSupportDirectory() {
+  let expectedSuffix =
+    "/Library/Application Support/tokyo.kaito.unite-analysis-swift/config.json"
+  #expect(UserConfigurationStore.defaultFileURL.path.hasSuffix(expectedSuffix))
+}
