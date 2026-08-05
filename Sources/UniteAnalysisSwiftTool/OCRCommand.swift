@@ -57,6 +57,8 @@ struct OCRCommand: AsyncParsableCommand {
     commandName: "ocr",
     abstract: "Recognize named still-image regions from JSONL jobs.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because Apple Vision text recognition is unavailable in the sandboxed execution environment.
+
       INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, input, source, region, and type. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
 
       COMPLETE jobs.jsonl EXAMPLE.

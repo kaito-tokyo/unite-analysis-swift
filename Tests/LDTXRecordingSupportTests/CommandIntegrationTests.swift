@@ -85,16 +85,18 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   }
 }
 
-@Test func avFoundationCommandHelpRequiresUnsandboxedExecution() throws {
+@Test func mediaCommandHelpRequiresUnsandboxedExecution() throws {
   let commands = [
-    "batch-frame", "sample-frames", "precise-frame", "contact-sheet", "audio-peaks",
-    "eval-draw-text-script",
+    ("batch-frame", "AVFoundation"), ("sample-frames", "AVFoundation"),
+    ("precise-frame", "AVFoundation"), ("contact-sheet", "AVFoundation"),
+    ("audio-peaks", "AVFoundation"), ("eval-draw-text-script", "AVFoundation"),
+    ("ocr", "Apple Vision"), ("scan-result", "Apple Vision"),
   ]
-  for command in commands {
+  for (command, framework) in commands {
     let result = try runCommand([command, "--help"])
     #expect(result.status == 0)
     #expect(result.stdout.contains("This command must run outside a sandbox"))
-    #expect(result.stdout.contains("AVFoundation"))
+    #expect(result.stdout.contains(framework))
     #expect(result.stderr.isEmpty)
   }
 }

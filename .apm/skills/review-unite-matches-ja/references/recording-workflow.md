@@ -29,7 +29,7 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`audio-peaks`、`eval-draw-text-script`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`audio-peaks`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 

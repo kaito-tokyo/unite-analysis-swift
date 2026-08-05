@@ -22,6 +22,8 @@ struct ScanResultCommand: ParsableCommand {
     commandName: "scan-result",
     abstract: "Scan Pokémon UNITE result and battle-data screens into JSON.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because Apple Vision text recognition is unavailable in the sandboxed execution environment.
+
       INPUT. Supply one still image in which a 16:9 cropped game screen fills the complete image. The OCR layout is proportionally scaled to the actual image dimensions. Resized game-screen images are accepted. Images containing margins or a surrounding composition remain invalid. PNG, JPEG, HEIC, TIFF, BMP, and GIF are accepted; only image index 0 is read. Videos and recording bundles are rejected.
 
       COMPLETE EXAMPLES.
