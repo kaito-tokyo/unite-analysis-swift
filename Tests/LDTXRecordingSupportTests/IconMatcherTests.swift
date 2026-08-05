@@ -31,12 +31,32 @@ import Testing
   #expect(matcher.formatVersion() == 1)
   #expect(matcher.akazeDescriptorSize() == 8)
   #expect(abs(matcher.akazeThreshold() - 0.001) < 0.000_001)
-  #expect(matcher.akazeImageHeight() == 4)
+  #expect(matcher.akazeImageHeight() == 64)
   #expect(matcher.count() == 2)
   #expect(String(matcher.entryName(0)) == "held-fixture")
   #expect(String(matcher.entryName(1)) == "battle-fixture")
   #expect(matcher.entryDescriptorCount(0) == 1)
   #expect(matcher.entryDescriptorCount(1) == 1)
+}
+
+@Test func ratioRejectedDescriptorsDoNotProduceCandidates() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("pb")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try descriptorDatabaseFixture().write(to: url)
+
+  let matcher = unite_analysis.IconMatcher(std.string(url.path))
+  let pixels = (0..<40).flatMap { y in
+    (0..<40).flatMap { x -> [UInt8] in
+      let value: UInt8 = (x / 4 + y / 4).isMultiple(of: 2) ? 0 : 255
+      return [value, value, value]
+    }
+  }
+  let image = try BGRImage(width: 40, height: 40, bytesPerRow: 120, bytes: pixels)
+
+  #expect(matcher.isValid())
+  #expect(matcher.matchHeldItem(in: image).isEmpty)
 }
 
 @Test func invalidBGRImageIsRejected() {
@@ -68,7 +88,7 @@ private func descriptorDatabaseFixture() -> Data {
   let configuration = protobufMessage([
     protobufVarintField(1, 8),
     protobufFixed32Field(2, Float(0.001).bitPattern),
-    protobufVarintField(3, 4),
+    protobufVarintField(3, 64),
   ])
   let held = descriptorEntry(name: "held-fixture", category: 1, byte: 0x00)
   let battle = descriptorEntry(name: "battle-fixture", category: 2, byte: 0xFF)

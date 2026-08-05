@@ -66,7 +66,7 @@ struct BGRImage: Sendable {
 }
 
 extension unite_analysis.IconMatcher {
-  fileprivate func matchHeldItem(in image: BGRImage) -> [IconMatch] {
+  func matchHeldItem(in image: BGRImage) -> [IconMatch] {
     image.bytes.withUnsafeBufferPointer { buffer in
       iconMatches(
         matchHeldBGR(
@@ -82,7 +82,7 @@ extension unite_analysis.IconMatcher {
     }
   }
 
-  fileprivate func matchBattleItem(in image: BGRImage) -> [IconMatch] {
+  func matchBattleItem(in image: BGRImage) -> [IconMatch] {
     image.bytes.withUnsafeBufferPointer { buffer in
       iconMatches(
         matchBattleBGR(

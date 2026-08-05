@@ -208,7 +208,8 @@ std::vector<RankedMatch> rankDescriptors(
   cv::Mat search;
   cv::vconcat(matrices, search);
   std::vector<std::vector<cv::DMatch>> matches;
-  cv::DescriptorMatcher::create("BruteForce")->knnMatch(query, search, matches, 2);
+  cv::DescriptorMatcher::create("BruteForce-Hamming")
+      ->knnMatch(query, search, matches, 2);
   for (const auto &pair : matches) {
     if (pair.size() != 2 || pair[0].trainIdx < 0 ||
         static_cast<std::size_t>(pair[0].trainIdx) >= labels.size()) {
@@ -225,7 +226,9 @@ std::vector<RankedMatch> rankDescriptors(
   std::vector<RankedMatch> result;
   result.reserve(votes.size());
   for (const auto &[name, score] : votes) {
-    result.push_back({name, static_cast<float>(-score)});
+    if (score > 0) {
+      result.push_back({name, static_cast<float>(-score)});
+    }
   }
   std::sort(result.begin(), result.end(), [](const auto &left, const auto &right) {
     return left.distance != right.distance ? left.distance < right.distance
