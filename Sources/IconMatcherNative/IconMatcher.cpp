@@ -113,7 +113,15 @@ bool decodeEntry(pb_istream_t *stream, const pb_field_t *, void **argument) {
     return false;
   }
 
-  entry.category = static_cast<ItemCategory>(wire.category);
+  switch (wire.category) {
+  case tokyo_kaito_unite_analysis_descriptors_v1_ItemCategory_ITEM_CATEGORY_UNSPECIFIED:
+  case tokyo_kaito_unite_analysis_descriptors_v1_ItemCategory_ITEM_CATEGORY_HELD:
+  case tokyo_kaito_unite_analysis_descriptors_v1_ItemCategory_ITEM_CATEGORY_BATTLE:
+    entry.category = static_cast<ItemCategory>(wire.category);
+    break;
+  default:
+    PB_RETURN_ERROR(stream, "descriptor entry has an unsupported category");
+  }
   entry.rows = wire.rows;
   entry.columns = wire.columns;
   database.entries.push_back(std::move(entry));
@@ -187,8 +195,9 @@ std::vector<RankedMatch> rankDescriptors(
   }
 
   std::vector<cv::Mat> matrices;
-  std::vector<std::string> labels;
+  std::vector<std::pair<std::size_t, const std::string *>> labelRanges;
   std::map<std::string, double> votes;
+  std::size_t descriptorCount = 0;
   for (const auto &entry : database.entries) {
     if (entry.category != category) {
       continue;
@@ -198,7 +207,8 @@ std::vector<RankedMatch> rankDescriptors(
         static_cast<int>(entry.columns),
         CV_8U,
         const_cast<std::uint8_t *>(entry.descriptors.data()));
-    labels.insert(labels.end(), entry.rows, entry.name);
+    descriptorCount += entry.rows;
+    labelRanges.emplace_back(descriptorCount, &entry.name);
     votes.try_emplace(entry.name, 0.0);
   }
   if (matrices.empty()) {
@@ -211,15 +221,24 @@ std::vector<RankedMatch> rankDescriptors(
   cv::DescriptorMatcher::create("BruteForce-Hamming")
       ->knnMatch(query, search, matches, 2);
   for (const auto &pair : matches) {
-    if (pair.size() != 2 || pair[0].trainIdx < 0 ||
-        static_cast<std::size_t>(pair[0].trainIdx) >= labels.size()) {
+    if (pair.size() != 2 || pair[0].trainIdx < 0) {
+      continue;
+    }
+    const auto trainIndex = static_cast<std::size_t>(pair[0].trainIdx);
+    const auto label = std::upper_bound(
+        labelRanges.begin(),
+        labelRanges.end(),
+        trainIndex,
+        [](const std::size_t index, const auto &range) {
+          return index < range.first;
+        });
+    if (label == labelRanges.end()) {
       continue;
     }
     const auto first = static_cast<double>(pair[0].distance);
     const auto second = static_cast<double>(pair[1].distance);
     if (first < static_cast<double>(ratio) * second) {
-      votes[labels[static_cast<std::size_t>(pair[0].trainIdx)]] +=
-          1.0 - first / std::max(second, 1e-9);
+      votes[*label->second] += 1.0 - first / std::max(second, 1e-9);
     }
   }
 

@@ -44,6 +44,18 @@ import Testing
   #expect(matcher.entryDescriptorCount(1) == 2)
 }
 
+@Test func descriptorDatabaseRejectsUnknownCategory() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("pb")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try descriptorDatabaseFixture(category: 3).write(to: url)
+
+  let matcher = unite_analysis.IconMatcher(std.string(url.path))
+  #expect(!matcher.isValid())
+  #expect(swiftString(from: matcher.errorMessage()).contains("unsupported category"))
+}
+
 @Test func ratioRejectedDescriptorsDoNotProduceCandidates() throws {
   let url = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -109,13 +121,13 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(normalized.height == 1080)
 }
 
-private func descriptorDatabaseFixture() -> Data {
+private func descriptorDatabaseFixture(category: UInt64? = nil) -> Data {
   let configuration = protobufMessage([
     protobufVarintField(1, 8),
     protobufFixed32Field(2, Float(0.001).bitPattern),
     protobufVarintField(3, 64),
   ])
-  let held = descriptorEntry(name: "held-fixture", category: 1, byte: 0x00)
+  let held = descriptorEntry(name: "held-fixture", category: category ?? 1, byte: 0x00)
   let battle = descriptorEntry(name: "battle-fixture", category: 2, byte: 0xFF)
   return protobufMessage([
     protobufVarintField(1, 1),
