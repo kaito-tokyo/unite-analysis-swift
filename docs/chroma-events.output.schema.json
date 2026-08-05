@@ -3,7 +3,6 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json",
   "title": "unite-analysis-swift detect-chroma-events output",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "$schema",
     "inputSampleDirectory",
@@ -58,7 +57,6 @@
   "$defs": {
     "sample": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "requestedInmatch",
         "actualInmatch",

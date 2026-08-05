@@ -3,7 +3,6 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/batch-frame.schema.json",
   "title": "unite-analysis-swift batch frame job",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "jobId",
     "matchTimestamps",
@@ -34,7 +33,6 @@
   "$defs": {
     "rectangle": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "x",
         "y",

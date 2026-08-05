@@ -13,7 +13,6 @@
   "$defs": {
     "success": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "$schema",
         "jobId",
@@ -33,7 +32,6 @@
         },
         "result": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "outputs"
           ],
@@ -54,7 +52,6 @@
     },
     "failureBase": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "$schema",
         "ok",
@@ -72,7 +69,6 @@
         },
         "error": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "line",
             "message"

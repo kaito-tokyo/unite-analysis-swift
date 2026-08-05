@@ -66,7 +66,7 @@ struct OCRCommand: AsyncParsableCommand {
 
       JOB-ID. jobId is a required non-empty caller-defined correlation string and must be unique within the input stream. It is returned unchanged and is never used to derive paths or OCR settings.
 
-      SOURCE. source is a top-left-origin {x,y,width,height} rectangle in input-image pixels. It must fit completely inside the decoded still image. PNG, JPEG, HEIC, TIFF, BMP, and GIF inputs are accepted.
+      SOURCE. source is a top-left-origin {x,y,width,height} rectangle in input-image pixels. It must fit completely inside the decoded still image. PNG, JPEG, HEIC, TIFF, BMP, and GIF inputs are accepted. For an animated image, only image index 0 is read.
 
       REGION OPTIONS. region selects the same globally unique key from --ocr-options. Every selected entry requires recognitionLanguages and may contain customWords. There is no fallback. Unrelated option entries and unrecognized fields in them are ignored.
 

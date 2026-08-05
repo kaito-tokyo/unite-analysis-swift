@@ -17,7 +17,7 @@ struct Schema: ParsableCommand {
     commandName: "schema",
     abstract: "Print a bundled JSON Schema selected by URL basename.",
     discussion: """
-      Pass the basename of a supported $schema URL, for example contact-sheet.schema.json. The exact bundled schema is written to standard output. Supported basenames are audio-peaks.output.schema.json, batch-frame.schema.json, batch-frame.output.schema.json, chroma-events.output.schema.json, contact-sheet.schema.json, contact-sheet.output.schema.json, ocr.schema.json, ocr.output.schema.json, and ocr-options.schema.json.
+      Pass the basename of a supported $schema URL, for example contact-sheet.schema.json. The exact bundled schema is written to standard output. Use this command when the installed single binary must provide its own input or output contract without network access. An unknown basename is an error and lists every supported value.
       """.reflowedHelp()
   )
 
@@ -48,20 +48,220 @@ enum EmbeddedSchemas {
     "ocr.schema.json",
     "ocr.output.schema.json",
     "ocr-options.schema.json",
+    "publication.schema.json",
+    "scan-result.output.schema.json",
   ]
 
   static func data(basename: String) -> Data? {
     schemas[basename].map { Data($0.utf8) }
   }
 
+  static var storedBasenames: [String] { schemas.keys.sorted() }
+
   private static let schemas = [
+    "publication.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
+      "title": "Pokémon UNITE match publication state",
+      "type": "object",
+      "required": [
+        "$schema",
+        "schemaVersion",
+        "updatedAt"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "obsidianMatchReports": {
+          "$ref": "#/$defs/filePublication"
+        },
+        "googleDrive": {
+          "$ref": "#/$defs/googleDrivePublication"
+        }
+      },
+      "$defs": {
+        "filePublication": {
+          "type": "object",
+          "required": [
+            "lastRelativePath",
+            "syncedAt",
+            "sourceReportUpdatedAt"
+          ],
+          "properties": {
+            "lastRelativePath": {
+              "type": "string",
+              "minLength": 1
+            },
+            "syncedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "sourceReportUpdatedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "googleDrivePublication": {
+          "type": "object",
+          "required": [
+            "documentId",
+            "lastRelativePath",
+            "syncedAt",
+            "sourceReportUpdatedAt"
+          ],
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "lastRelativePath": {
+              "type": "string",
+              "minLength": 1
+            },
+            "syncedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "sourceReportUpdatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "validatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "dailyPdfValidatedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    }
+    """#,
+    "scan-result.output.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json",
+      "title": "unite-analysis-swift scan-result output",
+      "type": "object",
+      "required": ["$schema", "input", "generatedAt", "ocrOptions", "screens", "warnings"],
+      "properties": {
+        "$schema": {
+          "const": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json"
+        },
+        "input": { "type": "string", "minLength": 1 },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "ocrOptions": {
+          "type": "object",
+          "patternProperties": { ".*": { "$ref": "#/$defs/ocrOptions" } }
+        },
+        "screens": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/screen" }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      },
+      "$defs": {
+        "ocrOptions": {
+          "type": "object",
+          "required": ["recognitionLanguages"],
+          "properties": {
+            "recognitionLanguages": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "customWords": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "box": {
+          "type": "object",
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "width": { "type": "number" },
+            "height": { "type": "number" }
+          }
+        },
+        "observation": {
+          "type": "object",
+          "required": ["text", "confidence", "box"],
+          "properties": {
+            "text": { "type": "string" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "box": { "$ref": "#/$defs/box" }
+          }
+        },
+        "cell": {
+          "type": "object",
+          "required": ["alternatives"],
+          "properties": {
+            "text": { "type": "string" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "alternatives": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "battleDataRow": {
+          "type": "object",
+          "required": ["side", "row", "name", "damageDealt", "damageTaken", "healing"],
+          "properties": {
+            "side": { "type": "string" },
+            "row": { "type": "integer" },
+            "name": { "$ref": "#/$defs/cell" },
+            "damageDealt": { "$ref": "#/$defs/cell" },
+            "damageTaken": { "$ref": "#/$defs/cell" },
+            "healing": { "$ref": "#/$defs/cell" }
+          }
+        },
+        "summaryRow": {
+          "type": "object",
+          "required": ["side", "row", "name", "scored", "knockouts", "assists", "rating"],
+          "properties": {
+            "side": { "type": "string" },
+            "row": { "type": "integer" },
+            "name": { "$ref": "#/$defs/cell" },
+            "scored": { "$ref": "#/$defs/cell" },
+            "knockouts": { "$ref": "#/$defs/cell" },
+            "assists": { "$ref": "#/$defs/cell" },
+            "rating": { "$ref": "#/$defs/cell" }
+          }
+        },
+        "screen": {
+          "type": "object",
+          "required": ["kind", "detectionScore", "rawText"],
+          "properties": {
+            "kind": { "enum": ["summary", "battleData"] },
+            "detectionScore": { "type": "integer" },
+            "rawText": { "type": "array", "items": { "$ref": "#/$defs/observation" } },
+            "battleData": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/battleDataRow" }
+            },
+            "summary": { "type": "array", "items": { "$ref": "#/$defs/summaryRow" } }
+          }
+        }
+      }
+    }
+    """#,
     "audio-peaks.output.schema.json": #"""
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json",
       "title": "unite-analysis-swift audio-peaks output",
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "$schema",
         "matchId",
@@ -110,7 +310,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "peak": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "recordingPTS",
             "inmatch",
@@ -132,7 +331,6 @@ enum EmbeddedSchemas {
         },
         "interval": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "recordingPTSStart",
             "recordingPTSEnd",
@@ -179,7 +377,6 @@ enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/batch-frame.schema.json",
       "title": "unite-analysis-swift batch frame job",
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "jobId",
         "matchTimestamps",
@@ -210,7 +407,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "rectangle": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -255,7 +451,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "success": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "$schema",
             "jobId",
@@ -275,7 +470,6 @@ enum EmbeddedSchemas {
             },
             "result": {
               "type": "object",
-              "additionalProperties": false,
               "required": [
                 "outputs"
               ],
@@ -296,7 +490,6 @@ enum EmbeddedSchemas {
         },
         "failureBase": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "$schema",
             "ok",
@@ -314,7 +507,6 @@ enum EmbeddedSchemas {
             },
             "error": {
               "type": "object",
-              "additionalProperties": false,
               "required": [
                 "line",
                 "message"
@@ -348,7 +540,6 @@ enum EmbeddedSchemas {
         "matchTimestamps",
         "output"
       ],
-      "additionalProperties": false,
       "properties": {
         "jobId": {
           "type": "string",
@@ -392,7 +583,6 @@ enum EmbeddedSchemas {
             "width",
             "height"
           ],
-          "additionalProperties": false,
           "properties": {
             "width": {
               "type": "integer",
@@ -412,7 +602,6 @@ enum EmbeddedSchemas {
             "width",
             "height"
           ],
-          "additionalProperties": false,
           "properties": {
             "x": {
               "type": "integer",
@@ -440,7 +629,6 @@ enum EmbeddedSchemas {
                 "source",
                 "destination"
               ],
-              "additionalProperties": false,
               "properties": {
                 "source": {
                   "$ref": "#/$defs/rectangle"
@@ -455,7 +643,6 @@ enum EmbeddedSchemas {
               "required": [
                 "drawText"
               ],
-              "additionalProperties": false,
               "properties": {
                 "drawText": {
                   "$ref": "#/$defs/drawText"
@@ -471,7 +658,6 @@ enum EmbeddedSchemas {
             "y",
             "fontSize"
           ],
-          "additionalProperties": false,
           "properties": {
             "text": {
               "type": "string"
@@ -481,7 +667,6 @@ enum EmbeddedSchemas {
               "required": [
                 "return"
               ],
-              "additionalProperties": false,
               "properties": {
                 "return": {
                   "type": "string"
@@ -548,7 +733,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "success": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "$schema",
             "jobId",
@@ -568,7 +752,6 @@ enum EmbeddedSchemas {
             },
             "result": {
               "type": "object",
-              "additionalProperties": false,
               "required": [
                 "output"
               ],
@@ -583,7 +766,6 @@ enum EmbeddedSchemas {
         },
         "failure": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "$schema",
             "ok",
@@ -601,7 +783,6 @@ enum EmbeddedSchemas {
             },
             "error": {
               "type": "object",
-              "additionalProperties": false,
               "required": [
                 "line",
                 "message"
@@ -627,7 +808,6 @@ enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.schema.json",
       "title": "unite-analysis-swift OCR job",
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "jobId",
         "input",
@@ -663,7 +843,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "rectangle": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -708,7 +887,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "rectangle": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -737,7 +915,6 @@ enum EmbeddedSchemas {
         "box": {
           "type": "object",
           "description": "Normalized coordinates within source, with a bottom-left origin as returned by Apple Vision.",
-          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -769,7 +946,6 @@ enum EmbeddedSchemas {
         },
         "observation": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "text",
             "confidence",
@@ -791,7 +967,6 @@ enum EmbeddedSchemas {
         },
         "result": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "input",
             "source",
@@ -835,7 +1010,6 @@ enum EmbeddedSchemas {
         },
         "success": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "$schema",
             "jobId",
@@ -860,7 +1034,6 @@ enum EmbeddedSchemas {
         },
         "failure": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "$schema",
             "ok",
@@ -878,7 +1051,6 @@ enum EmbeddedSchemas {
             },
             "error": {
               "type": "object",
-              "additionalProperties": false,
               "required": [
                 "line",
                 "message"
@@ -917,7 +1089,6 @@ enum EmbeddedSchemas {
           "$ref": "#/$defs/options"
         }
       },
-      "additionalProperties": false,
       "$defs": {
         "options": {
           "type": "object",
@@ -951,7 +1122,6 @@ enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json",
       "title": "unite-analysis-swift detect-chroma-events output",
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "$schema",
         "inputSampleDirectory",
@@ -1006,7 +1176,6 @@ enum EmbeddedSchemas {
       "$defs": {
         "sample": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "requestedInmatch",
             "actualInmatch",

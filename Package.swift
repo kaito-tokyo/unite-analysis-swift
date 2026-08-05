@@ -31,7 +31,7 @@ let package = Package(
       name: "LDTXRecordingSupportTests",
       dependencies: [
         "LDTXRecordingSupport", "RecordVisionSupport", "ResultScannerSupport",
-        "UniteAnalysisConfiguration",
+        "UniteAnalysisConfiguration", "UniteAnalysisSwiftTool",
       ]),
   ]
 )

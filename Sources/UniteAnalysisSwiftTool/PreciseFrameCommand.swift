@@ -17,7 +17,7 @@ struct PreciseFrame: AsyncParsableCommand {
     commandName: "precise-frame",
     abstract: "Write exactly one AVAssetReader-decoded explicit-source screenshot.",
     discussion: """
-      INPUT. This command accepts options only and writes exactly one frame. It does not accept jobs JSON. Specify --record-spec, --match-timestamp, --x, --y, --width, --height, and --output. Run it with the .ldtxrecord root as the current directory; this caller responsibility is not checked separately.
+      INPUT. This command accepts options only and writes exactly one frame; it does not use the jobs.jsonl interface. Specify --record-spec, --match-timestamp, --x, --y, --width, --height, and --output. Run it with the .ldtxrecord root as the current directory; this caller responsibility is not checked separately.
 
       COMPLETE EXAMPLE.
 

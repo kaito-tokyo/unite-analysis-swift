@@ -69,11 +69,20 @@ struct ScreenResult: Codable {
 }
 
 struct ScanResult: Codable {
+  static let schemaURL =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json"
+
+  let schema = schemaURL
   let input: String
   let generatedAt: String
   let ocrOptions: [String: OCRRecognitionOptions]
   let screens: [ScreenResult]
   let warnings: [String]
+
+  private enum CodingKeys: String, CodingKey {
+    case schema = "$schema"
+    case input, generatedAt, ocrOptions, screens, warnings
+  }
 }
 
 public enum ResultScreenType: String {

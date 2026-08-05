@@ -22,7 +22,7 @@ struct ScanResultCommand: ParsableCommand {
     commandName: "scan-result",
     abstract: "Scan Pokémon UNITE result and battle-data screens into JSON.",
     discussion: """
-      INPUT. Supply one still image in which the cropped game screen fills the complete image. The OCR layout is scaled from its 1632x918 reference coordinates to the actual image dimensions. Resized game-screen images are accepted. Images containing margins or a surrounding composition remain invalid. PNG, JPEG, HEIC, TIFF, BMP, and GIF are accepted; videos and recording bundles are rejected.
+      INPUT. Supply one still image in which the cropped game screen fills the complete image. The OCR layout is scaled from its 1632x918 reference coordinates to the actual image dimensions. Resized game-screen images are accepted. Images containing margins or a surrounding composition remain invalid. PNG, JPEG, HEIC, TIFF, BMP, and GIF are accepted; only image index 0 is read. Videos and recording bundles are rejected.
 
       COMPLETE EXAMPLES.
 
@@ -52,13 +52,28 @@ struct ScanResultCommand: ParsableCommand {
         }
       }
 
-      SCHEMA. Print the OCR options schema with `unite-analysis-swift schema ocr-options.schema.json`.
+      SCHEMAS. Print the OCR options schema with `unite-analysis-swift schema ocr-options.schema.json` and the output schema with `unite-analysis-swift schema scan-result.output.schema.json`.
 
       OCR. Battle-data uses fixed-cell OCR. Summary combines full-screen and row OCR. Language correction is disabled for numeric and proper-name fields.
 
       ROWS. All recognized rows are returned. The highlighted cursor row is never treated as the operated player. A missing standalone score 0 is supplemented without confidence only when the other three values in the same row were recognized. Low-confidence player names must be verified from the image.
 
-      OUTPUT. The result records the absolute input path, generation time, selected OCR options, screen type, detection score, recognized values, confidence, raw OCR text, and warnings. Unrelated OCR option entries are not copied into the result. It does not invent video timestamps or scan metadata. Pretty-printed JSON is written to stdout when --output is omitted; otherwise the specified file is atomically replaced.
+      OUTPUT. The result records its schema URL, absolute input path, generation time, selected OCR options, screen type, detection score, recognized values, confidence, raw OCR text, and warnings. Unrelated OCR option entries are not copied into the result. It does not invent video timestamps or scan metadata. Pretty-printed JSON is written to stdout when --output is omitted; otherwise the specified file is atomically replaced.
+
+      COMPLETE OUTPUT SHAPE.
+
+      {
+        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json",
+        "generatedAt": "2026-08-06T00:00:00Z",
+        "input": "/recording/result-summary.jpg",
+        "ocrOptions": {
+          "player-name": {"customWords": ["うみれおん"], "recognitionLanguages": ["ja-JP", "en-US"]},
+          "result-screen.numeric": {"customWords": [], "recognitionLanguages": ["en-US"]},
+          "result-screen.text": {"customWords": ["スコアの詳細"], "recognitionLanguages": ["ja-JP", "en-US"]}
+        },
+        "screens": [{"detectionScore": 7, "kind": "summary", "rawText": [], "summary": []}],
+        "warnings": ["The scanner returns all rows and never treats the highlighted cursor row as the local player."]
+      }
       """.reflowedHelp()
   )
 

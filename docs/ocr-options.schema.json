@@ -16,7 +16,6 @@
       "$ref": "#/$defs/options"
     }
   },
-  "additionalProperties": false,
   "$defs": {
     "options": {
       "type": "object",

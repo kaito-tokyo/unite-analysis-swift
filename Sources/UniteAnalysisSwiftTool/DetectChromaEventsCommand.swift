@@ -11,7 +11,7 @@ struct DetectChromaEvents: ParsableCommand {
     commandName: "detect-chroma-events",
     abstract: "Measure temporal Cb and Cr differences in a JPEG sequence.",
     discussion: """
-      INPUT. --input-sample-dir is required and must contain at least two JPEG files. Files whose extension is .jpg or .jpeg, case-insensitively, are processed in filename dictionary order. Hidden files and other formats are ignored. Relative paths use the current working directory.
+      INPUT. --input-sample-dir is required and must contain at least two JPEG files. Files whose extension is .jpg or .jpeg, case-insensitively, are processed in filename dictionary order. Use zero-padded sequence numbers such as frame-000001.jpg so dictionary order is also chronological order. Hidden files and other formats are ignored. Relative paths use the current working directory.
 
       COMPLETE EXAMPLE.
 
@@ -55,7 +55,7 @@ struct DetectChromaEvents: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Required directory containing the JPEG sequence in dictionary order.")
+  @Option(help: "Required directory containing a zero-padded JPEG sequence in dictionary order.")
   var inputSampleDir: String
 
   @Option(help: "Positive sequence rate used to assign index / fps times.")

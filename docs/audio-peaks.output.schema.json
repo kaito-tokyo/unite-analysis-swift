@@ -3,7 +3,6 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json",
   "title": "unite-analysis-swift audio-peaks output",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "$schema",
     "matchId",
@@ -52,7 +51,6 @@
   "$defs": {
     "peak": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "recordingPTS",
         "inmatch",
@@ -74,7 +72,6 @@
     },
     "interval": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "recordingPTSStart",
         "recordingPTSEnd",

@@ -19,6 +19,22 @@ import Testing
   #expect(message.contains("before treating the media as invalid"))
 }
 
+@Test func scanResultEncodesOutputSchemaURL() throws {
+  let result = ScanResult(
+    input: "/tmp/result.jpg",
+    generatedAt: "2026-08-06T00:00:00Z",
+    ocrOptions: [:],
+    screens: [
+      ScreenResult(
+        kind: "summary", detectionScore: 0, rawText: [], battleData: nil, summary: [])
+    ],
+    warnings: []
+  )
+  let object = try #require(
+    JSONSerialization.jsonObject(with: JSONEncoder().encode(result)) as? [String: Any])
+  #expect(object["$schema"] as? String == ScanResult.schemaURL)
+}
+
 private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {
   let bundle = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)

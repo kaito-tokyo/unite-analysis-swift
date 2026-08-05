@@ -13,7 +13,6 @@
   "$defs": {
     "rectangle": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -42,7 +41,6 @@
     "box": {
       "type": "object",
       "description": "Normalized coordinates within source, with a bottom-left origin as returned by Apple Vision.",
-      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -74,7 +72,6 @@
     },
     "observation": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "text",
         "confidence",
@@ -96,7 +93,6 @@
     },
     "result": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "input",
         "source",
@@ -140,7 +136,6 @@
     },
     "success": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "$schema",
         "jobId",
@@ -165,7 +160,6 @@
     },
     "failure": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "$schema",
         "ok",
@@ -183,7 +177,6 @@
         },
         "error": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "line",
             "message"

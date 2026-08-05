@@ -11,7 +11,6 @@
     "matchTimestamps",
     "output"
   ],
-  "additionalProperties": false,
   "properties": {
     "jobId": {
       "type": "string",
@@ -55,7 +54,6 @@
         "width",
         "height"
       ],
-      "additionalProperties": false,
       "properties": {
         "width": {
           "type": "integer",
@@ -75,7 +73,6 @@
         "width",
         "height"
       ],
-      "additionalProperties": false,
       "properties": {
         "x": {
           "type": "integer",
@@ -103,7 +100,6 @@
             "source",
             "destination"
           ],
-          "additionalProperties": false,
           "properties": {
             "source": {
               "$ref": "#/$defs/rectangle"
@@ -118,7 +114,6 @@
           "required": [
             "drawText"
           ],
-          "additionalProperties": false,
           "properties": {
             "drawText": {
               "$ref": "#/$defs/drawText"
@@ -134,7 +129,6 @@
         "y",
         "fontSize"
       ],
-      "additionalProperties": false,
       "properties": {
         "text": {
           "type": "string"
@@ -144,7 +138,6 @@
           "required": [
             "return"
           ],
-          "additionalProperties": false,
           "properties": {
             "return": {
               "type": "string"
