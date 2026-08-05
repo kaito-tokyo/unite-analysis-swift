@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "record-vision-tool continuous OCR definition",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/continuous-ocr.schema.json",
+  "title": "unite-analysis-swift continuous OCR definition",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "record-vision-tool contact sheet",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/contact-sheet.schema.json",
+  "title": "unite-analysis-swift contact sheet",
   "type": "object",
   "required": [
     "cell",

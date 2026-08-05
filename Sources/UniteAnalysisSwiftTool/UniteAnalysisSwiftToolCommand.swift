@@ -10,8 +10,9 @@ import Foundation
 import LDTXRecordingSupport
 import RecordVisionSupport
 import ResultScannerSupport
+import UniteAnalysisConfiguration
 
-private enum RecordVisionToolError: Error, CustomStringConvertible {
+private enum UniteAnalysisSwiftToolError: Error, CustomStringConvertible {
   case message(String)
 
   var description: String {
@@ -40,7 +41,8 @@ private struct FrameSource: Decodable {
 
   func validate() throws {
     guard x >= 0, y >= 0, width > 0, height > 0 else {
-      throw RecordVisionToolError.message("source must be a positive top-left-origin rectangle")
+      throw UniteAnalysisSwiftToolError.message(
+        "source must be a positive top-left-origin rectangle")
     }
   }
 }
@@ -61,7 +63,7 @@ private struct BatchFrameJob: Decodable {
   func scene() throws -> Scene {
     let values = [inmatch, beforeStart, afterEnd].compactMap { $0 }
     guard values.count == 1, let value = values.first, value.isFinite, value >= 0 else {
-      throw RecordVisionToolError.message(
+      throw UniteAnalysisSwiftToolError.message(
         "Each batch-frame job must specify exactly one finite nonnegative inmatch, beforeStart, or afterEnd value"
       )
     }
@@ -86,7 +88,7 @@ private func recordingBundle(above recordSpecURL: URL) throws -> URL {
     if candidate.pathExtension == "ldtxrecord" { return candidate }
     candidate.deleteLastPathComponent()
   }
-  throw RecordVisionToolError.message(
+  throw UniteAnalysisSwiftToolError.message(
     "record-spec.json must be inside a .ldtxrecord bundle: \(recordSpecURL.path)")
 }
 
@@ -101,12 +103,12 @@ private func renderFrames(
   force: Bool
 ) async throws {
   guard !frameRequests.isEmpty else {
-    throw RecordVisionToolError.message("At least one frame request is required")
+    throw UniteAnalysisSwiftToolError.message("At least one frame request is required")
   }
   let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
   RecordVisionInputLogger.recordSpec(recordSpecURL)
   guard spec.startPTS.timescale > 0 else {
-    throw RecordVisionToolError.message("startPTS.timescale must be positive")
+    throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
   }
   let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
   let bundleURL = try recordingBundle(above: recordSpecURL)
@@ -118,7 +120,7 @@ private func renderFrames(
   let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
   let videoDurationSeconds = CMTimeGetSeconds(extractor.duration)
   guard videoDurationSeconds.isFinite, videoDurationSeconds > 0 else {
-    throw RecordVisionToolError.message(
+    throw UniteAnalysisSwiftToolError.message(
       "Could not determine a positive source-video duration: \(recording.videoURL.path)")
   }
   var requests: [(time: CMTime, source: FrameSource, url: URL)] = []
@@ -129,19 +131,19 @@ private func renderFrames(
     switch scene {
     case .inmatch(let seconds):
       guard seconds.isFinite, seconds >= 0 else {
-        throw RecordVisionToolError.message(
+        throw UniteAnalysisSwiftToolError.message(
           "inmatch seconds must be a finite value greater than or equal to zero")
       }
       offset = seconds
     case .beforeStart(let seconds):
       guard seconds.isFinite, seconds >= 0 else {
-        throw RecordVisionToolError.message(
+        throw UniteAnalysisSwiftToolError.message(
           "before-start seconds must be a finite value greater than or equal to zero")
       }
       offset = -seconds
     case .afterEnd(let seconds):
       guard seconds.isFinite, seconds >= 0 else {
-        throw RecordVisionToolError.message(
+        throw UniteAnalysisSwiftToolError.message(
           "after-end seconds must be a finite value greater than or equal to zero")
       }
       offset = spec.duration + seconds
@@ -151,7 +153,7 @@ private func renderFrames(
     let requestedSeconds = CMTimeGetSeconds(requestedTime)
     guard requestedSeconds.isFinite, requestedSeconds >= 0, requestedSeconds < videoDurationSeconds
     else {
-      throw RecordVisionToolError.message(
+      throw UniteAnalysisSwiftToolError.message(
         "Requested frame time \(canonicalSeconds(requestedSeconds))s is outside source-video range [0.000, \(canonicalSeconds(videoDurationSeconds)))s: \(frameRequest.outputURL.path)"
       )
     }
@@ -166,7 +168,7 @@ private func renderFrames(
         || (seenPaths.insert(request.url.path).inserted
           && !FileManager.default.fileExists(atPath: request.url.path))
     else {
-      throw RecordVisionToolError.message(
+      throw UniteAnalysisSwiftToolError.message(
         "Output collision: \(request.url.path). Pass --force to overwrite.")
     }
   }
@@ -179,7 +181,7 @@ private func renderFrames(
     try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
     FileHandle.standardError.write(
       Data(
-        "record-vision-tool: batch frame requested PTS \(canonicalSeconds(request.time.seconds))s, actual PTS \(canonicalSeconds(actualTime.seconds))s\n"
+        "unite-analysis-swift: batch frame requested PTS \(canonicalSeconds(request.time.seconds))s, actual PTS \(canonicalSeconds(actualTime.seconds))s\n"
           .utf8
       ))
     print(outputURL.path)
@@ -195,13 +197,13 @@ private func renderPreciseFrame(
   force: Bool
 ) async throws {
   guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw RecordVisionToolError.message(
+    throw UniteAnalysisSwiftToolError.message(
       "Output collision: \(outputURL.path). Pass --force to overwrite.")
   }
   let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
   RecordVisionInputLogger.recordSpec(recordSpecURL)
   guard spec.startPTS.timescale > 0 else {
-    throw RecordVisionToolError.message("record-spec.json has no usable startPTS")
+    throw UniteAnalysisSwiftToolError.message("record-spec.json has no usable startPTS")
   }
   try source.validate()
   let offset: Double
@@ -223,7 +225,7 @@ private func renderPreciseFrame(
   guard CMTimeCompare(requestedTime, .zero) >= 0,
     CMTimeCompare(requestedTime, extractor.duration) < 0
   else {
-    throw RecordVisionToolError.message(
+    throw UniteAnalysisSwiftToolError.message(
       "Requested precise frame is outside the source-video range: \(canonicalSeconds(requestedTime.seconds))s"
     )
   }
@@ -234,15 +236,15 @@ private func renderPreciseFrame(
   try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
   FileHandle.standardError.write(
     Data(
-      "record-vision-tool: precise frame requested PTS \(canonicalSeconds(requestedTime.seconds))s, decoded PTS \(canonicalSeconds(frame.presentationTime.seconds))s\n"
+      "unite-analysis-swift: precise frame requested PTS \(canonicalSeconds(requestedTime.seconds))s, decoded PTS \(canonicalSeconds(frame.presentationTime.seconds))s\n"
         .utf8))
   print(outputURL.path)
 }
 
 @main
-private struct RecordVisionTool: AsyncParsableCommand {
+private struct UniteAnalysisSwiftTool: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "record-vision-tool",
+    commandName: "unite-analysis-swift",
     abstract: "Run source-video operations for one Pokémon UNITE record.",
     discussion: """
       Reads record-spec.json as the physical match-to-recording mapping used to locate the
@@ -254,15 +256,95 @@ private struct RecordVisionTool: AsyncParsableCommand {
       Audio peak detection uses the main-mix track only
       to propose visually interesting times; it does not classify events. Run `batch-frame --help`, `precise-frame --help`,
       `contact-sheet --help`, `continuous-ocr --help`, `ocr-input-frame --help`, `detect-chroma-events --help`,
-      `audio-peaks --help`, `result-scan --help`, or `eval-draw-text-script --help`
+      `audio-peaks --help`, `result-scan --help`, `eval-draw-text-script --help`, or `config --help`
       for their JSON and output contracts.
       """,
     subcommands: [
       BatchFrame.self, PreciseFrame.self, ContactSheet.self, ContinuousOCRCommand.self,
       OCRInputFrame.self, DetectChromaEvents.self, AudioPeaks.self, ResultScan.self,
-      EvaluateDrawText.self,
+      EvaluateDrawText.self, Config.self,
     ]
   )
+}
+
+private struct Config: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "config",
+    abstract: "Manage user-specific unite-analysis-swift settings.",
+    subcommands: [ConfigGet.self, ConfigSet.self, ConfigUnset.self, ConfigPath.self]
+  )
+}
+
+private enum ConfigKey: String, ExpressibleByArgument, CaseIterable {
+  case obsidianMatchReportsRoot = "obsidian-match-reports-root"
+  case obsidianStrategyBooksRoot = "obsidian-strategy-books-root"
+
+  var obsidianDirectory: ObsidianDirectory {
+    switch self {
+    case .obsidianMatchReportsRoot: .matchReports
+    case .obsidianStrategyBooksRoot: .strategyBooks
+    }
+  }
+}
+
+private struct ConfigGet: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "get", abstract: "Print one configured value.")
+
+  @Argument(help: "Configuration key: obsidian-match-reports-root or obsidian-strategy-books-root.")
+  var key: ConfigKey
+
+  func run() throws {
+    let configuration = try UserConfigurationStore().load()
+    let value: String?
+    switch key {
+    case .obsidianMatchReportsRoot:
+      value = configuration.obsidianMatchReportsRoot
+    case .obsidianStrategyBooksRoot:
+      value = configuration.obsidianStrategyBooksRoot
+    }
+    guard let value else {
+      throw UniteAnalysisSwiftToolError.message("\(key.rawValue) is not configured")
+    }
+    print(value)
+  }
+}
+
+private struct ConfigSet: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "set", abstract: "Validate and save one configured value.")
+
+  @Argument(help: "Configuration key: obsidian-match-reports-root or obsidian-strategy-books-root.")
+  var key: ConfigKey
+
+  @Argument(help: "Value to save.")
+  var value: String
+
+  func run() throws {
+    print(
+      try UserConfigurationStore().setObsidianDirectory(key.obsidianDirectory, path: value).path)
+  }
+}
+
+private struct ConfigUnset: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "unset", abstract: "Remove one configured value.")
+
+  @Argument(help: "Configuration key: obsidian-match-reports-root or obsidian-strategy-books-root.")
+  var key: ConfigKey
+
+  func run() throws {
+    try UserConfigurationStore().unsetObsidianDirectory(key.obsidianDirectory)
+  }
+}
+
+private struct ConfigPath: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "path", abstract: "Print the user configuration file path.")
+
+  func run() {
+    print(UserConfigurationStore.defaultFileURL.path)
+  }
 }
 
 private struct ResultScan: ParsableCommand {
@@ -361,10 +443,11 @@ private struct AudioPeaks: AsyncParsableCommand {
     let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
     guard spec.startPTS.timescale > 0 else {
-      throw RecordVisionToolError.message("startPTS.timescale must be positive")
+      throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
     }
     guard spec.duration.isFinite, spec.duration > 0 else {
-      throw RecordVisionToolError.message("record-spec duration must be a positive finite value")
+      throw UniteAnalysisSwiftToolError.message(
+        "record-spec duration must be a positive finite value")
     }
     let selectedDuration = duration ?? (spec.duration - inmatchStart)
     guard selectedDuration.isFinite, selectedDuration > 0 else {

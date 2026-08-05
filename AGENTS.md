@@ -23,7 +23,7 @@ SPDX-License-Identifier: Apache-2.0
 ## Verification
 
 - Run `swift format lint --recursive --strict .` after changing Swift files or formatting configuration.
-- Verify that `Package.resolved` and `Schemas/*.json` equal their `jq --indent 2` output after changing JSON files.
+- Verify that `Package.resolved` and `docs/*.json` equal their `jq --indent 2` output after changing JSON files.
 - Run `swift test` after changing Swift implementation or tests.
 - Run `reuse --no-multiprocessing lint` after changing tracked files.
 - Report each verification command and its result separately.

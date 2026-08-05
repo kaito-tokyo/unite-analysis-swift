@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
+  "title": "Pokémon UNITE match publication state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "updatedAt"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "obsidianMatchReports": {
+      "$ref": "#/$defs/filePublication"
+    },
+    "googleDrive": {
+      "$ref": "#/$defs/googleDrivePublication"
+    }
+  },
+  "$defs": {
+    "filePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lastRelativePath",
+        "syncedAt",
+        "sourceReportUpdatedAt"
+      ],
+      "properties": {
+        "lastRelativePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "syncedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceReportUpdatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "googleDrivePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documentId",
+        "lastRelativePath",
+        "syncedAt",
+        "sourceReportUpdatedAt"
+      ],
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lastRelativePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "syncedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceReportUpdatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "validatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dailyPdfValidatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "Pokémon UNITE 試合レビュー"
+  short_description: "録画を分析し、対話を通じて日本語レポートにまとめる"
+  default_prompt: "$review-unite-matches-jaを使って指定した録画内のPokémon UNITEの試合を一緒に振り返り、共有した解釈を日本語レポートに残してください。"

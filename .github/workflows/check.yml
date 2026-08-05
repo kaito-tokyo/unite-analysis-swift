@@ -57,7 +57,7 @@ jobs:
       - name: Check JSON format
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
-          for file in Package.resolved Schemas/*.json; do
+          for file in Package.resolved docs/*.json; do
             jq --indent 2 . "$file" | cmp --silent "$file" -
           done
 
