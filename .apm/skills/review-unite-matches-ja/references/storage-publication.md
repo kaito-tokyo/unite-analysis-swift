@@ -45,12 +45,12 @@ Obsidianへの操作を求められた場合にだけ、必要な保存先を解
 MatchReportsのルートディレクトリは次の優先順位で決める。
 
 1. ユーザーが今回の依頼で明示したMatchReportsパス
-2. `/usr/local/bin/unite-analysis-swift config get obsidian-match-reports-root`の出力
+2. `~/.local/bin/unite-analysis-swift config get obsidian-match-reports-root`の出力
 
 StrategyBooksのルートディレクトリは次の優先順位で決める。
 
 1. ユーザーが今回の依頼で明示したStrategyBooksパス
-2. `/usr/local/bin/unite-analysis-swift config get obsidian-strategy-books-root`の出力
+2. `~/.local/bin/unite-analysis-swift config get obsidian-strategy-books-root`の出力
 
 必要な保存先がいずれも指定されていない場合は、書き込みを始める前にユーザーへ確認する。過去の会話や推測したVault位置を暗黙に使わない。
 
@@ -64,11 +64,11 @@ StrategyBooksのルートディレクトリは次の優先順位で決める。
 恒久設定はSwift CLIで行う。
 
 ```sh
-/usr/local/bin/unite-analysis-swift config set obsidian-match-reports-root "/path/to/Obsidian/PokemonUnite/MatchReports"
-/usr/local/bin/unite-analysis-swift config set obsidian-strategy-books-root "/path/to/Obsidian/PokemonUnite/StrategyBooks"
+~/.local/bin/unite-analysis-swift config set obsidian-match-reports-root "/path/to/Obsidian/PokemonUnite/MatchReports"
+~/.local/bin/unite-analysis-swift config set obsidian-strategy-books-root "/path/to/Obsidian/PokemonUnite/StrategyBooks"
 ```
 
-設定の確認と解除には、それぞれのキーで`config get`と`config unset`を使う。設定ファイルの場所の確認には`/usr/local/bin/unite-analysis-swift config path`を使う。CLIが返した設定エラーを未設定として扱わず、ユーザーへ知らせる。設定ファイルを直接編集しない。
+設定の確認と解除には、それぞれのキーで`config get`と`config unset`を使う。設定ファイルの場所の確認には`~/.local/bin/unite-analysis-swift config path`を使う。CLIが返した設定エラーを未設定として扱わず、ユーザーへ知らせる。設定ファイルを直接編集しない。
 
 `config get`が対象キーの未登録を返した場合だけ、設定値を尋ねる手順へ進む。不正な設定ファイル、読み取り失敗、CLIの欠落、その他のエラーは未登録と同一視せず、内容をユーザーへ知らせる。`config set`が成功した後に`config get`で読み直し、選択したパスが保存されたことを確認する。
 
