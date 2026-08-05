@@ -1,0 +1,14 @@
+unite-analysis-swift
+Copyright 2026 Kaito Tokyo
+
+This product is licensed under the Apache License, Version 2.0.
+
+This product includes swift-argument-parser 1.8.2.
+Copyright (c) 2020 Apple Inc. and the Swift project authors.
+
+Original project:
+  Swift Argument Parser
+  https://github.com/apple/swift-argument-parser
+
+Swift Argument Parser is licensed under the Apache License, Version 2.0,
+with the Runtime Library Exception.

@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "record-vision-tool contact sheet",
+  "type": "object",
+  "required": [
+    "cell",
+    "columns",
+    "placements",
+    "frames"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "cell": {
+      "$ref": "#/$defs/size"
+    },
+    "columns": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "backgroundColor": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+    },
+    "placements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/placement"
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/frame"
+      }
+    }
+  },
+  "$defs": {
+    "size": {
+      "type": "object",
+      "required": [
+        "width",
+        "height"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "rectangle": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "placement": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "source",
+            "destination"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/rectangle"
+            },
+            "destination": {
+              "$ref": "#/$defs/rectangle"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "drawText"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "drawText": {
+              "$ref": "#/$defs/drawText"
+            }
+          }
+        }
+      ]
+    },
+    "drawText": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "fontSize"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "script": {
+          "type": "object",
+          "required": [
+            "return"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "return": {
+              "type": "string"
+            }
+          }
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fontSize": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "backgroundColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "borderColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "fontName": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ]
+        },
+        {
+          "required": [
+            "script"
+          ]
+        }
+      ]
+    },
+    "frame": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "inmatch"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "inmatch": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "required": [
+            "beforeStart"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "beforeStart": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "required": [
+            "afterEnd"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "afterEnd": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
