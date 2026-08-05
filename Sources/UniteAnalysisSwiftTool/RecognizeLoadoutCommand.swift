@@ -19,16 +19,32 @@ private struct LoadoutOutputDocument: Encodable {
   let finalPrepTime: Double?
   let versusTime: Double?
   let prepTime: Double?
+  let finalPrepPresentationTime: Double?
+  let versusPresentationTime: Double?
+  let prepPresentationTime: Double?
   let recognizer: RecognizerDescription
   let allies: [RecognizedAllyLoadout]
   let enemies: [RecognizedEnemyLoadout]
 
   struct RecognizerDescription: Encodable {
-    let matching = "AKAZE MLDB full + BF-Hamming KNN + Lowe ratio"
+    let matching: String
     let heldKNNRatio: Float = 0.90
     let battleKNNRatio: Float = 0.80
     let selectionMode = "caller-selected from visual review/contact sheet"
+
+    init(matcher: unite_analysis.IconMatcher) {
+      let descriptorSize = matcher.akazeDescriptorSize()
+      self.matching =
+        descriptorSize == 0
+        ? "AKAZE MLDB full + BF-Hamming KNN + Lowe ratio"
+        : "AKAZE MLDB \(descriptorSize)-bit + BF-Hamming KNN + Lowe ratio"
+    }
   }
+}
+
+private struct DecodedLoadoutFrame {
+  let image: CGImage
+  let presentationTime: Double
 }
 
 private func defaultDescriptorDatabaseURL() -> URL {
@@ -49,7 +65,7 @@ private func loadoutInputs(
   recordSpec recordSpecPath: String?,
   input inputPath: String?,
   matchTimes: [Double]
-) async throws -> (video: URL, outputDirectory: URL, frames: [CGImage]) {
+) async throws -> (video: URL, outputDirectory: URL, frames: [DecodedLoadoutFrame]) {
   guard matchTimes.allSatisfy(\.isFinite) else {
     throw ValidationError("Recognition times must be finite match-relative seconds")
   }
@@ -77,8 +93,13 @@ private func loadoutInputs(
       RecordVisionInputLogger.unfinishedRecording(bundle)
     }
     recording = try ResolvedRecordingInput.resolve(bundle.path, allowUnfinished: true)
-    outputDirectory = recordSpecURL.deletingLastPathComponent()
-      .appendingPathComponent("_PokemonUniteAnalysis", isDirectory: true)
+    outputDirectory =
+      bundle
+      .appendingPathComponent("_PokemonUniteAnalysis/matches", isDirectory: true)
+      .appendingPathComponent(
+        recordSpecURL.deletingLastPathComponent().lastPathComponent,
+        isDirectory: true
+      )
     component = gameScreen
     let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
     times = matchTimes.map {
@@ -98,12 +119,22 @@ private func loadoutInputs(
     times = matchTimes.map { CMTime(seconds: $0, preferredTimescale: 600) }
   }
   let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
-  var frames = [CGImage?](repeating: nil, count: times.count)
-  try extractor.extractFrames(at: times) { index, image in
-    frames[index] = image
+  guard
+    times.allSatisfy({
+      CMTimeCompare($0, .zero) >= 0 && CMTimeCompare($0, extractor.duration) < 0
+    })
+  else {
+    throw ValidationError("Recognition time is outside the source-video range")
+  }
+  var frames = [DecodedLoadoutFrame?](repeating: nil, count: times.count)
+  try extractor.extractFrames(at: times) { index, image, presentationTime in
+    frames[index] = DecodedLoadoutFrame(
+      image: try normalizedGameScreen(image, component: component),
+      presentationTime: presentationTime.seconds
+    )
     FileHandle.standardError.write(
       Data(
-        "unite-analysis-swift: loadout frame at or after requested PTS \(canonicalSeconds(times[index].seconds))s\n"
+        "unite-analysis-swift: loadout frame requested PTS \(canonicalSeconds(times[index].seconds))s, decoded PTS \(canonicalSeconds(presentationTime.seconds))s\n"
           .utf8))
   }
   return (
@@ -112,7 +143,7 @@ private func loadoutInputs(
       guard let frame else {
         throw UniteAnalysisSwiftToolError.message("Missing decoded loadout frame")
       }
-      return try normalizedGameScreen(frame, component: component)
+      return frame
     }
   )
 }
@@ -189,12 +220,14 @@ struct RecognizeDraftLoadout: AsyncParsableCommand {
     let matcher = try loadIconMatcher(
       from: descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
     let result = try LoadoutRecognizer.recognizeDraft(
-      finalPreparation: inputs.frames[0], versus: inputs.frames[1], matcher: matcher)
+      finalPreparation: inputs.frames[0].image, versus: inputs.frames[1].image, matcher: matcher)
     try writeLoadout(
       LoadoutOutputDocument(
         format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
         finalPrepTime: finalPreparationTime, versusTime: versusTime, prepTime: nil,
-        recognizer: .init(), allies: result.allies, enemies: result.enemies),
+        finalPrepPresentationTime: inputs.frames[0].presentationTime,
+        versusPresentationTime: inputs.frames[1].presentationTime, prepPresentationTime: nil,
+        recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
       defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
       force: force)
   }
@@ -227,11 +260,14 @@ struct RecognizeBlindLoadout: AsyncParsableCommand {
     let matcher = try loadIconMatcher(
       from: descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
     let result = try LoadoutRecognizer.recognizeBlind(
-      preparation: inputs.frames[0], matcher: matcher)
+      preparation: inputs.frames[0].image, matcher: matcher)
     try writeLoadout(
       LoadoutOutputDocument(
         format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
-        finalPrepTime: nil, versusTime: nil, prepTime: prepTime, recognizer: .init(),
+        finalPrepTime: nil, versusTime: nil, prepTime: prepTime,
+        finalPrepPresentationTime: nil, versusPresentationTime: nil,
+        prepPresentationTime: inputs.frames[0].presentationTime,
+        recognizer: .init(matcher: matcher),
         allies: result.allies, enemies: result.enemies),
       defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
       force: force)

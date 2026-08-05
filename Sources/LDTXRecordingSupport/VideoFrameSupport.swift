@@ -132,6 +132,17 @@ public final class VideoFrameExtractor {
     at times: [CMTime],
     handler: (_ index: Int, _ image: CGImage) throws -> Void
   ) throws {
+    try extractFrames(at: times) { index, image, _ in
+      try handler(index, image)
+    }
+  }
+
+  /// Decodes the first source sample at or after each requested time.
+  /// The presentation time identifies the decoded sample rather than the request.
+  public func extractFrames(
+    at times: [CMTime],
+    handler: (_ index: Int, _ image: CGImage, _ presentationTime: CMTime) throws -> Void
+  ) throws {
     guard !times.isEmpty else { return }
     for index in 1..<times.count {
       guard CMTimeCompare(times[index], times[index - 1]) > 0 else {
@@ -156,7 +167,7 @@ public final class VideoFrameExtractor {
       let image = try VideoFrameSupport.normalizedImage(
         pixelBuffer, transform: transform, context: context)
       repeat {
-        try handler(targetIndex, image)
+        try handler(targetIndex, image, presentationTime)
         targetIndex += 1
       } while targetIndex < times.count && CMTimeCompare(presentationTime, times[targetIndex]) >= 0
     }
