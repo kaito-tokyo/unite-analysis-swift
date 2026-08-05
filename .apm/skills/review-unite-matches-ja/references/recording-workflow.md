@@ -13,14 +13,14 @@ SPDX-License-Identifier: Apache-2.0
 このスキルの標準分析CLIは、配置済みの次のコマンドだけとする。
 
 ```text
-/usr/local/bin/unite-analysis-swift
+~/.local/bin/unite-analysis-swift
 ```
 
 実行前に次を確認する。
 
 ```sh
-test -x /usr/local/bin/unite-analysis-swift
-/usr/local/bin/unite-analysis-swift --help
+test -x ~/.local/bin/unite-analysis-swift
+~/.local/bin/unite-analysis-swift --help
 ```
 
 PATH上の同名コマンドではなく、この絶対パスを使う。コマンドがない、実行できない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
@@ -47,7 +47,7 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 オプションとJSON契約の正本は、インストール済みコマンドのヘルプとする。
 
 ```sh
-/usr/local/bin/unite-analysis-swift help <subcommand>
+~/.local/bin/unite-analysis-swift help <subcommand>
 ```
 
 | サブコマンド | 用途 |
@@ -116,7 +116,7 @@ OCR結果に疑問がある場合は`ocr-input-frame`で前処理入力を確認
 
 1. ユーザーが指定した録画と対象試合を確認する。
 2. `.finalized`、`Info.plist`、`record-spec.json`を確認する。
-3. `/usr/local/bin/unite-analysis-swift --help`でCLIを確認する。
+3. `~/.local/bin/unite-analysis-swift --help`でCLIを確認する。
 4. 既存の`_PokemonUniteAnalysis`成果物を調べ、現行入力と一致するものを再利用する。
 5. `batch-frame`または`contact-sheet`で試合全体の概要を作る。
 6. 必要に応じて`audio-peaks`、`detect-chroma-events`、`continuous-ocr`で候補時刻を探す。

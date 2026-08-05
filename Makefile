@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-PREFIX ?= /usr/local
+PREFIX ?= $(HOME)/.local
 DESTDIR ?=
 
 .PHONY: build install
