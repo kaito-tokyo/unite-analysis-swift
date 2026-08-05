@@ -282,7 +282,9 @@ public enum ContinuousOCR {
         actualTime = valueActualTime
       case .failure(let valueRequestedTime, let error):
         throw ContinuousOCRError.message(
-          "Source-video image generation failed at \(valueRequestedTime.seconds)s: \(error.localizedDescription)"
+          VideoFrameSupport.decodingFailureMessage(
+            "Source-video image generation failed at \(valueRequestedTime.seconds)s: \(error.localizedDescription)"
+          )
         )
       }
       guard let index = sourceTimes.firstIndex(where: { CMTimeCompare($0, requestedTime) == 0 }),
@@ -411,7 +413,9 @@ public enum ContinuousOCR {
         try writePNG(try recognitionInput(image, source: definition.source), to: outputs[index])
       case .failure(let requestedTime, let error):
         throw ContinuousOCRError.message(
-          "Preview generation failed at \(requestedTime.seconds)s: \(error.localizedDescription)")
+          VideoFrameSupport.decodingFailureMessage(
+            "Preview generation failed at \(requestedTime.seconds)s: \(error.localizedDescription)"
+          ))
       }
     }
     guard rendered.count == sourceTimes.count else {

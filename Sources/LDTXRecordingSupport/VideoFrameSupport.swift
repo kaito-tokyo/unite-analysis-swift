@@ -83,7 +83,9 @@ public final class VideoFrameExtractor {
         try handler(index, image, actualTime)
       case .failure(let requestedTime, let error):
         throw VideoFrameSupportError.message(
-          "Source-video image generation failed at \(requestedTime.seconds)s: \(error.localizedDescription)"
+          VideoFrameSupport.decodingFailureMessage(
+            "Source-video image generation failed at \(requestedTime.seconds)s: \(error.localizedDescription)"
+          )
         )
       }
     }
@@ -105,8 +107,10 @@ public final class VideoFrameExtractor {
     reader.timeRange = CMTimeRange(start: prerollStart, end: duration)
     let output = try makeOutput(reader: reader)
     guard reader.startReading() else {
-      throw reader.error
-        ?? VideoFrameSupportError.message("Could not start precise source-video decoding")
+      throw VideoFrameSupportError.message(
+        VideoFrameSupport.decodingFailureMessage(
+          "Could not start precise source-video decoding: \(reader.error?.localizedDescription ?? "unknown error")"
+        ))
     }
     while let sample = output.copyNextSampleBuffer() {
       let presentationTime = CMSampleBufferGetPresentationTimeStamp(sample)
@@ -118,8 +122,10 @@ public final class VideoFrameExtractor {
         presentationTime
       )
     }
-    throw reader.error
-      ?? VideoFrameSupportError.message("Source-video decoding ended before precise frame request")
+    throw VideoFrameSupportError.message(
+      VideoFrameSupport.decodingFailureMessage(
+        "Source-video decoding ended before precise frame request: \(reader.error?.localizedDescription ?? "unknown error")"
+      ))
   }
 
   public func extractFrames(
@@ -136,7 +142,10 @@ public final class VideoFrameExtractor {
     reader.timeRange = CMTimeRange(start: times[0], end: duration)
     let output = try makeOutput(reader: reader)
     guard reader.startReading() else {
-      throw reader.error ?? VideoFrameSupportError.message("Could not start source-video decoding")
+      throw VideoFrameSupportError.message(
+        VideoFrameSupport.decodingFailureMessage(
+          "Could not start source-video decoding: \(reader.error?.localizedDescription ?? "unknown error")"
+        ))
     }
     var targetIndex = 0
     while targetIndex < times.count, let sample = output.copyNextSampleBuffer() {
@@ -152,10 +161,10 @@ public final class VideoFrameExtractor {
       } while targetIndex < times.count && CMTimeCompare(presentationTime, times[targetIndex]) >= 0
     }
     guard targetIndex == times.count else {
-      throw reader.error
-        ?? VideoFrameSupportError.message(
-          "Source-video decoding ended after \(targetIndex) of \(times.count) requested frames"
-        )
+      throw VideoFrameSupportError.message(
+        VideoFrameSupport.decodingFailureMessage(
+          "Source-video decoding ended after \(targetIndex) of \(times.count) requested frames: \(reader.error?.localizedDescription ?? "unknown error")"
+        ))
     }
   }
 
@@ -176,6 +185,13 @@ public final class VideoFrameExtractor {
 }
 
 public enum VideoFrameSupport {
+  public static let sandboxDecodingGuidance =
+    "Video decoding uses VideoToolbox and generally requires execution outside an application sandbox. If decoding fails with \"Cannot Decode\" inside a sandbox, rerun the same command outside the sandbox before treating the media as invalid."
+
+  public static func decodingFailureMessage(_ message: String) -> String {
+    "\(message) \(sandboxDecodingGuidance)"
+  }
+
   public static func normalizedImage(
     _ pixelBuffer: CVPixelBuffer,
     transform: CGAffineTransform,

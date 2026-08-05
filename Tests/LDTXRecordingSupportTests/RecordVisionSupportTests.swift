@@ -3,9 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Foundation
+import LDTXRecordingSupport
 import Testing
 
 @testable import RecordVisionSupport
+
+@Test func videoDecodingFailureIncludesSandboxRecoveryGuidance() {
+  let message = VideoFrameSupport.decodingFailureMessage("Cannot Decode")
+  #expect(message.contains("VideoToolbox"))
+  #expect(message.contains("outside an application sandbox"))
+  #expect(message.contains("before treating the media as invalid"))
+}
 
 @Test func drawTextScriptReturnExpressionUsesSharedContext() throws {
   let value = try DrawTextScriptEngine.evaluate(

@@ -155,7 +155,9 @@ public enum ChromaEventDetector {
         actualTime = actual
       case .failure(let requested, let error):
         throw ChromaEventError.message(
-          "Source-video image generation failed at \(requested.seconds)s: \(error.localizedDescription)"
+          VideoFrameSupport.decodingFailureMessage(
+            "Source-video image generation failed at \(requested.seconds)s: \(error.localizedDescription)"
+          )
         )
       }
       guard let index = sourceTimes.firstIndex(where: { CMTimeCompare($0, requestedTime) == 0 }),
