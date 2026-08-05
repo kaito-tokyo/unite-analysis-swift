@@ -85,6 +85,20 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   }
 }
 
+@Test func avFoundationCommandHelpRequiresUnsandboxedExecution() throws {
+  let commands = [
+    "batch-frame", "sample-frames", "precise-frame", "contact-sheet", "audio-peaks",
+    "eval-draw-text-script",
+  ]
+  for command in commands {
+    let result = try runCommand([command, "--help"])
+    #expect(result.status == 0)
+    #expect(result.stdout.contains("This command must run outside a sandbox"))
+    #expect(result.stdout.contains("AVFoundation"))
+    #expect(result.stderr.isEmpty)
+  }
+}
+
 @Test func schemaCommandPrintsEveryDocumentSchema() throws {
   let docsURL = repositoryRoot.appendingPathComponent("docs", isDirectory: true)
   for basename in EmbeddedSchemas.basenames {

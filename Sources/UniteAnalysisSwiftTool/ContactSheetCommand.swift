@@ -34,11 +34,13 @@ struct ContactSheet: AsyncParsableCommand {
     commandName: "contact-sheet",
     abstract: "Render source-video contact sheets from JSONL jobs.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
+
       INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, output, cell {width,height}, columns, placements, and matchTimestamps. backgroundColor is optional. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
 
       COMPLETE jobs.jsonl EXAMPLE.
 
-      {"jobId":"overview","output":"contact-sheet.jpg","cell":{"width":408,"height":258},"columns":3,"backgroundColor":"#202020","placements":[{"source":{"x":0,"y":0,"width":1632,"height":918},"destination":{"x":0,"y":0,"width":408,"height":230}},{"drawText":{"script":{"return":"FRAME.actualInmatch.toFixed(3)+'s'"},"x":8,"y":234,"fontSize":18,"color":"#FFFFFF","backgroundColor":"#000000CC","borderColor":"#FFFFFF"}}],"matchTimestamps":[-1,0,30,60]}
+      {"jobId":"overview","output":"contact-sheet.jpg","cell":{"width":320,"height":202},"columns":3,"backgroundColor":"#202020","placements":[{"source":{"x":0,"y":0,"width":640,"height":360},"destination":{"x":0,"y":0,"width":320,"height":180}},{"drawText":{"script":{"return":"FRAME.actualInmatch.toFixed(3)+'s'"},"x":8,"y":184,"fontSize":14,"color":"#FFFFFF","backgroundColor":"#000000CC","borderColor":"#FFFFFF"}}],"matchTimestamps":[-1,0,30,60]}
 
       JOB-ID. jobId is a required non-empty caller-defined correlation string and must be unique within the input stream. It is returned unchanged and is never used to derive the output filename.
 

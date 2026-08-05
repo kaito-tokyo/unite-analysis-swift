@@ -10,6 +10,8 @@ struct SampleFrames: AsyncParsableCommand {
     commandName: "sample-frames",
     abstract: "Write one FFmpeg-shaped fixed-rate JPEG sequence.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
+
       PURPOSE. Generate one seek-image sequence before detect-chroma-events. The options intentionally correspond to one FFmpeg crop, fps, and scale filter chain. This command only extracts images; it does not measure chroma differences or select event candidates.
 
       COMPLETE EXAMPLE.

@@ -17,6 +17,8 @@ struct EvaluateDrawText: AsyncParsableCommand {
     commandName: "eval-draw-text-script",
     abstract: "Evaluate one drawText JSC expression and print its resulting string.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video metadata loading is unavailable in the sandboxed execution environment.
+
       PURPOSE. Evaluate the exact JavaScript expression used as drawText.script.return without rendering a contact sheet. The converted string is written to stdout.
 
       COMPLETE EXAMPLE.

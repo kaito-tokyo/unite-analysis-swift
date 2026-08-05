@@ -34,11 +34,13 @@ struct BatchFrame: AsyncParsableCommand {
     commandName: "batch-frame",
     abstract: "Write source-video screenshots from JSONL frame jobs.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
+
       INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, matchTimestamps, source, and outputPrefix. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
 
       COMPLETE jobs.jsonl EXAMPLE.
 
-      {"jobId":"game-frames","matchTimestamps":[-2,0,45.5],"source":{"x":0,"y":0,"width":1632,"height":918},"outputPrefix":"screenshots/game"}
+      {"jobId":"example-region","matchTimestamps":[-2,0,45.5],"source":{"x":0,"y":0,"width":640,"height":360},"outputPrefix":"screenshots/example-region"}
 
       JOB-ID. jobId is a required non-empty caller-defined correlation string and must be unique within the input stream. It is returned unchanged and is never used to derive output filenames.
 

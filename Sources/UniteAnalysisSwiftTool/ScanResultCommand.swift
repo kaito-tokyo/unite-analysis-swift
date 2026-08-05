@@ -22,7 +22,7 @@ struct ScanResultCommand: ParsableCommand {
     commandName: "scan-result",
     abstract: "Scan Pokémon UNITE result and battle-data screens into JSON.",
     discussion: """
-      INPUT. Supply one still image in which the cropped game screen fills the complete image. The OCR layout is scaled from its 1632x918 reference coordinates to the actual image dimensions. Resized game-screen images are accepted. Images containing margins or a surrounding composition remain invalid. PNG, JPEG, HEIC, TIFF, BMP, and GIF are accepted; only image index 0 is read. Videos and recording bundles are rejected.
+      INPUT. Supply one still image in which a 16:9 cropped game screen fills the complete image. The OCR layout is proportionally scaled to the actual image dimensions. Resized game-screen images are accepted. Images containing margins or a surrounding composition remain invalid. PNG, JPEG, HEIC, TIFF, BMP, and GIF are accepted; only image index 0 is read. Videos and recording bundles are rejected.
 
       COMPLETE EXAMPLES.
 

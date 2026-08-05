@@ -220,8 +220,8 @@ public enum StillImageInput {
 }
 
 enum GameScreenInput {
-  static let width = 1632
-  static let height = 918
+  static let width = 1920
+  static let height = 1080
 }
 
 enum OCR {
@@ -393,8 +393,16 @@ enum OCR {
     let sx = CGFloat(image.width) / CGFloat(GameScreenInput.width)
     let sy = CGFloat(image.height) / CGFloat(GameScreenInput.height)
     let regions = [
-      CGRect(x: 600 * sx, y: 0, width: 1032 * sx, height: 200 * sy),
-      CGRect(x: 0, y: 80 * sy, width: 1632 * sx, height: 690 * sy),
+      CGRect(
+        x: Layout.canonical(600) * sx,
+        y: 0,
+        width: Layout.canonical(1032) * sx,
+        height: Layout.canonical(200) * sy),
+      CGRect(
+        x: 0,
+        y: Layout.canonical(80) * sy,
+        width: CGFloat(GameScreenInput.width) * sx,
+        height: Layout.canonical(690) * sy),
     ]
     for region in regions {
       if let crop = image.cropping(to: region.integral) {
@@ -423,11 +431,21 @@ enum OCR {
 }
 
 struct Layout {
-  // Coordinates are calibrated directly for the cropped 1632x918 game canvas.
-  static let gameWidth: CGFloat = 1632
-  static let gameHeight: CGFloat = 918
-  static let battleRowTops: [CGFloat] = [200, 304, 408, 510, 610]
-  static let summaryRowTops: [CGFloat] = [205, 307, 409, 510, 612]
+  // OCR geometry uses a canonical 16:9 coordinate space. The conversion preserves the
+  // existing calibrated regions while avoiding a capture-device-specific canvas size.
+  static func canonical(_ value: CGFloat) -> CGFloat { value * 20 / 17 }
+  static let gameWidth: CGFloat = CGFloat(GameScreenInput.width)
+  static let gameHeight: CGFloat = CGFloat(GameScreenInput.height)
+  static let battleRowTops: [CGFloat] = [200, 304, 408, 510, 610].map(canonical)
+  static let summaryRowTops: [CGFloat] = [205, 307, 409, 510, 612].map(canonical)
+
+  static func canonicalRect(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> CGRect {
+    CGRect(
+      x: canonical(x),
+      y: canonical(y),
+      width: canonical(width),
+      height: canonical(height))
+  }
 
   struct Columns {
     let name: CGRect
@@ -438,32 +456,32 @@ struct Layout {
   }
 
   static let battleLeft = Columns(
-    name: CGRect(x: 195, y: 5, width: 230, height: 78),
-    first: CGRect(x: 430, y: 2, width: 110, height: 42),
-    second: CGRect(x: 545, y: 2, width: 110, height: 42),
-    third: CGRect(x: 665, y: 2, width: 115, height: 42),
+    name: canonicalRect(x: 195, y: 5, width: 230, height: 78),
+    first: canonicalRect(x: 430, y: 2, width: 110, height: 42),
+    second: canonicalRect(x: 545, y: 2, width: 110, height: 42),
+    third: canonicalRect(x: 665, y: 2, width: 115, height: 42),
     fourth: nil
   )
   static let battleRight = Columns(
-    name: CGRect(x: 935, y: 5, width: 230, height: 78),
-    first: CGRect(x: 1170, y: 2, width: 110, height: 42),
-    second: CGRect(x: 1288, y: 2, width: 110, height: 42),
-    third: CGRect(x: 1410, y: 2, width: 115, height: 42),
+    name: canonicalRect(x: 935, y: 5, width: 230, height: 78),
+    first: canonicalRect(x: 1170, y: 2, width: 110, height: 42),
+    second: canonicalRect(x: 1288, y: 2, width: 110, height: 42),
+    third: canonicalRect(x: 1410, y: 2, width: 115, height: 42),
     fourth: nil
   )
   static let summaryLeft = Columns(
-    name: CGRect(x: 190, y: 2, width: 240, height: 70),
-    first: CGRect(x: 430, y: 2, width: 64, height: 70),
-    second: CGRect(x: 535, y: 2, width: 62, height: 70),
-    third: CGRect(x: 615, y: 2, width: 65, height: 70),
-    fourth: CGRect(x: 696, y: 2, width: 95, height: 70)
+    name: canonicalRect(x: 190, y: 2, width: 240, height: 70),
+    first: canonicalRect(x: 430, y: 2, width: 64, height: 70),
+    second: canonicalRect(x: 535, y: 2, width: 62, height: 70),
+    third: canonicalRect(x: 615, y: 2, width: 65, height: 70),
+    fourth: canonicalRect(x: 696, y: 2, width: 95, height: 70)
   )
   static let summaryRight = Columns(
-    name: CGRect(x: 935, y: 2, width: 220, height: 70),
-    first: CGRect(x: 1141, y: 2, width: 64, height: 70),
-    second: CGRect(x: 1259, y: 2, width: 62, height: 70),
-    third: CGRect(x: 1341, y: 2, width: 65, height: 70),
-    fourth: CGRect(x: 1413, y: 2, width: 96, height: 70)
+    name: canonicalRect(x: 935, y: 2, width: 220, height: 70),
+    first: canonicalRect(x: 1141, y: 2, width: 64, height: 70),
+    second: canonicalRect(x: 1259, y: 2, width: 62, height: 70),
+    third: canonicalRect(x: 1341, y: 2, width: 65, height: 70),
+    fourth: canonicalRect(x: 1413, y: 2, width: 96, height: 70)
   )
 
   static func rect(_ base: CGRect, row: Int, rowTops: [CGFloat], image: CGImage) -> CGRect {
@@ -553,7 +571,7 @@ func summaryRows(
     for row in 0..<5 {
       let scaleX = CGFloat(image.width) / CGFloat(GameScreenInput.width)
       let scaleY = CGFloat(image.height) / CGFloat(GameScreenInput.height)
-      let textY = (Layout.summaryRowTops[row] + 43) * scaleY
+      let textY = (Layout.summaryRowTops[row] + Layout.canonical(43)) * scaleY
       let centers = [columns.first, columns.second, columns.third, columns.fourth!]
         .map { $0.midX * scaleX }
       var numbers = OCR.numericRow(
@@ -566,7 +584,7 @@ func summaryRows(
         x: columns.first.minX,
         y: 0,
         width: columns.fourth!.maxX - columns.first.minX,
-        height: 76
+        height: Layout.canonical(76)
       )
       let rowWide = try OCR.numericCells(
         image,

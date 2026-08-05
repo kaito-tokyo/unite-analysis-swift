@@ -17,11 +17,13 @@ struct PreciseFrame: AsyncParsableCommand {
     commandName: "precise-frame",
     abstract: "Write exactly one AVAssetReader-decoded explicit-source screenshot.",
     discussion: """
+      EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
+
       INPUT. This command accepts options only and writes exactly one frame; it does not use the jobs.jsonl interface. Specify --record-spec, --match-timestamp, --x, --y, --width, --height, and --output. Run it with the .ldtxrecord root as the current directory; this caller responsibility is not checked separately.
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 45.5 --x 0 --y 0 --width 1632 --height 918 --output screenshots/precise.jpg
+      unite-analysis-swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 45.5 --x 0 --y 0 --width 640 --height 360 --output screenshots/precise.jpg
 
       TIMING. --match-timestamp is one finite second value relative to match start. Negative values select pre-match frames. Values above the match duration select post-match frames. The resolved recording time must remain inside the source video.
 

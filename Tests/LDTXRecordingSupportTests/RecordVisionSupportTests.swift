@@ -58,7 +58,7 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
       "startPTS": {"value": 180000, "timescale": 600},
       "duration": 600,
       "videoComponents": [
-        {"name": "game-screen", "x": 0, "y": 0, "width": 1632, "height": 918}
+        {"name": "game-screen", "x": 0, "y": 0, "width": 1920, "height": 1080}
       ]
     }
     """#.utf8)
