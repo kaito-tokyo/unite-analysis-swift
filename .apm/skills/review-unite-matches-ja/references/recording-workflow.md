@@ -27,7 +27,7 @@ PATH上の同名コマンドではなく、この絶対パスを使う。コマ�
 
 APMはスキルを配布するものであり、Swiftバイナリをインストールするものではない。`apm_modules`、APMキャッシュ、Swiftソースのチェックアウト、`.build`内の成果物へ依存しない。
 
-このワークフローでは外部の認識・映像・音声ツールを使わない。Swift CLIにない機能を別ツールで暗黙に補完せず、未取得として扱う。
+このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
 `batch-frame`、`precise-frame`、`contact-sheet`など、VideoToolboxでソース動画をデコードする映像抽出サブコマンドはサンドボックス外で実行する。サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の`Cannot Decode`だけを根拠に、録画破損、spec不整合、CLIのデコード実装不具合と判定しない。サンドボックス外での再実行が許可されない場合は、環境制約により未検証と報告する。
 
@@ -38,30 +38,21 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 ユーザーが指定した完了済み`.ldtxrecord`を読み取り専用の入力として扱う。固定の録画ディレクトリを仮定しない。
 
 - `.finalized`がないアクティブな録画を除外する。
-- 主映像は`Info.plist`と`record-spec.json`から解決し、固定ファイル名を仮定しない。
+- recording format v2だけを対象とする。主映像ファイル名は`main.fragmented.mp4`であり、`LDTXRecordingMainMediaFile`も通常は同じ名前を記録する。
 - 物理試合メタデータは`<recording>/_PokemonUniteMatches/match-<NN>/record-spec.json`とする。
 - 分析成果物は`<recording>/_PokemonUniteAnalysis/`以下だけへ書く。
 - 正本レポートは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/review.md`とする。
 - LDTXが管理する既存ファイルを変更しない。
 
-`record-spec.json`はCLIの必須入力である。見つからない場合は、利用可能な根拠から候補specを復元し、上記の物理試合メタデータ位置へ新規作成してよい。既存の`record-spec.json`を推定値で上書きしない。
-
-復元には、ユーザーが示した事前知識、Codexメモリ、同じ録画環境または過去録画のspec、録画内Vision/OCR索引、既存分析成果物、`Info.plist`、主映像の寸法と継続時間を利用してよい。映像配置の自由度が高いため固定レイアウトを仮定せず、次を守る。
-
-1. 試合時計などの時刻証拠から録画上の試合開始PTSと試合時間を計算する。
-2. ゲーム領域は対象録画の証拠を優先し、過去specの矩形を使う場合は同一配置と判断した根拠を残す。
-3. 候補値が主映像の範囲内にあり、試合区間が動画の継続時間と整合することを確認する。
-4. 可能なら候補specを使ってソース動画画像を抽出し、試合時計とゲーム領域を目視検証する。
-5. 根拠、計算、採用した値、推定項目、検証済み項目、未検証項目、検証コマンドの失敗を`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/record-spec-recovery.md`へ記録する。
-
-ソース動画抽出が失敗しても、他の根拠が十分なら候補specの作成自体を禁止しない。VideoToolboxを使う抽出は先にサンドボックス外で再実行する。検証状態を未検証または一部検証済みとして明示し、失敗したサブコマンド、実行環境、エラーを記録する。根拠が不足して候補値を合理的に作れない項目だけを未取得とし、Swift CLIによる依存分析を未実行として報告する。
+`record-spec.json`は録画を読む各コマンドの必須入力である。現行CLIには生成サブコマンドがないため、見つからない場合は試合境界や矩形を推測して作らず、Swift CLIによる録画分析を未実行として報告する。
 
 ## サブコマンドの選択
 
-オプションとJSON契約の正本は、インストール済みコマンドのヘルプとする。
+オプションとJSON契約の正本は、インストール済みコマンドのヘルプとバイナリ内蔵schemaとする。
 
 ```sh
 ~/.local/bin/unite-analysis-swift help <subcommand>
+~/.local/bin/unite-analysis-swift schema <schema-basename>
 ```
 
 | サブコマンド | 用途 |
@@ -75,18 +66,20 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 | `audio-peaks` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
 | `scan-result` | 結果画面またはバトルデータ画面をJSONへ読み取る |
 | `eval-draw-text-script` | コンタクトシートの`drawText`用JSC式を単独評価する |
+| `schema` | `$schema` URLのbasenameを指定して内蔵JSON Schemaを表示する |
+| `config` | 明示的な保存・公開時にユーザー設定を管理する |
 
 専用サブコマンドがある処理を、手作業の抽出や独自スクリプトへ置き換えない。失敗した場合は、実行したサブコマンド、入力、失敗理由、未取得項目を記録する。
 
 ## JSONジョブ
 
-`batch-frame`、`contact-sheet`、`ocr`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。`-`を指定する場合はstdinを1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。`sample-frames`と`detect-chroma-events`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
+`batch-frame`、`contact-sheet`、`ocr`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
 
 - `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`の各ジョブには`output`を明示する。`ocr`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
 - 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。`ocr`は静止画入力のみを読み、`record-spec.json`を使わない。
 - すべての相対パスは、ジョブファイルの位置に関係なく現在の作業ディレクトリ基準とする。
 - 既存成果物を意図せず上書きしない。`--force`は再生成対象を確認した場合だけ使う。
-- `ocr`の各ジョブは`region`で`ocr-options.json`の同名エントリを選び、`source`と`type`を明示する。
+- `ocr`の各ジョブは`region`で`ocr-options.json`の同名エントリを選び、`source`と`type`を明示する。`ocr-options.json`には`$schema`、選択領域ごとの空でない`recognitionLanguages`、必要なら`customWords`を記録する。fallbackはない。
 - `sample-frames`と`detect-chroma-events`には同じ正の有限値`fps`を明示する。
 - `batch-frame`と`contact-sheet`の`matchTimestamps`は試合開始を0とする有限数値の配列とし、厳密な昇順にする。負数は試合開始前、試合時間より大きい値は試合終了後を表す。
 - ソース矩形を主映像の左上原点ピクセル座標で明示し、既定のゲーム領域を仮定しない。
@@ -106,7 +99,7 @@ Vision/OCR出力はシーク用索引であり、画像証拠ではない。分�
 対話前の分析では、次の候補生成を原則実行する。
 
 1. `audio-peaks`を試合全体へ実行し、音声変化候補を得る。
-2. 対象録画で確定したUI領域ごとに`sample-frames`でJPEG連番を生成し、同じ`fps`を指定して`detect-chroma-events`を各ディレクトリへ実行する。少なくとも上部イベントバナー、上中央の時計・定刻イベント、中央の大型通知を検討する。
+2. 対象録画で確定したUI領域ごとに`sample-frames`でJPEG連番を生成し、同じ`fps`を指定して`detect-chroma-events`を各ディレクトリへ実行する。ファイル名は`frame-000001.jpg`のようにゼロ埋めして辞書順と時系列を一致させ、JPEG qualityは原則0.95とする。少なくとも上部イベントバナー、上中央の時計・定刻イベント、中央の大型通知を検討する。
 3. 候補生成側が色差結果の選択、前後時刻の展開、ソート、重複除去を行う。選択したJPEGごとに対象矩形、グローバルに一意な領域名、認識タイプを`ocr`ジョブとして明示する。`ocr`内部で色差結果を読ませたり、候補を生成・選別させたりしない。
 4. 音声、色差、OCR、定刻イベントの候補を試合相対時刻へ正規化する。
 5. 近接候補を統合し、各候補の由来として`audio`、`chroma:<region>`、`ocr:<region>`、`scheduled`を保持する。
@@ -117,6 +110,10 @@ Vision/OCR出力はシーク用索引であり、画像証拠ではない。分�
 候補選択のしきい値・分位点・上位件数、近接候補の統合幅、OCR対象時刻の前後オフセット、統合候補ファイルのスキーマと保存場所は別途の`event-detect`設計で定める。このワークフローでは暗黙に固定しない。
 
 OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`source`を使って同じJPEG領域を確認する。OCR文字列だけで出来事を確定せず、ソース動画画像を再確認する。`audio-peaks`と`detect-chroma-events`もイベントを分類しない。
+
+`audio-peaks`は`--record-spec`と必要なら正の`--gain`だけを受け、試合全体を解析する。`inmatch-start`や`duration`は指定しない。format v2の`main.fragmented.mp4`内の音声トラックを使い、音声トラックなし、format v1、デコード不能はエラーとして記録する。出力契約は`audio-peaks.output.schema.json`で確認する。
+
+`detect-chroma-events`はJPEGディレクトリ、同じ`--fps`、JSON出力先をオプションで受ける。出力は全隣接ペアの無選別測定であり、契約は`chroma-events.output.schema.json`で確認する。
 
 試合全体の概要コンタクトシートは目視探索索引であり、上記の機械生成候補に含めない。`scan-result`も事前基礎情報と最終結果の復元であり、候補生成に含めない。
 
@@ -129,6 +126,8 @@ OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`sourc
 - レイアウトや切り出しが不正な画像の認識値を採用しない。
 - Apple Visionを実行できない場合は未実行として報告する。
 - 出力JSONと元のソース動画画像を対応づけて保存する。
+- 出力契約は`scan-result.output.schema.json`で確認する。
+- `--output`は既存ファイルを`--force`なしで原子的に置換するため、新規パスを使うか、置換対象を確認してから実行する。
 
 ## 選出形式とロードアウト
 
