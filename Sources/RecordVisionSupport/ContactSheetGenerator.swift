@@ -36,7 +36,7 @@ public enum RecordVisionInputLogger {
   public static func continuousOCRFrames(requested: Int, distinct: Int, maximumError: Double) {
     let line = String(
       format:
-        "record-vision-tool: continuous OCR actual frames: %d distinct / %d requested, maximum time error %.3fs\n",
+        "unite-analysis-swift: continuous OCR actual frames: %d distinct / %d requested, maximum time error %.3fs\n",
       distinct, requested, maximumError
     )
     FileHandle.standardError.write(Data(line.utf8))
@@ -44,13 +44,13 @@ public enum RecordVisionInputLogger {
 
   public static func unfinishedRecording(_ url: URL) {
     let line =
-      "record-vision-tool: warning: recording is not finalized (missing .finalized): " + url.path
+      "unite-analysis-swift: warning: recording is not finalized (missing .finalized): " + url.path
       + "\n"
     FileHandle.standardError.write(Data(line.utf8))
   }
 
   private static func write(_ label: String, _ url: URL) {
-    let line = "record-vision-tool: " + label + ": " + url.path + "\n"
+    let line = "unite-analysis-swift: " + label + ": " + url.path + "\n"
     FileHandle.standardError.write(Data(line.utf8))
   }
 }

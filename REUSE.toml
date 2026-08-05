@@ -13,3 +13,14 @@ path = [
 ]
 SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  ".apm/skills/review-unite-matches-ja/SKILL.md",
+  ".apm/skills/review-unite-matches-ja/references/*.json",
+  ".apm/skills/review-unite-matches-ja/references/ranked-season-registry.md",
+  ".apm/skills/review-unite-matches-ja/references/recording-workflow.md",
+  ".apm/skills/review-unite-matches-ja/references/storage-publication.md",
+]
+SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
+SPDX-License-Identifier = "Apache-2.0"

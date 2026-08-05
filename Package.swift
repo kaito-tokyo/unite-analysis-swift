@@ -5,7 +5,7 @@ let package = Package(
   name: "unite-analysis-swift",
   platforms: [.macOS("26.0")],
   products: [
-    .executable(name: "record-vision-tool", targets: ["RecordVisionTool"])
+    .executable(name: "unite-analysis-swift", targets: ["UniteAnalysisSwiftTool"])
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2")
@@ -17,16 +17,20 @@ let package = Package(
       path: "Sources/ResultScanner"
     ),
     .target(name: "RecordVisionSupport", dependencies: ["LDTXRecordingSupport"]),
+    .target(name: "UniteAnalysisConfiguration"),
     .executableTarget(
-      name: "RecordVisionTool",
+      name: "UniteAnalysisSwiftTool",
       dependencies: [
         "LDTXRecordingSupport",
         "RecordVisionSupport",
         "ResultScannerSupport",
+        "UniteAnalysisConfiguration",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ]),
     .testTarget(
       name: "LDTXRecordingSupportTests",
-      dependencies: ["LDTXRecordingSupport", "RecordVisionSupport"]),
+      dependencies: [
+        "LDTXRecordingSupport", "RecordVisionSupport", "UniteAnalysisConfiguration",
+      ]),
   ]
 )

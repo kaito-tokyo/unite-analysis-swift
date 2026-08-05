@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pokémon UNITE ranked season registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "updatedAt",
+    "timezone",
+    "seasons"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "ranked-seasons.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date"
+    },
+    "timezone": {
+      "const": "Asia/Tokyo"
+    },
+    "seasons": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/season"
+      }
+    }
+  },
+  "$defs": {
+    "season": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "season",
+        "startsAt",
+        "endsAt",
+        "mapFormat",
+        "folderName"
+      ],
+      "properties": {
+        "season": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "startsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "mapFormat": {
+          "enum": [
+            "groudon",
+            "kyogre",
+            "other"
+          ]
+        },
+        "folderName": {
+          "type": "string",
+          "pattern": "^Season-[1-9][0-9]*-[A-Za-z][A-Za-z0-9-]*$"
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "record-vision-tool chroma event definition",
+  "title": "unite-analysis-swift chroma event definition",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -1,0 +1,22 @@
+{
+  "$schema": "ranked-seasons.schema.json",
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-05",
+  "timezone": "Asia/Tokyo",
+  "seasons": [
+    {
+      "season": 37,
+      "startsAt": "2026-07-01T08:30:00+09:00",
+      "endsAt": "2026-08-01T08:30:00+09:00",
+      "mapFormat": "kyogre",
+      "folderName": "Season-37-Kyogre"
+    },
+    {
+      "season": 38,
+      "startsAt": "2026-08-01T08:30:00+09:00",
+      "endsAt": "2026-09-01T08:30:00+09:00",
+      "mapFormat": "groudon",
+      "folderName": "Season-38-Groudon"
+    }
+  ]
+}

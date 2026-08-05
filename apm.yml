@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: unite-analysis-swift
+version: 0.1.0
+description: Pokémon UNITE recording evidence tools and match-review skill.
+author: Kaito Udagawa
+license: Apache-2.0
+includes: auto
+dependencies:
+  apm: []
+  mcp: []
+scripts: {}
