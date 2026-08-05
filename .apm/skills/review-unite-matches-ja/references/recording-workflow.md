@@ -44,7 +44,7 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 - 正本レポートは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/review.md`とする。
 - LDTXが管理する既存ファイルを変更しない。
 
-`record-spec.json`は録画を読む各コマンドの必須入力である。現行CLIには生成サブコマンドがないため、見つからない場合は試合境界や矩形を推測して作らず、Swift CLIによる録画分析を未実行として報告する。
+`record-spec.json`は録画を読む各コマンドの必須入力である。見つからない場合は、ソース動画、`Info.plist`、既存の分析成果物から根拠を集め、試合境界とゲーム画面矩形を候補として復元する。候補specは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/record-spec.json`へ保存し、根拠と未確定な値を分析メモへ記録する。LDTXが管理する`_PokemonUniteMatches/`には書き込まない。
 
 ## サブコマンドの選択
 
