@@ -65,6 +65,13 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   )
 }
 
+@Test func rootVersionMatchesReleaseVersion() throws {
+  let result = try runCommand(["--version"])
+  #expect(result.status == 0)
+  #expect(result.stdout == "0.1.0\n")
+  #expect(result.stderr.isEmpty)
+}
+
 @Test func everyCommandPrintsDetailedHelp() throws {
   let commands = [
     "batch-frame", "sample-frames", "precise-frame", "contact-sheet", "frame-burst",
