@@ -5,7 +5,8 @@ let package = Package(
   name: "unite-analysis-swift",
   platforms: [.macOS("26.0")],
   products: [
-    .executable(name: "unite-analysis-swift", targets: ["UniteAnalysisSwiftTool"])
+    .executable(name: "unite-analysis-swift", targets: ["UniteAnalysisSwiftTool"]),
+    .executable(name: "unite-analysis-model-tool", targets: ["UniteAnalysisModelTool"]),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2")
@@ -183,11 +184,19 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ],
       swiftSettings: [.interoperabilityMode(.Cxx)]),
+    .executableTarget(
+      name: "UniteAnalysisModelTool",
+      dependencies: [
+        "IconMatcherNative",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ],
+      swiftSettings: [.interoperabilityMode(.Cxx)]),
     .testTarget(
       name: "LDTXRecordingSupportTests",
       dependencies: [
         "LDTXRecordingSupport", "RecordVisionSupport", "ResultScannerSupport",
-        "UniteAnalysisConfiguration", "UniteAnalysisSwiftTool", "IconMatcherNative",
+        "UniteAnalysisConfiguration", "UniteAnalysisSwiftTool", "UniteAnalysisModelTool",
+        "IconMatcherNative",
       ],
       swiftSettings: [.interoperabilityMode(.Cxx)]),
   ],

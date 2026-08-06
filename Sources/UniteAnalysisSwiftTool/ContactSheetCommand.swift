@@ -54,7 +54,7 @@ struct ContactSheet: AsyncParsableCommand {
 
       OUTPUT. The command shares one AVAssetImageGenerator within each job and writes a baseline 8-bit RGB JPEG. One JSON response line containing jobId, ok, and either result.output or error is written to stdout before the next job is read. A malformed line has no jobId when it cannot be recovered. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Existing output is rejected unless --force is supplied. The filename extension does not change the JPEG format. stdout contains JSONL responses only.
 
-      SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema contact-sheet.schema.json` and the response schema with `unite-analysis-swift schema contact-sheet.output.schema.json`.
+      SCHEMAS. Print the per-line input schema with `unite-analysis swift schema contact-sheet.schema.json` and the response schema with `unite-analysis swift schema contact-sheet.output.schema.json`.
       """.reflowedHelp()
   )
 

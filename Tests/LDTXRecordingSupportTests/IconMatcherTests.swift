@@ -15,6 +15,50 @@ import Testing
   #expect(unite_analysis.isAkazeAvailable())
 }
 
+@Test func referenceIconProducesDescriptors() {
+  let side = 64
+  var bgra = [UInt8](repeating: 0, count: side * side * 4)
+  for y in 12..<52 {
+    for x in 12..<52 where (x / 4 + y / 4).isMultiple(of: 2) {
+      let offset = (y * side + x) * 4
+      bgra[offset] = UInt8((x * 5) % 256)
+      bgra[offset + 1] = UInt8((y * 5) % 256)
+      bgra[offset + 2] = 255
+      bgra[offset + 3] = 255
+    }
+  }
+  let descriptors = bgra.withUnsafeBufferPointer { buffer in
+    unite_analysis.IconDescriptors(
+      buffer.baseAddress, buffer.count, UInt32(side), UInt32(side), side * 4,
+      256, 128, 0.0001, 0.20)
+  }
+  #expect(descriptors.isValid())
+  #expect(descriptors.rows() > 0)
+  #expect(descriptors.columns() == 16)
+  #expect(descriptors.byteCount() == Int(descriptors.rows() * descriptors.columns()))
+}
+
+@Test func narrowReferenceIconDoesNotRequestZeroWidthResize() {
+  let bgra = [UInt8](repeating: 255, count: 1 * 5 * 4)
+  let descriptors = bgra.withUnsafeBufferPointer { buffer in
+    unite_analysis.IconDescriptors(
+      buffer.baseAddress, buffer.count, 1, 5, 4,
+      4, 128, 0.0001, 0)
+  }
+  #expect(!descriptors.isValid())
+  #expect(descriptors.errorMessage() == std.string("AKAZE produced no descriptors"))
+}
+
+@Test func descriptorSourceRejectsOverflowingRowStorage() {
+  let bgra = [UInt8](repeating: 255, count: 8)
+  let descriptors = bgra.withUnsafeBufferPointer { buffer in
+    unite_analysis.IconDescriptors(
+      buffer.baseAddress, buffer.count, 1, 2, .max,
+      256, 128, 0.0001, 0)
+  }
+  #expect(!descriptors.isValid())
+}
+
 @Test func missingDescriptorDatabaseIsRejected() {
   let matcher = unite_analysis.IconMatcher(std.string("/definitely-missing/descriptors.pb"))
   #expect(!matcher.isValid())

@@ -95,16 +95,33 @@ jobs:
         shell: bash --noprofile --norc -euo pipefail {0}
         run: swift build --configuration release
 
-      - name: Attest release build
+      - name: Stage release products
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          install -d "$RUNNER_TEMP/release-products"
+          install -m 755 .build/arm64-apple-macosx/release/unite-analysis-swift "$RUNNER_TEMP/release-products/"
+          install -m 755 .build/arm64-apple-macosx/release/unite-analysis-model-tool "$RUNNER_TEMP/release-products/"
+          install -m 644 Models/descriptors.pb "$RUNNER_TEMP/release-products/"
+
+      - name: Attest unite-analysis-swift release build
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: .build/arm64-apple-macosx/release/unite-analysis-swift
+          subject-path: ${{ runner.temp }}/release-products/unite-analysis-swift
+
+      - name: Attest unite-analysis-model-tool release build
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-products/unite-analysis-model-tool
+
+      - name: Attest descriptor database
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-products/descriptors.pb
 
       - name: Upload release build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-macos-${{ github.sha }}
-          path: |
-            .build/arm64-apple-macosx/release/unite-analysis-swift
+          path: ${{ runner.temp }}/release-products
           if-no-files-found: error
           retention-days: 30

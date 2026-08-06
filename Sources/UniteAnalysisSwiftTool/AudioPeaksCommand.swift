@@ -23,7 +23,7 @@ struct AudioPeaks: AsyncParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift audio-peaks --record-spec _PokemonUniteMatches/match-01/record-spec.json --gain 1.0
+      unite-analysis swift audio-peaks --record-spec _PokemonUniteMatches/match-01/record-spec.json --gain 1.0
 
       RANGE. The full record-spec match is always analyzed. There are no start or duration options. The detector reads 200ms before match start to preserve FIR history and 20ms after match end for local-maximum detection, but reports only peaks inside the match.
 
@@ -67,7 +67,7 @@ struct AudioPeaks: AsyncParsableCommand {
         ]
       }
 
-      SCHEMA. Print the output schema with `unite-analysis-swift schema audio-peaks.output.schema.json`.
+      SCHEMA. Print the output schema with `unite-analysis swift schema audio-peaks.output.schema.json`.
 
       DIAGNOSTICS. Resolved record-spec.json and audio paths and unfinished-recording warnings are written to stderr. Missing metadata or media, a v2 main media file without an audio track, and undecodable audio are errors.
       """.reflowedHelp()

@@ -15,7 +15,7 @@ struct DetectChromaEvents: ParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift detect-chroma-events --input-sample-dir sampled/top-event-banner --fps 2 --output top-event-banner.chroma-events.json
+      unite-analysis swift detect-chroma-events --input-sample-dir sampled/top-event-banner --fps 2 --output top-event-banner.chroma-events.json
 
       TIMING. --fps must match the value used to create the sequence. File index 0 represents match-relative time 0; subsequent files represent index / fps. Because the JPEG sequence contains no decoder timestamp metadata, requestedInmatch and actualInmatch are both set to this sequence-grid time.
 
@@ -51,7 +51,7 @@ struct DetectChromaEvents: ParsableCommand {
         ]
       }
 
-      SCHEMA. Print the output schema with `unite-analysis-swift schema chroma-events.output.schema.json`.
+      SCHEMA. Print the output schema with `unite-analysis swift schema chroma-events.output.schema.json`.
       """.reflowedHelp()
   )
 

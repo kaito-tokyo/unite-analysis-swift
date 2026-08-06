@@ -21,13 +21,13 @@ struct Config: ParsableCommand {
 
       COMPLETE EXAMPLES.
 
-      unite-analysis-swift config set obsidian-match-reports-root /Users/me/Obsidian/Matches
+      unite-analysis swift config set obsidian-match-reports-root /Users/me/Obsidian/Matches
 
-      unite-analysis-swift config get obsidian-match-reports-root
+      unite-analysis swift config get obsidian-match-reports-root
 
-      unite-analysis-swift config unset obsidian-match-reports-root
+      unite-analysis swift config unset obsidian-match-reports-root
 
-      Use `unite-analysis-swift config path` to print the configuration file path. set validates an Obsidian destination before saving it. get prints the stored value. unset removes it.
+      Use `unite-analysis swift config path` to print the configuration file path. set validates an Obsidian destination before saving it. get prints the stored value. unset removes it.
       """.reflowedHelp(),
     subcommands: [ConfigGet.self, ConfigSet.self, ConfigUnset.self, ConfigPath.self]
   )

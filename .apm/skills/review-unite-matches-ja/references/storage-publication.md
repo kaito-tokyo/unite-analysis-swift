@@ -45,12 +45,12 @@ Obsidianへの操作を求められた場合にだけ、必要な保存先を解
 MatchReportsのルートディレクトリは次の優先順位で決める。
 
 1. ユーザーが今回の依頼で明示したMatchReportsパス
-2. `~/.local/bin/unite-analysis-swift config get obsidian-match-reports-root`の出力
+2. `~/.local/bin/unite-analysis swift config get obsidian-match-reports-root`の出力
 
 StrategyBooksのルートディレクトリは次の優先順位で決める。
 
 1. ユーザーが今回の依頼で明示したStrategyBooksパス
-2. `~/.local/bin/unite-analysis-swift config get obsidian-strategy-books-root`の出力
+2. `~/.local/bin/unite-analysis swift config get obsidian-strategy-books-root`の出力
 
 必要な保存先がいずれも指定されていない場合は、書き込みを始める前にユーザーへ確認する。過去の会話や推測したVault位置を暗黙に使わない。
 
@@ -64,11 +64,11 @@ StrategyBooksのルートディレクトリは次の優先順位で決める。
 恒久設定はSwift CLIで行う。
 
 ```sh
-~/.local/bin/unite-analysis-swift config set obsidian-match-reports-root "/path/to/Obsidian/PokemonUnite/MatchReports"
-~/.local/bin/unite-analysis-swift config set obsidian-strategy-books-root "/path/to/Obsidian/PokemonUnite/StrategyBooks"
+~/.local/bin/unite-analysis swift config set obsidian-match-reports-root "/path/to/Obsidian/PokemonUnite/MatchReports"
+~/.local/bin/unite-analysis swift config set obsidian-strategy-books-root "/path/to/Obsidian/PokemonUnite/StrategyBooks"
 ```
 
-設定の確認と解除には、それぞれのキーで`config get`と`config unset`を使う。設定ファイルの場所の確認には`~/.local/bin/unite-analysis-swift config path`を使う。CLIが返した設定エラーを未設定として扱わず、ユーザーへ知らせる。設定ファイルを直接編集しない。
+設定の確認と解除には、それぞれのキーで`config get`と`config unset`を使う。設定ファイルの場所の確認には`~/.local/bin/unite-analysis swift config path`を使う。CLIが返した設定エラーを未設定として扱わず、ユーザーへ知らせる。設定ファイルを直接編集しない。
 
 `config get`が対象キーの未登録を返した場合だけ、設定値を尋ねる手順へ進む。不正な設定ファイル、読み取り失敗、CLIの欠落、その他のエラーは未登録と同一視せず、内容をユーザーへ知らせる。`config set`が成功した後に`config get`で読み直し、選択したパスが保存されたことを確認する。
 
@@ -92,7 +92,7 @@ StrategyBooksのルートディレクトリは次の優先順位で決める。
 
 コピー元とミラーの対象数が一致すること、すべての相対リンクが解決すること、旧配置が残っていないこと、保存先が重複していないことを確認する。
 
-`publication.json`は`https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json`を正本Schemaとし、`$schema`へこのURL、`schemaVersion`へ`1`を記録する。正確なschemaは`~/.local/bin/unite-analysis-swift schema publication.schema.json`で単一バイナリから取得する。リポジトリ内の原本は`docs/publication.schema.json`とする。MatchReportsとGoogle Driveについて、最後に同期した相対パス、同期時刻、同期元レポートの`Report-Updated-At`を記録する。Google Driveでは文書IDと検証時刻も記録する。
+`publication.json`は`https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json`を正本Schemaとし、`$schema`へこのURL、`schemaVersion`へ`1`を記録する。正確なschemaは`~/.local/bin/unite-analysis swift schema publication.schema.json`で単一バイナリから取得する。リポジトリ内の原本は`docs/publication.schema.json`とする。MatchReportsとGoogle Driveについて、最後に同期した相対パス、同期時刻、同期元レポートの`Report-Updated-At`を記録する。Google Driveでは文書IDと検証時刻も記録する。
 
 記録済みの相対パスは分類の正本には使わない。再同期時には現在確認できる試合メタデータから`taxonomyPath`を算出し直す。算出した保存先が`lastRelativePath`と異なる場合は、同期成功後に旧保存先を取り除き、重複がないことを確認してから新しい相対パスを記録する。
 

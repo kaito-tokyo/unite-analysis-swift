@@ -76,7 +76,7 @@ struct OCRCommand: AsyncParsableCommand {
 
       OUTPUT. One JSON response line containing jobId, ok, and either result or error is written before the next job is read. A malformed line has no jobId when it cannot be recovered. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Each successful result records the absolute input path, source, region, type, raw observations, and interpreted values. Observation boxes are normalized within source and use Apple Vision's bottom-left origin; source itself uses top-left-origin input-image pixels. stdout is used when --output is omitted; otherwise all response lines are atomically written to that path after EOF.
 
-      SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema ocr.schema.json`, the response schema with `unite-analysis-swift schema ocr.output.schema.json`, and OCR option schema with `unite-analysis-swift schema ocr-options.schema.json`.
+      SCHEMAS. Print the per-line input schema with `unite-analysis swift schema ocr.schema.json`, the response schema with `unite-analysis swift schema ocr.output.schema.json`, and OCR option schema with `unite-analysis swift schema ocr-options.schema.json`.
       """.reflowedHelp()
   )
 

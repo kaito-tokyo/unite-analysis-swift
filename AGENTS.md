@@ -28,8 +28,18 @@ SPDX-License-Identifier: Apache-2.0
 - Run `reuse --no-multiprocessing lint` after changing tracked files.
 - Report each verification command and its result separately.
 
+## Release follow-up
+
+- After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
+- In that pull request, set `docs/metadata/latest-version.txt` to the version of the tag that was just released, without the leading `v`.
+- In the same pull request, advance both the APM package version in `apm.yml` and the Swift CLI version to the next release version.
+- Do not advance `docs/metadata/latest-version.txt` before the corresponding GitHub Release is available for download.
+
 ## Release artifact zero trust
 
+- Always run code-signing verification outside the sandbox. Do not treat
+  `codesign`, `spctl`, or equivalent results produced inside a sandbox as valid
+  evidence that a release artifact's signature is valid or invalid.
 - Apply this policy only to products that can become GitHub Release assets. It does not apply to source code, runner environments, caches, test artifacts, or other outputs that cannot enter the release path.
 - Attest every release-bound product in the job that produces it, before transferring it to another job or workflow.
 - After receiving a release-bound product from another job or workflow, verify its attestation before reading, transforming, signing, packaging, notarizing, or publishing it.

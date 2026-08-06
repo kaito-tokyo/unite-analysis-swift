@@ -28,9 +28,9 @@ struct ScanResultCommand: ParsableCommand {
 
       COMPLETE EXAMPLES.
 
-      unite-analysis-swift scan-result result-summary.jpg --type summary --ocr-options ocr-options.json
+      unite-analysis swift scan-result result-summary.jpg --type summary --ocr-options ocr-options.json
 
-      unite-analysis-swift scan-result battle-data.jpg --type battle-data --ocr-options ocr-options.json --output battle-data.json
+      unite-analysis swift scan-result battle-data.jpg --type battle-data --ocr-options ocr-options.json --output battle-data.json
 
       SCREEN TYPE. --type is required and selects summary or battle-data parsing. The command does not auto-detect a different type or emit both types. The requested type is returned even when its detection score is low; that condition is recorded in warnings.
 
@@ -54,7 +54,7 @@ struct ScanResultCommand: ParsableCommand {
         }
       }
 
-      SCHEMAS. Print the OCR options schema with `unite-analysis-swift schema ocr-options.schema.json` and the output schema with `unite-analysis-swift schema scan-result.output.schema.json`.
+      SCHEMAS. Print the OCR options schema with `unite-analysis swift schema ocr-options.schema.json` and the output schema with `unite-analysis swift schema scan-result.output.schema.json`.
 
       OCR. Battle-data uses fixed-cell OCR. Summary combines full-screen and row OCR. Language correction is disabled for numeric and proper-name fields.
 
