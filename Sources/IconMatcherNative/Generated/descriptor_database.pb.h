@@ -28,6 +28,8 @@ typedef struct _tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase {
     bool has_akaze;
     tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration akaze;
     pb_callback_t entries;
+    pb_callback_t database_id;
+    pb_callback_t created_at;
 } tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase;
 
 typedef struct _tokyo_kaito_unite_analysis_descriptors_v1_DescriptorEntry {
@@ -54,10 +56,10 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_init_default {0, false, tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration_init_default, {{NULL}, NULL}}
+#define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_init_default {0, false, tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration_init_default, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration_init_default {0, 0, 0}
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorEntry_init_default {{{NULL}, NULL}, _tokyo_kaito_unite_analysis_descriptors_v1_ItemCategory_MIN, 0, 0, {{NULL}, NULL}}
-#define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_init_zero {0, false, tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration_init_zero, {{NULL}, NULL}}
+#define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_init_zero {0, false, tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration_init_zero, {{NULL}, NULL}, {{NULL}, NULL}, {{NULL}, NULL}}
 #define tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration_init_zero {0, 0, 0}
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorEntry_init_zero {{{NULL}, NULL}, _tokyo_kaito_unite_analysis_descriptors_v1_ItemCategory_MIN, 0, 0, {{NULL}, NULL}}
 
@@ -68,6 +70,8 @@ extern "C" {
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_format_version_tag 1
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_akaze_tag 2
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_entries_tag 3
+#define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_database_id_tag 4
+#define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_created_at_tag 5
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorEntry_name_tag 1
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorEntry_category_tag 2
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorEntry_rows_tag 3
@@ -78,7 +82,9 @@ extern "C" {
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   format_version,    1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  akaze,             2) \
-X(a, CALLBACK, REPEATED, MESSAGE,  entries,           3)
+X(a, CALLBACK, REPEATED, MESSAGE,  entries,           3) \
+X(a, CALLBACK, SINGULAR, STRING,   database_id,       4) \
+X(a, CALLBACK, SINGULAR, STRING,   created_at,        5)
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_CALLBACK pb_default_field_callback
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_DEFAULT NULL
 #define tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_akaze_MSGTYPE tokyo_kaito_unite_analysis_descriptors_v1_AkazeConfiguration

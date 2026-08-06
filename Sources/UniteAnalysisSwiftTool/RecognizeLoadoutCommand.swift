@@ -13,6 +13,7 @@ import RecordVisionSupport
 import UniteAnalysisConfiguration
 
 private struct LoadoutOutputDocument: Encodable {
+  let schema = "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json"
   let format: String
   let matchFormat: String
   let video: String
@@ -22,15 +23,25 @@ private struct LoadoutOutputDocument: Encodable {
   let finalPrepPresentationTime: Double?
   let versusPresentationTime: Double?
   let prepPresentationTime: Double?
+  let timeBasis: String
   let recognizer: RecognizerDescription
   let allies: [RecognizedAllyLoadout]
   let enemies: [RecognizedEnemyLoadout]
+
+  enum CodingKeys: String, CodingKey {
+    case schema = "$schema"
+    case format, matchFormat, video, finalPrepTime, versusTime, prepTime
+    case finalPrepPresentationTime, versusPresentationTime, prepPresentationTime
+    case timeBasis, recognizer, allies, enemies
+  }
 
   struct RecognizerDescription: Encodable {
     let matching: String
     let heldKNNRatio: Float = 0.90
     let battleKNNRatio: Float = 0.80
     let selectionMode = "caller-selected from visual review/contact sheet"
+    let databaseID: String
+    let databaseCreatedAt: String
 
     init(matcher: unite_analysis.IconMatcher) {
       let descriptorSize = matcher.akazeDescriptorSize()
@@ -38,6 +49,8 @@ private struct LoadoutOutputDocument: Encodable {
         descriptorSize == 0
         ? "AKAZE MLDB full + BF-Hamming KNN + Lowe ratio"
         : "AKAZE MLDB \(descriptorSize)-bit + BF-Hamming KNN + Lowe ratio"
+      self.databaseID = swiftString(from: matcher.databaseID())
+      self.databaseCreatedAt = swiftString(from: matcher.createdAt())
     }
   }
 }
@@ -110,6 +123,7 @@ private func loadoutInputs(
     guard let bundleURL = recording.bundleURL else {
       throw ValidationError("--input must identify a .ldtxrecord bundle")
     }
+    try validateLegacyLoadoutInputBundle(bundleURL)
     if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
     {
       RecordVisionInputLogger.unfinishedRecording(bundleURL)
@@ -146,6 +160,19 @@ private func loadoutInputs(
       return frame
     }
   )
+}
+
+func validateLegacyLoadoutInputBundle(_ bundleURL: URL) throws {
+  let infoURL = bundleURL.appendingPathComponent("Info.plist")
+  let data = try Data(contentsOf: infoURL)
+  guard
+    let dictionary = try PropertyListSerialization.propertyList(
+      from: data, options: 0, format: nil)
+      as? [String: Any],
+    (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue == 1
+  else {
+    throw ValidationError("--input requires LDTX recording format version 1")
+  }
 }
 
 func normalizedGameScreen(
@@ -227,6 +254,7 @@ struct RecognizeDraftLoadout: AsyncParsableCommand {
         finalPrepTime: finalPreparationTime, versusTime: versusTime, prepTime: nil,
         finalPrepPresentationTime: inputs.frames[0].presentationTime,
         versusPresentationTime: inputs.frames[1].presentationTime, prepPresentationTime: nil,
+        timeBasis: recordSpec == nil ? "recording-timeline" : "match-relative",
         recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
       defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
       force: force)
@@ -267,6 +295,7 @@ struct RecognizeBlindLoadout: AsyncParsableCommand {
         finalPrepTime: nil, versusTime: nil, prepTime: prepTime,
         finalPrepPresentationTime: nil, versusPresentationTime: nil,
         prepPresentationTime: inputs.frames[0].presentationTime,
+        timeBasis: recordSpec == nil ? "recording-timeline" : "match-relative",
         recognizer: .init(matcher: matcher),
         allies: result.allies, enemies: result.enemies),
       defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory, output: output,

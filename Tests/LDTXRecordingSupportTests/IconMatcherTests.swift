@@ -31,7 +31,9 @@ import Testing
 
   let matcher = unite_analysis.IconMatcher(std.string(url.path))
   #expect(matcher.isValid())
-  #expect(matcher.formatVersion() == 1)
+  #expect(matcher.formatVersion() == 2)
+  #expect(swiftString(from: matcher.databaseID()) == "550e8400-e29b-41d4-a716-446655440000")
+  #expect(swiftString(from: matcher.createdAt()) == "2026-08-06T00:00:00Z")
   #expect(matcher.akazeDescriptorSize() == 8)
   #expect(abs(matcher.akazeThreshold() - 0.001) < 0.000_001)
   #expect(matcher.akazeImageHeight() == 64)
@@ -54,6 +56,18 @@ import Testing
   let matcher = unite_analysis.IconMatcher(std.string(url.path))
   #expect(!matcher.isValid())
   #expect(swiftString(from: matcher.errorMessage()).contains("unsupported category"))
+}
+
+@Test func descriptorDatabaseRejectsInvalidUTF8Name() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("pb")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try descriptorDatabaseFixture(heldName: Data([0xC0, 0xAF])).write(to: url)
+
+  let matcher = unite_analysis.IconMatcher(std.string(url.path))
+  #expect(!matcher.isValid())
+  #expect(swiftString(from: matcher.errorMessage()).contains("UTF-8"))
 }
 
 @Test func ratioRejectedDescriptorsDoNotProduceCandidates() throws {
@@ -121,25 +135,43 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(normalized.height == 1080)
 }
 
-private func descriptorDatabaseFixture(category: UInt64? = nil) -> Data {
+@Test func legacyLoadoutInputRejectsFormatVersion2() throws {
+  let bundle = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("ldtxrecord")
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: bundle) }
+  let data = try PropertyListSerialization.data(
+    fromPropertyList: ["LDTXRecordingFormatVersion": 2], format: .xml, options: 0)
+  try data.write(to: bundle.appendingPathComponent("Info.plist"))
+
+  #expect(throws: Error.self) {
+    try validateLegacyLoadoutInputBundle(bundle)
+  }
+}
+
+private func descriptorDatabaseFixture(category: UInt64? = nil, heldName: Data? = nil) -> Data {
   let configuration = protobufMessage([
     protobufVarintField(1, 8),
     protobufFixed32Field(2, Float(0.001).bitPattern),
     protobufVarintField(3, 64),
   ])
-  let held = descriptorEntry(name: "held-fixture", category: category ?? 1, byte: 0x00)
-  let battle = descriptorEntry(name: "battle-fixture", category: 2, byte: 0xFF)
+  let held = descriptorEntry(
+    name: heldName ?? Data("held-fixture".utf8), category: category ?? 1, byte: 0x00)
+  let battle = descriptorEntry(name: Data("battle-fixture".utf8), category: 2, byte: 0xFF)
   return protobufMessage([
-    protobufVarintField(1, 1),
+    protobufVarintField(1, 2),
     protobufBytesField(2, configuration),
     protobufBytesField(3, held),
     protobufBytesField(3, battle),
+    protobufBytesField(4, Data("550e8400-e29b-41d4-a716-446655440000".utf8)),
+    protobufBytesField(5, Data("2026-08-06T00:00:00Z".utf8)),
   ])
 }
 
-private func descriptorEntry(name: String, category: UInt64, byte: UInt8) -> Data {
+private func descriptorEntry(name: Data, category: UInt64, byte: UInt8) -> Data {
   protobufMessage([
-    protobufBytesField(1, Data(name.utf8)),
+    protobufBytesField(1, name),
     protobufVarintField(2, category),
     protobufVarintField(3, 2),
     protobufVarintField(4, 1),

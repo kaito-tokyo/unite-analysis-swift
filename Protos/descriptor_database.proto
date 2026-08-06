@@ -10,6 +10,8 @@ message DescriptorDatabase {
   uint32 format_version = 1;
   AkazeConfiguration akaze = 2;
   repeated DescriptorEntry entries = 3;
+  string database_id = 4;
+  string created_at = 5;
 }
 
 message AkazeConfiguration {

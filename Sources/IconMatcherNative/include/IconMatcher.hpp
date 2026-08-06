@@ -24,7 +24,7 @@ class IconMatchResults final {
  public:
   [[nodiscard]] std::size_t count() const noexcept;
   [[nodiscard]] std::string name(std::size_t index) const;
-  [[nodiscard]] float distance(std::size_t index) const noexcept;
+  [[nodiscard]] float score(std::size_t index) const noexcept;
 
  private:
   struct Value;
@@ -40,6 +40,8 @@ class IconMatcher final {
   [[nodiscard]] bool isValid() const noexcept;
   [[nodiscard]] std::string errorMessage() const;
   [[nodiscard]] std::uint32_t formatVersion() const noexcept;
+  [[nodiscard]] std::string databaseID() const;
+  [[nodiscard]] std::string createdAt() const;
   [[nodiscard]] std::uint32_t akazeDescriptorSize() const noexcept;
   [[nodiscard]] float akazeThreshold() const noexcept;
   [[nodiscard]] std::uint32_t akazeImageHeight() const noexcept;

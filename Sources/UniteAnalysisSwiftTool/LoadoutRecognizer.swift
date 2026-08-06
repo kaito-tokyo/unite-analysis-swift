@@ -9,7 +9,7 @@ import IconMatcherNative
 
 struct IconMatch: Codable, Sendable, Equatable {
   var name: String
-  var distance: Float
+  var score: Float
 }
 
 func swiftString(from value: std.string) -> String {
@@ -107,7 +107,7 @@ extension unite_analysis.IconMatcher {
       let name = results.name(index)
       return IconMatch(
         name: swiftString(from: name),
-        distance: results.distance(index)
+        score: results.score(index)
       )
     }
   }
@@ -115,12 +115,12 @@ extension unite_analysis.IconMatcher {
 
 struct RecognizedItem: Codable, Sendable, Equatable {
   var name: String?
-  var distance: Float?
+  var score: Float?
   var candidates: [IconMatch]
 
   init(_ matches: [IconMatch]) {
     name = matches.first?.name
-    distance = matches.first?.distance
+    score = matches.first?.score
     candidates = matches
   }
 }

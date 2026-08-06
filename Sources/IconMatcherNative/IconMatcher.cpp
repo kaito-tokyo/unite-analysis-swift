@@ -35,7 +35,7 @@ bool isAkazeAvailable() {
 
 namespace {
 
-constexpr std::uint32_t kSupportedFormatVersion = 1;
+constexpr std::uint32_t kSupportedFormatVersion = 2;
 constexpr std::size_t kMaximumDatabaseBytes = 64 * 1024 * 1024;
 constexpr int kMaximumEntries = 4096;
 constexpr std::uint64_t kMaximumDescriptorsPerEntry = 1'000'000;
@@ -44,7 +44,7 @@ constexpr float kHeldPaddingFraction = 0.20F;
 
 struct RankedMatch {
   std::string name;
-  float distance;
+  float score;
 };
 
 struct AkazeConfiguration {
@@ -63,6 +63,8 @@ struct DescriptorEntry {
 
 struct DescriptorDatabase {
   std::uint32_t formatVersion = 0;
+  std::string databaseID;
+  std::string createdAt;
   bool hasAkaze = false;
   AkazeConfiguration akaze;
   std::vector<DescriptorEntry> entries;
@@ -136,6 +138,10 @@ bool decodeDatabase(
       tokyo_kaito_unite_analysis_descriptors_v1_DescriptorDatabase_init_zero;
   wire.entries.funcs.decode = decodeEntry;
   wire.entries.arg = &database;
+  wire.database_id.funcs.decode = decodeString;
+  wire.database_id.arg = &database.databaseID;
+  wire.created_at.funcs.decode = decodeString;
+  wire.created_at.arg = &database.createdAt;
   auto stream = pb_istream_from_buffer(bytes.data(), bytes.size());
   if (!pb_decode(
           &stream,
@@ -246,11 +252,11 @@ std::vector<RankedMatch> rankDescriptors(
   result.reserve(votes.size());
   for (const auto &[name, score] : votes) {
     if (score > 0) {
-      result.push_back({name, static_cast<float>(-score)});
+      result.push_back({name, static_cast<float>(score)});
     }
   }
   std::sort(result.begin(), result.end(), [](const auto &left, const auto &right) {
-    return left.distance != right.distance ? left.distance < right.distance
+    return left.score != right.score ? left.score > right.score
                                            : left.name < right.name;
   });
   if (result.size() > limit) {
@@ -262,6 +268,34 @@ std::vector<RankedMatch> rankDescriptors(
 std::string validate(const DescriptorDatabase &database) {
   if (database.formatVersion != kSupportedFormatVersion) {
     return "unsupported descriptor database format version";
+  }
+  const auto isHex = [](const char character) {
+    return (character >= '0' && character <= '9') ||
+        (character >= 'a' && character <= 'f') ||
+        (character >= 'A' && character <= 'F');
+  };
+  if (database.databaseID.size() != 36 ||
+      database.databaseID[8] != '-' || database.databaseID[13] != '-' ||
+      database.databaseID[18] != '-' || database.databaseID[23] != '-' ||
+      database.databaseID[14] != '4') {
+    return "descriptor database id must be a UUIDv4";
+  }
+  for (std::size_t index = 0; index < database.databaseID.size(); ++index) {
+    if (index != 8 && index != 13 && index != 18 && index != 23 &&
+        !isHex(database.databaseID[index])) {
+      return "descriptor database id must be a UUIDv4";
+    }
+  }
+  const char variant = database.databaseID[19];
+  if (variant != '8' && variant != '9' && variant != 'a' && variant != 'A' &&
+      variant != 'b' && variant != 'B') {
+    return "descriptor database id must be a UUIDv4";
+  }
+  if (database.createdAt.size() < 20 || database.createdAt[4] != '-' ||
+      database.createdAt[7] != '-' || database.createdAt[10] != 'T' ||
+      database.createdAt[13] != ':' || database.createdAt[16] != ':' ||
+      database.createdAt.back() != 'Z') {
+    return "descriptor database creation time must be RFC 3339 UTC";
   }
   if (!database.hasAkaze) {
     return "descriptor database has no AKAZE configuration";
@@ -285,6 +319,37 @@ std::string validate(const DescriptorDatabase &database) {
   for (const auto &entry : database.entries) {
     if (entry.name.empty()) {
       return "descriptor entry has an empty name";
+    }
+    const auto *bytes = reinterpret_cast<const unsigned char *>(entry.name.data());
+    for (std::size_t index = 0; index < entry.name.size();) {
+      const auto first = bytes[index];
+      std::size_t length = 0;
+      if (first <= 0x7F) {
+        length = 1;
+      } else if (first >= 0xC2 && first <= 0xDF) {
+        length = 2;
+      } else if (first >= 0xE0 && first <= 0xEF) {
+        length = 3;
+      } else if (first >= 0xF0 && first <= 0xF4) {
+        length = 4;
+      } else {
+        return "descriptor entry name is not valid UTF-8";
+      }
+      if (index + length > entry.name.size()) {
+        return "descriptor entry name is not valid UTF-8";
+      }
+      for (std::size_t offset = 1; offset < length; ++offset) {
+        if ((bytes[index + offset] & 0xC0) != 0x80) {
+          return "descriptor entry name is not valid UTF-8";
+        }
+      }
+      if ((first == 0xE0 && bytes[index + 1] < 0xA0) ||
+          (first == 0xED && bytes[index + 1] >= 0xA0) ||
+          (first == 0xF0 && bytes[index + 1] < 0x90) ||
+          (first == 0xF4 && bytes[index + 1] >= 0x90)) {
+        return "descriptor entry name is not valid UTF-8";
+      }
+      index += length;
     }
     if (entry.rows == 0 || entry.columns == 0) {
       return "descriptor entry has an empty matrix";
@@ -352,10 +417,10 @@ std::string IconMatchResults::name(const std::size_t index) const {
                                                : value_->matches[index].name;
 }
 
-float IconMatchResults::distance(const std::size_t index) const noexcept {
+float IconMatchResults::score(const std::size_t index) const noexcept {
   return value_ == nullptr || index >= count()
       ? std::numeric_limits<float>::quiet_NaN()
-      : value_->matches[index].distance;
+      : value_->matches[index].score;
 }
 
 IconMatcher::IconMatcher(const std::string &path)
@@ -396,6 +461,14 @@ std::string IconMatcher::errorMessage() const {
 
 std::uint32_t IconMatcher::formatVersion() const noexcept {
   return isValid() ? implementation_->message.formatVersion : 0;
+}
+
+std::string IconMatcher::databaseID() const {
+  return isValid() ? implementation_->message.databaseID : std::string{};
+}
+
+std::string IconMatcher::createdAt() const {
+  return isValid() ? implementation_->message.createdAt : std::string{};
 }
 
 std::uint32_t IconMatcher::akazeDescriptorSize() const noexcept {
