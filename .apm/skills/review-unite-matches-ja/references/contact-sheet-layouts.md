@@ -12,7 +12,7 @@ SPDX-License-Identifier: Apache-2.0
 cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ~/.local/bin/unite-analysis-swift contact-sheet \
-  --record-spec _PokemonUniteAnalysis/matches/match-01/record-spec.json \
+  --record-spec _PokemonUniteMatches/match-01/record-spec.json \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ```
 
@@ -31,10 +31,10 @@ cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
 overview以外の列数、時間範囲、時間間隔、セル寸法、組合せを標準化しない。検証する主張に合わせて自由に作る。必要な分析用コンタクトシートの構成を自律的に決め、JSONLを作成し、ソース動画から出力し、生成結果を実際に読んで分析へ使う。overviewを生成しただけで分析用シートの工程を終えない。
 
 1. 5つのoverviewから候補区間と検証する主張を選ぶ。
-2. overview JSONの`placements`から必要な全景またはROIをコピーする。
+2. overview JSONから必要な全景またはROIの`source`だけをコピーする。
 3. 主張に必要な時刻範囲と密度へ`matchTimestamps`を変更する。
-4. 必要なら複数のoverviewの`placements`を同一セルへ組み合わせる。
-5. 同一セル内の配置は同じ`matchTimestamp`へ対応させる。
+4. 必要なら複数のoverviewのROIを同一セルへ組み合わせる。その際は新しいセル寸法に対して重ならない`destination`を設計し、動的ラベルは1つに統合する。overviewごとの`placements`配列をそのまま連結しない。
+5. 同一セル内の全配置は同じ`matchTimestamp`へ対応させる。
 6. 重要な主張はすべて密な時系列の原寸画像で再確認する。縮小セルで曖昧な箇所には追加の原寸確認を行う。
 
 ### 組み方の推奨

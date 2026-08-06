@@ -17,7 +17,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ```sh
 ~/.local/bin/unite-analysis-swift frame-burst \
-  --record-spec _PokemonUniteAnalysis/matches/match-01/record-spec.json \
+  --record-spec _PokemonUniteMatches/match-01/record-spec.json \
   frame-burst-jobs.jsonl
 ```
 

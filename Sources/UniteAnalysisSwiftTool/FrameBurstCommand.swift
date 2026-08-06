@@ -11,6 +11,7 @@ import RecordVisionSupport
 
 private struct FrameBurstJob: Decodable {
   static let maximumOutputDimension = 32_768
+  static let maximumOutputPixels = 64_000_000
 
   let jobId: String
   let matchTimestamp: Double
@@ -77,6 +78,11 @@ private struct FrameBurstJob: Decodable {
       throw UniteAnalysisSwiftToolError.message(
         "Frame burst dimensions exceed \(Self.maximumOutputDimension)x\(Self.maximumOutputDimension)"
       )
+    }
+    let (pixelCount, pixelCountOverflow) = width.multipliedReportingOverflow(by: height)
+    guard !pixelCountOverflow, pixelCount <= Self.maximumOutputPixels else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Frame burst pixel count exceeds \(Self.maximumOutputPixels)")
     }
     return (cellHeight, rows, width, height)
   }
