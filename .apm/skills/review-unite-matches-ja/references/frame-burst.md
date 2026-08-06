@@ -18,9 +18,9 @@ SPDX-License-Identifier: Apache-2.0
 ```sh
 ~/.local/bin/unite-analysis-swift frame-burst \
   --record-spec _PokemonUniteMatches/match-01/record-spec.json \
-  frame-burst-jobs.jsonl
+  _PokemonUniteAnalysis/matches/match-01/frame-burst-jobs.jsonl
 ```
 
-`frameCount`は連続デコードするソースフレーム数であり、連写が覆う時間範囲を決める。任意の`decimate: N`はソースインデックス`0, N, 2N, ...`だけを表示し、時間範囲を変えずにセルを間引く。省略時は`1`とする。標準的な1秒前後の分析ジョブでは`frameCount`を60、`decimate`を2、`columns`を8、`cellWidth`を320から始める。
+JSONLは`_PokemonUniteAnalysis/matches/match-01/frame-burst-jobs.jsonl`へ保存する。`frameCount`は連続デコードするソースフレーム数であり、連写が覆う時間範囲を決める。値は1から600までとする。任意の`decimate: N`はソースインデックス`0, N, 2N, ...`だけを表示し、時間範囲を変えずにセルを間引く。省略時は`1`とする。標準的な1秒前後の分析ジョブでは`frameCount`を60、`decimate`を2、`columns`を8、`cellWidth`を320から始める。
 
 最初のセルは指定時刻以降で最初にデコードされたフレームであり、左から右、上から下へ読む。注目対象が小さい場合は全画面ではなくROIを指定する。全stdout応答の`ok`を検査し、開始・終了PTSをstderrで確認して、録画の実フレームレートから連写が覆う実時間を判断する。

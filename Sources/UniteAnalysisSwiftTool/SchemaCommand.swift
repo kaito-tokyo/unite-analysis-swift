@@ -73,7 +73,7 @@ enum EmbeddedSchemas {
         "jobId": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "matchTimestamp": { "type": "number" },
         "source": { "$ref": "#/$defs/rectangle" },
-        "frameCount": { "type": "integer", "minimum": 1 },
+        "frameCount": { "type": "integer", "minimum": 1, "maximum": 600 },
         "decimate": { "type": "integer", "minimum": 1, "default": 1 },
         "columns": { "type": "integer", "minimum": 1, "maximum": 32768 },
         "cellWidth": { "type": "integer", "minimum": 1, "maximum": 32768 },

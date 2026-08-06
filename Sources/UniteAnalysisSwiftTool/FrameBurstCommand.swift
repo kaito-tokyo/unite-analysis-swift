@@ -12,6 +12,7 @@ import RecordVisionSupport
 private struct FrameBurstJob: Decodable {
   static let maximumOutputDimension = 32_768
   static let maximumOutputPixels = 64_000_000
+  static let maximumFrameCount = 600
 
   let jobId: String
   let matchTimestamp: Double
@@ -32,8 +33,9 @@ private struct FrameBurstJob: Decodable {
       throw UniteAnalysisSwiftToolError.message("matchTimestamp must be finite")
     }
     try source.validate()
-    guard frameCount > 0 else {
-      throw UniteAnalysisSwiftToolError.message("frameCount must be positive")
+    guard (1...Self.maximumFrameCount).contains(frameCount) else {
+      throw UniteAnalysisSwiftToolError.message(
+        "frameCount must be from 1 through \(Self.maximumFrameCount)")
     }
     guard decimation > 0 else {
       throw UniteAnalysisSwiftToolError.message("decimate must be positive")

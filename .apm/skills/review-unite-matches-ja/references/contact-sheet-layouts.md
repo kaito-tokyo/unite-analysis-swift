@@ -6,9 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # 標準overviewコンタクトシート
 
-標準として固定するコンタクトシートは、10列×10行、6秒間隔で10分試合全体を俯瞰する5種類の`overview`だけとする。標準HUD、ゲーム領域`1632x918`、10分、`match-01`では、[overview-contact-sheet-jobs.jsonl](overview-contact-sheet-jobs.jsonl)を変更せず使う。ジョブファイルはスキルの配置場所にあるため、録画ルートへ移動する前に、`SKILL.md`があるディレクトリを`<skill-root>`として分析成果物領域へコピーする。
+標準として固定するコンタクトシートは、10列×10行、6秒間隔で10分試合全体を俯瞰する5種類の`overview`だけとする。標準HUD、原点`(0,0)`のゲーム領域`1632x918`、10分、`match-01`では、[overview-contact-sheet-jobs.jsonl](overview-contact-sheet-jobs.jsonl)を変更せず使う。ジョブファイルはスキルの配置場所にあるため、録画ルートをカレントディレクトリにしてから、`SKILL.md`があるディレクトリを`<skill-root>`として分析成果物領域へコピーする。
 
 ```sh
+mkdir -p _PokemonUniteAnalysis/matches/match-01
 cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ~/.local/bin/unite-analysis-swift contact-sheet \
@@ -16,7 +17,7 @@ cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ```
 
-録画ルートをカレントディレクトリにして実行する。5つの出力は`_PokemonUniteAnalysis/matches/match-01/contact-sheets/`へ作られる。
+5つの出力は`_PokemonUniteAnalysis/matches/match-01/contact-sheets/`へ作られる。ゲーム領域の原点が`(0,0)`でない場合は、テンプレートをそのまま使わず、すべての`source`矩形へ実測したオフセットを加える。
 
 | overview | 含む領域 | 主な用途 |
 |---|---|---|
