@@ -68,7 +68,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
 @Test func everyCommandPrintsDetailedHelp() throws {
   let commands = [
     "batch-frame", "sample-frames", "precise-frame", "contact-sheet", "frame-burst",
-    "detect-chroma-events", "audio-peaks", "ocr", "scan-result",
+    "detect-chroma-events", "audio-peaks", "extract-clip", "ocr", "scan-result",
     "recognize-draft-loadout", "recognize-blind-loadout",
     "eval-draw-text-script", "schema", "config",
   ]
@@ -91,7 +91,8 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
     ("batch-frame", "AVFoundation"), ("sample-frames", "AVFoundation"),
     ("precise-frame", "AVFoundation"), ("contact-sheet", "AVFoundation"),
     ("frame-burst", "AVFoundation"),
-    ("audio-peaks", "AVFoundation"), ("eval-draw-text-script", "AVFoundation"),
+    ("audio-peaks", "AVFoundation"), ("extract-clip", "AVFoundation"),
+    ("eval-draw-text-script", "AVFoundation"),
     ("recognize-draft-loadout", "AVFoundation"),
     ("recognize-blind-loadout", "AVFoundation"),
     ("ocr", "Apple Vision"), ("scan-result", "Apple Vision"),
@@ -130,7 +131,8 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   let invocations = [
     ["batch-frame"], ["sample-frames"], ["precise-frame"], ["contact-sheet"],
     ["frame-burst"],
-    ["detect-chroma-events"], ["audio-peaks"], ["ocr"], ["scan-result"],
+    ["detect-chroma-events"], ["audio-peaks"], ["extract-clip"], ["ocr"],
+    ["scan-result"],
     ["recognize-draft-loadout"], ["recognize-blind-loadout"],
     ["eval-draw-text-script"], ["schema"], ["config", "get"], ["config", "set"],
     ["config", "unset"],
@@ -142,6 +144,16 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
     #expect(result.stderr.contains("Error: Missing expected argument"))
     #expect(result.stderr.contains("Usage:"))
   }
+}
+
+@Test func extractClipValidatesFiniteTimesBeforeOpeningInputs() throws {
+  let result = try runCommand([
+    "extract-clip", "--record-spec", "missing.json", "--start", "nan", "--output", "clip.mp4",
+  ])
+  #expect(result.status != 0)
+  #expect(result.stdout.isEmpty)
+  #expect(result.stderr.contains("--start must be finite"))
+  #expect(!result.stderr.contains("missing.json"))
 }
 
 @Test func commandValidationFailsBeforeOpeningInputs() throws {

@@ -82,6 +82,10 @@ apm install -g --target codex kaito-tokyo/unite-analysis-swift --skill review-un
 
 Ask your agent to analyze a Pokémon UNITE match recording.
 
+Run `unite-analysis-swift --help` to list the available commands. For each
+command's options, behavior, and examples, run
+`unite-analysis-swift <command> --help`.
+
 ## License
 
 Licensed under the Apache License 2.0. See `LICENSE`, `LICENSES/`, and `NOTICE`.
