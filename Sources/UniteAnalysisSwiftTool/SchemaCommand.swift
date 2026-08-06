@@ -45,6 +45,7 @@ enum EmbeddedSchemas {
     "chroma-events.output.schema.json",
     "contact-sheet.schema.json",
     "contact-sheet.output.schema.json",
+    "loadout.output.schema.json",
     "ocr.schema.json",
     "ocr.output.schema.json",
     "ocr-options.schema.json",
@@ -59,6 +60,87 @@ enum EmbeddedSchemas {
   static var storedBasenames: [String] { schemas.keys.sorted() }
 
   private static let schemas = [
+    "loadout.output.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json",
+      "title": "Pokémon UNITE recognized loadout",
+      "type": "object",
+      "required": ["$schema", "format", "match_format", "video", "time_basis", "recognizer", "allies", "enemies"],
+      "properties": {
+        "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json" },
+        "format": { "enum": ["pokemon-unite-draft-loadout-2", "pokemon-unite-blind-loadout-1"] },
+        "match_format": { "enum": ["draft", "blind"] },
+        "video": { "type": "string", "minLength": 1 },
+        "final_prep_time": { "type": ["number", "null"] },
+        "versus_time": { "type": ["number", "null"] },
+        "prep_time": { "type": ["number", "null"] },
+        "final_prep_presentation_time": { "type": ["number", "null"] },
+        "versus_presentation_time": { "type": ["number", "null"] },
+        "prep_presentation_time": { "type": ["number", "null"] },
+        "time_basis": { "enum": ["match-relative", "recording-timeline"] },
+        "recognizer": { "$ref": "#/$defs/recognizer" },
+        "allies": { "type": "array", "items": { "$ref": "#/$defs/ally" } },
+        "enemies": { "type": "array", "items": { "$ref": "#/$defs/enemy" } }
+      },
+      "$defs": {
+        "recognizer": {
+          "type": "object",
+          "required": ["matching", "held_knn_ratio", "battle_knn_ratio", "selection_mode", "database_id", "database_created_at"],
+          "properties": {
+            "matching": { "type": "string" },
+            "held_knn_ratio": { "type": "number" },
+            "battle_knn_ratio": { "type": "number" },
+            "selection_mode": { "type": "string" },
+            "database_id": { "type": "string", "format": "uuid" },
+            "database_created_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        "candidate": {
+          "type": "object",
+          "required": ["name", "score"],
+          "properties": { "name": { "type": "string" }, "score": { "type": "number" } }
+        },
+        "recognizedItem": {
+          "type": "object",
+          "required": ["candidates"],
+          "properties": {
+            "name": { "type": ["string", "null"] },
+            "score": { "type": ["number", "null"] },
+            "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } }
+          }
+        },
+        "declaredRoute": {
+          "type": "object",
+          "required": ["method", "chromatic_fraction"],
+          "properties": {
+            "name": { "type": ["string", "null"] },
+            "method": { "const": "hsv" },
+            "median_hue": { "type": ["number", "null"] },
+            "chromatic_fraction": { "type": "number" }
+          }
+        },
+        "ally": {
+          "type": "object",
+          "required": ["slot", "held_items", "battle_item", "declared_route"],
+          "properties": {
+            "slot": { "type": "integer", "minimum": 1 },
+            "held_items": { "type": "array", "items": { "$ref": "#/$defs/recognizedItem" } },
+            "battle_item": { "$ref": "#/$defs/recognizedItem" },
+            "declared_route": { "$ref": "#/$defs/declaredRoute" }
+          }
+        },
+        "enemy": {
+          "type": "object",
+          "required": ["slot", "battle_item"],
+          "properties": {
+            "slot": { "type": "integer", "minimum": 1 },
+            "battle_item": { "$ref": "#/$defs/recognizedItem" }
+          }
+        }
+      }
+    }
+    """#,
     "publication.schema.json": #"""
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

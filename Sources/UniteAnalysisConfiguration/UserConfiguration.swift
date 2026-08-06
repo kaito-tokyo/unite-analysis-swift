@@ -32,12 +32,24 @@ public enum ObsidianDirectory: Sendable {
 
 public struct UserConfigurationStore: Sendable {
   public let fileURL: URL
+  private let legacyFileURL: URL?
 
-  public init(fileURL: URL = Self.defaultFileURL) {
+  public init(fileURL: URL = Self.defaultFileURL, legacyFileURL: URL? = nil) {
     self.fileURL = fileURL
+    self.legacyFileURL =
+      legacyFileURL
+      ?? (fileURL == Self.defaultFileURL ? Self.legacyDefaultFileURL : nil)
   }
 
   public static var defaultFileURL: URL {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library", isDirectory: true)
+      .appendingPathComponent("Application Support", isDirectory: true)
+      .appendingPathComponent("tokyo.kaito.unite-analysis-swift", isDirectory: true)
+      .appendingPathComponent("config.json")
+  }
+
+  public static var legacyDefaultFileURL: URL {
     FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent(".config", isDirectory: true)
       .appendingPathComponent("unite-analysis-swift", isDirectory: true)
@@ -45,10 +57,13 @@ public struct UserConfigurationStore: Sendable {
   }
 
   public func load() throws -> UserConfiguration {
-    guard FileManager.default.fileExists(atPath: fileURL.path) else {
-      return UserConfiguration()
+    if FileManager.default.fileExists(atPath: fileURL.path) {
+      return try JSONDecoder().decode(UserConfiguration.self, from: Data(contentsOf: fileURL))
     }
-    return try JSONDecoder().decode(UserConfiguration.self, from: Data(contentsOf: fileURL))
+    if let legacyFileURL, FileManager.default.fileExists(atPath: legacyFileURL.path) {
+      return try JSONDecoder().decode(UserConfiguration.self, from: Data(contentsOf: legacyFileURL))
+    }
+    return UserConfiguration()
   }
 
   @discardableResult

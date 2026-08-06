@@ -1,0 +1,78 @@
+// SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#ifndef UNITE_ANALYSIS_ICON_MATCHER_HPP
+#define UNITE_ANALYSIS_ICON_MATCHER_HPP
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+
+namespace unite_analysis {
+
+[[nodiscard]] bool isAkazeAvailable();
+
+enum class ItemCategory : std::uint8_t {
+  unspecified = 0,
+  held = 1,
+  battle = 2,
+};
+
+class IconMatchResults final {
+ public:
+  [[nodiscard]] std::size_t count() const noexcept;
+  [[nodiscard]] std::string name(std::size_t index) const;
+  [[nodiscard]] float score(std::size_t index) const noexcept;
+
+ private:
+  struct Value;
+  std::shared_ptr<Value> value_;
+  explicit IconMatchResults(std::shared_ptr<Value> value);
+  friend class IconMatcher;
+};
+
+class IconMatcher final {
+ public:
+  explicit IconMatcher(const std::string &path);
+
+  [[nodiscard]] bool isValid() const noexcept;
+  [[nodiscard]] std::string errorMessage() const;
+  [[nodiscard]] std::uint32_t formatVersion() const noexcept;
+  [[nodiscard]] std::string databaseID() const;
+  [[nodiscard]] std::string createdAt() const;
+  [[nodiscard]] std::uint32_t akazeDescriptorSize() const noexcept;
+  [[nodiscard]] float akazeThreshold() const noexcept;
+  [[nodiscard]] std::uint32_t akazeImageHeight() const noexcept;
+  [[nodiscard]] std::size_t count() const noexcept;
+  [[nodiscard]] std::string entryName(std::size_t index) const;
+  [[nodiscard]] ItemCategory entryCategory(std::size_t index) const noexcept;
+  [[nodiscard]] std::uint32_t entryDescriptorCount(
+      std::size_t index) const noexcept;
+  [[nodiscard]] IconMatchResults matchHeldBGR(
+      const std::uint8_t *bytes,
+      std::size_t byteCount,
+      std::uint32_t width,
+      std::uint32_t height,
+      std::size_t bytesPerRow,
+      float radiusFraction = 0.40F,
+      std::size_t limit = 3,
+      float ratio = 0.90F) const;
+  [[nodiscard]] IconMatchResults matchBattleBGR(
+      const std::uint8_t *bytes,
+      std::size_t byteCount,
+      std::uint32_t width,
+      std::uint32_t height,
+      std::size_t bytesPerRow,
+      std::size_t limit = 3,
+      float ratio = 0.80F) const;
+
+ private:
+  class Implementation;
+  std::shared_ptr<Implementation> implementation_;
+};
+
+}  // namespace unite_analysis
+
+#endif

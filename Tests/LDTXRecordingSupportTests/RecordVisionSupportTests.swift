@@ -50,10 +50,11 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
   return bundle
 }
 
-@Test func recordSpecRequiresMatchIdAndVideoComponents() throws {
+@Test func recordSpecVersion2RequiresMatchIdAndVideoComponents() throws {
   let data = Data(
     #"""
     {
+      "version": 2,
       "matchId": "match-01",
       "startPTS": {"value": 180000, "timescale": 600},
       "duration": 600,
@@ -64,6 +65,7 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
     """#.utf8)
   let spec = try JSONDecoder().decode(RecordVisionRecordSpec.self, from: data)
 
+  #expect(spec.version == 2)
   #expect(spec.matchId == "match-01")
   #expect(spec.videoComponents.map(\.name) == ["game-screen"])
 }
@@ -72,6 +74,7 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
   let data = Data(
     #"""
     {
+      "version": 2,
       "matchId": "match-01",
       "startPTS": {"value": 180000, "timescale": 600},
       "duration": 600
@@ -80,6 +83,53 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
 
   #expect(throws: DecodingError.self) {
     try JSONDecoder().decode(RecordVisionRecordSpec.self, from: data)
+  }
+}
+
+@Test func recordSpecVersion1UsesGlobalId() throws {
+  let data = Data(
+    #"""
+    {
+      "version": 1,
+      "globalId": "LDTX-example-match-01",
+      "startPTS": {"value": 180000, "timescale": 600},
+      "duration": 600,
+      "videoComponents": [
+        {"name": "game-screen", "x": 0, "y": 0, "width": 1920, "height": 1080}
+      ]
+    }
+    """#.utf8)
+  let spec = try JSONDecoder().decode(RecordVisionRecordSpec.self, from: data)
+  #expect(spec.version == 1)
+  #expect(spec.matchId == "LDTX-example-match-01")
+}
+
+@Test func recordSpecRejectsMissingOrUnsupportedVersion() {
+  let missing = Data(
+    #"""
+    {
+      "matchId": "match-01",
+      "startPTS": {"value": 180000, "timescale": 600},
+      "duration": 600,
+      "videoComponents": []
+    }
+    """#.utf8)
+  #expect(throws: DecodingError.self) {
+    try JSONDecoder().decode(RecordVisionRecordSpec.self, from: missing)
+  }
+
+  let unsupported = Data(
+    #"""
+    {
+      "version": 3,
+      "matchId": "match-01",
+      "startPTS": {"value": 180000, "timescale": 600},
+      "duration": 600,
+      "videoComponents": []
+    }
+    """#.utf8)
+  #expect(throws: DecodingError.self) {
+    try JSONDecoder().decode(RecordVisionRecordSpec.self, from: unsupported)
   }
 }
 

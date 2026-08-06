@@ -69,6 +69,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   let commands = [
     "batch-frame", "sample-frames", "precise-frame", "contact-sheet",
     "detect-chroma-events", "audio-peaks", "ocr", "scan-result",
+    "recognize-draft-loadout", "recognize-blind-loadout",
     "eval-draw-text-script", "schema", "config",
   ]
   let root = try runCommand(["--help"])
@@ -90,6 +91,8 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
     ("batch-frame", "AVFoundation"), ("sample-frames", "AVFoundation"),
     ("precise-frame", "AVFoundation"), ("contact-sheet", "AVFoundation"),
     ("audio-peaks", "AVFoundation"), ("eval-draw-text-script", "AVFoundation"),
+    ("recognize-draft-loadout", "AVFoundation"),
+    ("recognize-blind-loadout", "AVFoundation"),
     ("ocr", "Apple Vision"), ("scan-result", "Apple Vision"),
   ]
   for (command, framework) in commands {
@@ -126,6 +129,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   let invocations = [
     ["batch-frame"], ["sample-frames"], ["precise-frame"], ["contact-sheet"],
     ["detect-chroma-events"], ["audio-peaks"], ["ocr"], ["scan-result"],
+    ["recognize-draft-loadout"], ["recognize-blind-loadout"],
     ["eval-draw-text-script"], ["schema"], ["config", "get"], ["config", "set"],
     ["config", "unset"],
   ]
@@ -151,11 +155,27 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   #expect(!result.stderr.contains("No such file"))
 }
 
+@Test func loadoutCommandsRequireExactlyOneTimelineSource() throws {
+  let neither = try runCommand(["recognize-blind-loadout", "--prep-time=1"])
+  #expect(neither.status != 0)
+  #expect(neither.stderr.contains("Specify exactly one of --record-spec or --input"))
+
+  let both = try runCommand([
+    "recognize-blind-loadout", "--prep-time=1", "--record-spec", "missing.json",
+    "--input", "missing.ldtxrecord",
+  ])
+  #expect(both.status != 0)
+  #expect(both.stderr.contains("Specify exactly one of --record-spec or --input"))
+  #expect(!both.stderr.contains("Input not found"))
+}
+
 @Test func configPathCommandPrintsAnAbsolutePath() throws {
   let result = try runCommand(["config", "path"])
   #expect(result.status == 0)
   #expect(result.stderr.isEmpty)
   let path = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
   #expect(path.hasPrefix("/"))
-  #expect(path.hasSuffix("/unite-analysis-swift/config.json"))
+  #expect(
+    path.hasSuffix(
+      "/Library/Application Support/tokyo.kaito.unite-analysis-swift/config.json"))
 }

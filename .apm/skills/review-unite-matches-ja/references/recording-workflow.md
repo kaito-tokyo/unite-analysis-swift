@@ -29,7 +29,7 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`audio-peaks`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`audio-peaks`、`recognize-draft-loadout`、`recognize-blind-loadout`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -44,7 +44,7 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 - 正本レポートは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/review.md`とする。
 - LDTXが管理する既存ファイルを変更しない。
 
-`record-spec.json`は録画を読む各コマンドの必須入力である。現行CLIには生成サブコマンドがないため、見つからない場合は試合境界や矩形を推測して作らず、Swift CLIによる録画分析を未実行として報告する。
+`record-spec.json`は録画を読む各コマンドの必須入力である。見つからない場合は、ソース動画、`Info.plist`、既存の分析成果物から根拠を集め、試合境界とゲーム画面矩形を候補として復元する。候補specは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/record-spec.json`へ保存し、根拠と未確定な値を分析メモへ記録する。LDTXが管理する`_PokemonUniteMatches/`には書き込まない。
 
 ## サブコマンドの選択
 
@@ -65,6 +65,8 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 | `detect-chroma-events` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
 | `audio-peaks` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
 | `scan-result` | 結果画面またはバトルデータ画面をJSONへ読み取る |
+| `recognize-draft-loadout` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
+| `recognize-blind-loadout` | blind選択画面から、味方の持ち物・バトルアイテム・宣言ルートをJSONへ読み取る |
 | `eval-draw-text-script` | コンタクトシートの`drawText`用JSC式を単独評価する |
 | `schema` | `$schema` URLのbasenameを指定して内蔵JSON Schemaを表示する |
 | `config` | 明示的な保存・公開時にユーザー設定を管理する |
@@ -153,7 +155,7 @@ OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`sourc
 - 区別に必要な映像がない場合は`unknown`とする。
 - 最終準備、ルート、VS画面のレイアウトだけで選出形式を決めない。
 
-現行Swift CLIは持ち物、バトルアイテム、宣言ルートの専用自動認識を提供しない。画面から確実に読めない値は`—`または`?`とし、一般的なビルドから補完しない。
+持ち物、バトルアイテム、宣言ルートは専用コマンドで読み取る。draftかblindかは認識器に推測させず、上の映像証拠で形式を確定してから対応するコマンドを選ぶ。`--record-spec`と試合相対の安定フレーム時刻を指定し、標準出力先は`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/`とする。認識候補が空なら値は`—`または`?`とし、一般的なビルドから補完しない。
 
 ## 録画調査の順序
 

@@ -22,7 +22,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Verification
 
-- Run `swift format lint --recursive --strict .` after changing Swift files or formatting configuration.
+- Run `swift format lint --recursive --strict Package.swift Sources Tests` after changing Swift files or formatting configuration. Vendor submodules contain upstream Swift examples outside this repository's formatting policy.
 - Verify that `Package.resolved` and `docs/*.json` equal their `jq --indent 2` output after changing JSON files.
 - Run `swift test` after changing Swift implementation or tests.
 - Run `reuse --no-multiprocessing lint` after changing tracked files.
