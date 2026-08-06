@@ -70,6 +70,18 @@ import Testing
   #expect(swiftString(from: matcher.errorMessage()).contains("UTF-8"))
 }
 
+@Test func descriptorDatabaseRejectsInvalidCreationTime() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("pb")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try descriptorDatabaseFixture(createdAt: "2026-99-99T99:99:99Z").write(to: url)
+
+  let matcher = unite_analysis.IconMatcher(std.string(url.path))
+  #expect(!matcher.isValid())
+  #expect(swiftString(from: matcher.errorMessage()).contains("RFC 3339"))
+}
+
 @Test func ratioRejectedDescriptorsDoNotProduceCandidates() throws {
   let url = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -150,7 +162,11 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   }
 }
 
-private func descriptorDatabaseFixture(category: UInt64? = nil, heldName: Data? = nil) -> Data {
+private func descriptorDatabaseFixture(
+  category: UInt64? = nil,
+  heldName: Data? = nil,
+  createdAt: String = "2026-08-06T00:00:00Z"
+) -> Data {
   let configuration = protobufMessage([
     protobufVarintField(1, 8),
     protobufFixed32Field(2, Float(0.001).bitPattern),
@@ -165,7 +181,7 @@ private func descriptorDatabaseFixture(category: UInt64? = nil, heldName: Data? 
     protobufBytesField(3, held),
     protobufBytesField(3, battle),
     protobufBytesField(4, Data("550e8400-e29b-41d4-a716-446655440000".utf8)),
-    protobufBytesField(5, Data("2026-08-06T00:00:00Z".utf8)),
+    protobufBytesField(5, Data(createdAt.utf8)),
   ])
 }
 

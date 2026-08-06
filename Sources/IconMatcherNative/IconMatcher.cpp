@@ -265,6 +265,52 @@ std::vector<RankedMatch> rankDescriptors(
   return result;
 }
 
+bool isRFC3339UTC(const std::string &value) {
+  if (value.size() < 20 || value[4] != '-' || value[7] != '-' ||
+      value[10] != 'T' || value[13] != ':' || value[16] != ':' ||
+      value.back() != 'Z') {
+    return false;
+  }
+  for (const auto index : {0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18}) {
+    if (value[index] < '0' || value[index] > '9') {
+      return false;
+    }
+  }
+  if (value.size() > 20) {
+    if (value[19] != '.' || value.size() == 21) {
+      return false;
+    }
+    for (std::size_t index = 20; index + 1 < value.size(); ++index) {
+      if (value[index] < '0' || value[index] > '9') {
+        return false;
+      }
+    }
+  }
+  const auto number = [&value](const std::size_t offset, const std::size_t count) {
+    int result = 0;
+    for (std::size_t index = offset; index < offset + count; ++index) {
+      result = result * 10 + value[index] - '0';
+    }
+    return result;
+  };
+  const int year = number(0, 4);
+  const int month = number(5, 2);
+  const int day = number(8, 2);
+  const int hour = number(11, 2);
+  const int minute = number(14, 2);
+  const int second = number(17, 2);
+  if (year == 0 || month < 1 || month > 12 || hour > 23 || minute > 59 ||
+      second > 59) {
+    return false;
+  }
+  constexpr int daysPerMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  int maximumDay = daysPerMonth[month - 1];
+  if (month == 2 && (year % 400 == 0 || (year % 4 == 0 && year % 100 != 0))) {
+    maximumDay = 29;
+  }
+  return day >= 1 && day <= maximumDay;
+}
+
 std::string validate(const DescriptorDatabase &database) {
   if (database.formatVersion != kSupportedFormatVersion) {
     return "unsupported descriptor database format version";
@@ -291,10 +337,7 @@ std::string validate(const DescriptorDatabase &database) {
       variant != 'b' && variant != 'B') {
     return "descriptor database id must be a UUIDv4";
   }
-  if (database.createdAt.size() < 20 || database.createdAt[4] != '-' ||
-      database.createdAt[7] != '-' || database.createdAt[10] != 'T' ||
-      database.createdAt[13] != ':' || database.createdAt[16] != ':' ||
-      database.createdAt.back() != 'Z') {
+  if (!isRFC3339UTC(database.createdAt)) {
     return "descriptor database creation time must be RFC 3339 UTC";
   }
   if (!database.hasAkaze) {
