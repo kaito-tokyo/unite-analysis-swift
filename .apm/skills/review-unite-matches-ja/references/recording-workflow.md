@@ -29,7 +29,7 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks`、`recognize-draft-loadout`、`recognize-blind-loadout`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks`、`extract-clip`、`recognize-draft-loadout`、`recognize-blind-loadout`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -65,6 +65,7 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 | `sample-frames` | FFmpeg相似のcrop、fps、scale指定で1領域のJPEG連番を出力する |
 | `detect-chroma-events` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
 | `audio-peaks` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
+| `extract-clip` | 試合相対の指定区間を再エンコードせずMP4へ切り出す |
 | `scan-result` | 結果画面またはバトルデータ画面をJSONへ読み取る |
 | `recognize-draft-loadout` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
 | `recognize-blind-loadout` | blind選択画面から、味方の持ち物・バトルアイテム・宣言ルートをJSONへ読み取る |
@@ -86,6 +87,26 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 - `sample-frames`と`detect-chroma-events`には同じ正の有限値`fps`を明示する。
 - `batch-frame`と`contact-sheet`の`matchTimestamps`は試合開始を0とする有限数値の配列とし、厳密な昇順にする。負数は試合開始前、試合時間より大きい値は試合終了後を表す。
 - ソース矩形を主映像の左上原点ピクセル座標で明示し、既定のゲーム領域を仮定しない。
+
+## 試合区間の動画切り出し
+
+ハイライトの共有、局所シーンの連続再生、またはレポート用の映像を必要とするときは、`extract-clip`でrecording format v2の`main.fragmented.mp4`から必要区間をMP4へ切り出す。外部の動画ツールで再エンコードせず、まずこの専用サブコマンドを使う。
+
+`.ldtxrecord`ルートから、`--start`と`--end`を試合開始からの秒数で指定する。`--start`の既定値は`0`、`--end`を省略すると試合終了までとなる。出力は`_PokemonUniteAnalysis/matches/match-<NN>/`以下の`.mp4`へ書く。
+
+```sh
+~/.local/bin/unite-analysis-swift extract-clip \
+  --record-spec _PokemonUniteMatches/match-01/record-spec.json \
+  --start 420 \
+  --end 510 \
+  --output _PokemonUniteAnalysis/matches/match-01/final-stretch.mp4
+```
+
+- 指定区間は`0 <= start < end <= record-spec duration`を満たす有限値とする。ソース動画の範囲外はエラーになる。
+- `AVAssetExportPresetPassthrough`により、互換性のある圧縮済み映像・音声サンプルをデコード・再エンコードせずコピーする。
+- 指定した開始時刻に新しいキーフレームは作られない。プレイヤーは近接する同期サンプルからデコードし始める場合がある。フレーム単位で正確かつ独立デコード可能な開始が必須なら、このコマンドではなく再エンコードが必要と報告する。
+- 既存出力はエラーになる。再生成対象を確認した場合だけ`--force`を使う。出力は一時的な同階層ファイルへ書き出した後、成功時だけ目的パスへ置く。
+- 実行後は出力MP4を実際に再生し、映像と音声、意図したシーン範囲、開始付近のデコードを確認する。録画が提供されず再生確認できない場合は、検証済みとせず未実行と報告する。
 
 ## ソース動画証拠
 
