@@ -30,7 +30,7 @@ SPDX-License-Identifier: Apache-2.0
 
 現在の作業に必要な参照文書だけを選び、選んだ文書は最後まで読む。
 
-- 録画を調べる前、または分析ツールを実行・変更する前に、[recording-workflow.md](references/recording-workflow.md)を読む。
+- 録画を調べる前、または分析ツールを実行・変更する前に、[recording-workflow.md](references/recording-workflow.md)を読む。コンタクトシートを生成するときは、完成済み配置とJSON生成手順を再利用するため[contact-sheet-layouts.md](references/contact-sheet-layouts.md)も読む。1秒未満の連続動作を検証するときは[frame-burst.md](references/frame-burst.md)を読む。
 - 完全な試合スタッツを表示する前、またはレポートを作成・更新する前に、[report-contract.md](references/report-contract.md)を読む。持ち物名を表示する場合は[item-abbreviations.md](references/item-abbreviations.md)も読む。
 - 正本ファイルの作成・移行、Obsidian同期、Drive公開、分類体系の変更前に、[storage-publication.md](references/storage-publication.md)を読む。
 - ランク分類または公開前には、[ranked-season-registry.md](references/ranked-season-registry.md)と[ranked-seasons.json](references/ranked-seasons.json)も読む。台帳は読み取り専用として扱い、試合レビュー中に変更しない。
@@ -54,6 +54,8 @@ SPDX-License-Identifier: Apache-2.0
 - 重要な主張を裏づける高密度なソース動画シーケンス
 
 概要コンタクトシートで候補を探し、高密度な局所シートまたはフレームで出力を確定する。Vision/OCR成果物はシーク用索引であり、画像証拠ではない。
+
+接敵相手はターゲットホイール専用overviewで全試合を走査する。振り向きなど1秒未満の連続動作は、候補区間から60連続ソースフレームを並べたフレーム連写で確認する。コンタクトシートとフレーム連写を区別し、連写の具体的なコマンドは[frame-burst.md](references/frame-burst.md)に従う。
 
 ## シーンモデル
 

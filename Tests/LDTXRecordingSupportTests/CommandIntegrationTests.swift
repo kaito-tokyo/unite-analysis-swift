@@ -67,7 +67,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
 
 @Test func everyCommandPrintsDetailedHelp() throws {
   let commands = [
-    "batch-frame", "sample-frames", "precise-frame", "contact-sheet",
+    "batch-frame", "sample-frames", "precise-frame", "contact-sheet", "frame-burst",
     "detect-chroma-events", "audio-peaks", "ocr", "scan-result",
     "recognize-draft-loadout", "recognize-blind-loadout",
     "eval-draw-text-script", "schema", "config",
@@ -90,6 +90,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   let commands = [
     ("batch-frame", "AVFoundation"), ("sample-frames", "AVFoundation"),
     ("precise-frame", "AVFoundation"), ("contact-sheet", "AVFoundation"),
+    ("frame-burst", "AVFoundation"),
     ("audio-peaks", "AVFoundation"), ("eval-draw-text-script", "AVFoundation"),
     ("recognize-draft-loadout", "AVFoundation"),
     ("recognize-blind-loadout", "AVFoundation"),
@@ -128,6 +129,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
 @Test func commandsDiagnoseMissingRequiredArguments() throws {
   let invocations = [
     ["batch-frame"], ["sample-frames"], ["precise-frame"], ["contact-sheet"],
+    ["frame-burst"],
     ["detect-chroma-events"], ["audio-peaks"], ["ocr"], ["scan-result"],
     ["recognize-draft-loadout"], ["recognize-blind-loadout"],
     ["eval-draw-text-script"], ["schema"], ["config", "get"], ["config", "set"],

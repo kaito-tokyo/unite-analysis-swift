@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.schema.json",
+  "title": "unite-analysis-swift frame burst job",
+  "type": "object",
+  "required": [
+    "jobId",
+    "matchTimestamp",
+    "source",
+    "frameCount",
+    "columns",
+    "cellWidth",
+    "output"
+  ],
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "matchTimestamp": {
+      "type": "number"
+    },
+    "source": {
+      "$ref": "#/$defs/rectangle"
+    },
+    "frameCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "decimate": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "columns": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cellWidth": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "output": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "rectangle": {
+      "type": "object",
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

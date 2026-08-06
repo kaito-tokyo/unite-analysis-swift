@@ -60,6 +60,7 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 | `batch-frame` | 各ジョブの`source`、`outputPrefix`、数値`matchTimestamps`で指定した複数時刻・複数矩形のソース動画画像を出力する |
 | `precise-frame` | AVAssetReaderで1枚の明示的なソース矩形画像を出力する |
 | `contact-sheet` | ソース動画フレームから任意配置のコンタクトシートを作る |
+| `frame-burst` | 指定時刻以降の連続ソースフレームを連写として1枚へ並べ、1秒未満の動作を検証する |
 | `ocr` | 静止画ジョブごとに矩形、領域名、認識タイプを明示してOCRする |
 | `sample-frames` | FFmpeg相似のcrop、fps、scale指定で1領域のJPEG連番を出力する |
 | `detect-chroma-events` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
@@ -75,9 +76,9 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 
 ## JSONジョブ
 
-`batch-frame`、`contact-sheet`、`ocr`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
+`batch-frame`、`contact-sheet`、`frame-burst`、`ocr`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
 
-- `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`の各ジョブには`output`を明示する。`ocr`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
+- `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`と`frame-burst`の各ジョブには`output`を明示する。`ocr`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
 - 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。`ocr`は静止画入力のみを読み、`record-spec.json`を使わない。
 - すべての相対パスは、ジョブファイルの位置に関係なく現在の作業ディレクトリ基準とする。
 - 既存成果物を意図せず上書きしない。`--force`は再生成対象を確認した場合だけ使う。
@@ -88,11 +89,32 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 
 ## ソース動画証拠
 
-Vision/OCR出力はシーク用索引であり、画像証拠ではない。分析画像は必ず`batch-frame`、`precise-frame`、または`contact-sheet`でソース動画から生成する。
+Vision/OCR出力はシーク用索引であり、画像証拠ではない。分析画像は必ず`batch-frame`、`precise-frame`、`contact-sheet`、または`frame-burst`でソース動画から生成する。
 
 概要コンタクトシートは候補探索に使う。重要な主張は、密な時系列の`batch-frame`または`precise-frame`画像で再確認する。要求時刻と実際の取得時刻、ゲーム内時計の違いが見えるようにし、ラベルで関連UIを覆わない。
 
 ゲーム領域は16:9でも録画内の位置とピクセル寸法が異なり得る。固定矩形を既定値にせず、各ジョブに対象録画の実測矩形を指定する。
+
+## 標準コンタクトシート構成
+
+具体的な配置JSONと使い方は[contact-sheet-layouts.md](contact-sheet-layouts.md)を正本とする。標準として固定するのは、10列×10行、6秒間隔の`overview` 5種類だけである。標準条件では[overview-contact-sheet-jobs.jsonl](overview-contact-sheet-jobs.jsonl)を変更せず使う。
+
+overview以外のコンタクトシートに固定のPhase、Detail、列数、時間間隔、セル寸法を設けない。検証する主張を先に決め、overviewに定義された`placements`を再利用または組み合わせて、必要な時刻範囲と密度の分析用コンタクトシートを自律的に設計・生成し、生成結果を読んで分析へ使う。注目する画面領域と時間範囲へ絞り、最終シート全体はセルを歪めず正方形または16:9に近い表示しやすい比率を推奨する。必要なら目的または時間帯で複数枚へ分割する。
+
+`placements`を組み合わせる場合は、1セル内の全配置を同じ`matchTimestamp`へ対応させる。ラベルで試合時計、ミニマップ、通知、味方状態、ターゲットホイールを覆わない。標準HUDと異なる場合だけソース矩形を再実測し、変更値と理由を分析メモへ記録する。
+
+### 分析順序と確定証拠
+
+標準の読み順は次とする。
+
+1. 5種類のoverviewで試合全体を走査する。特定の接敵相手を探すときは`target-wheel-overview`を優先する。
+2. 検証する主張と必要なROIを選ぶ。
+3. overviewの`placements`を使って、候補場面の分析用コンタクトシートを必要な密度で作る。
+4. 数字、個体識別、技の命中、同時死亡など、縮小セルで確定できない事実だけを`batch-frame`または`precise-frame`の原寸画像で確認する。
+
+振り向きなど連続動作の成立時間を検証するときは、[frame-burst.md](frame-burst.md)に従い、候補区間を`frame-burst`で60連続フレームの連写として並べる。これはコンタクトシートではない。時間指定を細分した通常の`contact-sheet`で代用しない。
+
+コンタクトシートだけで細部を断定しない。一方、単一フレームへ直ちに分解して時系列の関係を失わず、まず分析用コンタクトシートで試み、反応、出力を連続して読む。
 
 ## 事前イベント点候補生成
 
