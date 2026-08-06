@@ -6,12 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # 標準overviewコンタクトシート
 
-標準として固定するコンタクトシートは、10列×10行、6秒間隔で10分試合全体を俯瞰する5種類の`overview`だけとする。標準HUD、ゲーム領域`1632x918`、10分、`match-01`では、[overview-contact-sheet-jobs.jsonl](overview-contact-sheet-jobs.jsonl)を変更せず直接使う。
+標準として固定するコンタクトシートは、10列×10行、6秒間隔で10分試合全体を俯瞰する5種類の`overview`だけとする。標準HUD、ゲーム領域`1632x918`、10分、`match-01`では、[overview-contact-sheet-jobs.jsonl](overview-contact-sheet-jobs.jsonl)を変更せず使う。ジョブファイルはスキルの配置場所にあるため、録画ルートへ移動する前に、`SKILL.md`があるディレクトリを`<skill-root>`として分析成果物領域へコピーする。
 
 ```sh
+cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
+  _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ~/.local/bin/unite-analysis-swift contact-sheet \
   --record-spec _PokemonUniteAnalysis/matches/match-01/record-spec.json \
-  .apm/skills/review-unite-matches-ja/references/overview-contact-sheet-jobs.jsonl
+  _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ```
 
 録画ルートをカレントディレクトリにして実行する。5つの出力は`_PokemonUniteAnalysis/matches/match-01/contact-sheets/`へ作られる。
@@ -22,7 +24,7 @@ SPDX-License-Identifier: Apache-2.0
 | `minimap-overview` | ミニマップ | 味方の集散、ゴール状態、反対側の変換 |
 | `player-zoom-overview` | プレイヤー周辺 | 向き、間合い、敵の始動、操作反応 |
 | `player-ui-overview` | 味方状態、時計と敵KOタイマー、プレイヤーHUD、ターゲットホイール | 生存、接敵相手、ターゲット切替、技と資源 |
-| `target-wheel-overview` | ターゲットホイールだけを判読しやすく拡大 | 接敵相手の全試合走査、特定ポケモンとの接触区間の抽出 |
+| `target-wheel-overview` | ターゲットホイールだけを判読しやすく拡大 | 接敵相手候補の全試合サンプル索引。6秒未満の接触を網羅せず、接触区間の確定には高密度の分析用シートを使う |
 
 ## 分析用コンタクトシート
 
@@ -33,7 +35,7 @@ overview以外の列数、時間範囲、時間間隔、セル寸法、組合せ
 3. 主張に必要な時刻範囲と密度へ`matchTimestamps`を変更する。
 4. 必要なら複数のoverviewの`placements`を同一セルへ組み合わせる。
 5. 同一セル内の配置は同じ`matchTimestamp`へ対応させる。
-6. 縮小セルで断定できない事実だけを原寸画像で確認する。
+6. 重要な主張はすべて密な時系列の原寸画像で再確認する。縮小セルで曖昧な箇所には追加の原寸確認を行う。
 
 ### 組み方の推奨
 

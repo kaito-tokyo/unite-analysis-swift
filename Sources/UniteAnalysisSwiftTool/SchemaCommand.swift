@@ -75,8 +75,8 @@ enum EmbeddedSchemas {
         "source": { "$ref": "#/$defs/rectangle" },
         "frameCount": { "type": "integer", "minimum": 1 },
         "decimate": { "type": "integer", "minimum": 1, "default": 1 },
-        "columns": { "type": "integer", "minimum": 1 },
-        "cellWidth": { "type": "integer", "minimum": 1 },
+        "columns": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "cellWidth": { "type": "integer", "minimum": 1, "maximum": 32768 },
         "output": { "type": "string", "minLength": 1 }
       },
       "$defs": {

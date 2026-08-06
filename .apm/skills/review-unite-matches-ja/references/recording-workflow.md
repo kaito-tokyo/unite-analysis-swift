@@ -29,7 +29,7 @@ APMはスキルを配布するものであり、Swiftバイナリをインスト
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`audio-peaks`、`recognize-draft-loadout`、`recognize-blind-loadout`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks`、`recognize-draft-loadout`、`recognize-blind-loadout`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -107,10 +107,10 @@ overview以外のコンタクトシートに固定のPhase、Detail、列数、�
 
 標準の読み順は次とする。
 
-1. 5種類のoverviewで試合全体を走査する。特定の接敵相手を探すときは`target-wheel-overview`を優先する。
+1. 5種類のoverviewを試合全体のサンプル索引として走査する。特定の接敵相手を探すときは`target-wheel-overview`を優先するが、6秒未満の接触は欠落し得るため網羅的な接敵検出には使わない。
 2. 検証する主張と必要なROIを選ぶ。
 3. overviewの`placements`を使って、候補場面の分析用コンタクトシートを必要な密度で作る。
-4. 数字、個体識別、技の命中、同時死亡など、縮小セルで確定できない事実だけを`batch-frame`または`precise-frame`の原寸画像で確認する。
+4. 重要な主張はすべて、密な時系列の`batch-frame`または`precise-frame`原寸画像で再確認する。数字、個体識別、技の命中、同時死亡など縮小セルで確定できない事実には、追加の原寸確認を行う。
 
 振り向きなど連続動作の成立時間を検証するときは、[frame-burst.md](frame-burst.md)に従い、候補区間を`frame-burst`で60連続フレームの連写として並べる。これはコンタクトシートではない。時間指定を細分した通常の`contact-sheet`で代用しない。
 

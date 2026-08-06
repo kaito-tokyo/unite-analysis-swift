@@ -155,8 +155,9 @@ public final class VideoFrameExtractor {
       guard CMTimeCompare(presentationTime, time) >= 0,
         let pixelBuffer = CMSampleBufferGetImageBuffer(sample)
       else { continue }
+      // FrameSource rectangles use encoded-pixel coordinates, matching contact-sheet.
       let image = try VideoFrameSupport.normalizedImage(
-        pixelBuffer, transform: transform, context: context)
+        pixelBuffer, transform: .identity, context: context)
       try handler(index, image, presentationTime)
       index += 1
     }

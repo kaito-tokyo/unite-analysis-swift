@@ -157,6 +157,26 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   #expect(!result.stderr.contains("No such file"))
 }
 
+@Test func frameBurstRejectsOverflowingLayoutsWithoutStoppingLaterJobs() throws {
+  let jobsURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("frame-burst-overflow-\(UUID().uuidString).jsonl")
+  defer { try? FileManager.default.removeItem(at: jobsURL) }
+  let jobs = """
+    {"jobId":"overflow","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":9223372036854775807,"decimate":2,"columns":32768,"cellWidth":32768,"output":"overflow.jpg"}
+    {"jobId":"later","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"columns":1,"cellWidth":1,"output":"later.jpg"}
+    """
+  try Data(jobs.utf8).write(to: jobsURL)
+
+  let result = try runCommand([
+    "frame-burst", jobsURL.path, "--record-spec", "/does/not/exist/record-spec.json",
+  ])
+  #expect(result.status == 0)
+  let responses = result.stdout.split(separator: "\n")
+  #expect(responses.count == 2)
+  #expect(responses[0].contains("Frame burst dimensions exceed"))
+  #expect(responses[1].contains("later"))
+}
+
 @Test func loadoutCommandsRequireExactlyOneTimelineSource() throws {
   let neither = try runCommand(["recognize-blind-loadout", "--prep-time=1"])
   #expect(neither.status != 0)

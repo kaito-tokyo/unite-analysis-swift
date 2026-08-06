@@ -10,6 +10,8 @@ import LDTXRecordingSupport
 import RecordVisionSupport
 
 private struct FrameBurstJob: Decodable {
+  static let maximumOutputDimension = 32_768
+
   let jobId: String
   let matchTimestamp: Double
   let source: FrameSource
@@ -41,9 +43,42 @@ private struct FrameBurstJob: Decodable {
     guard cellWidth > 0 else {
       throw UniteAnalysisSwiftToolError.message("cellWidth must be positive")
     }
+    guard columns <= Self.maximumOutputDimension,
+      cellWidth <= Self.maximumOutputDimension
+    else {
+      throw UniteAnalysisSwiftToolError.message(
+        "columns and cellWidth must not exceed \(Self.maximumOutputDimension)")
+    }
     guard !output.isEmpty else {
       throw UniteAnalysisSwiftToolError.message("output must not be empty")
     }
+    _ = try layoutDimensions()
+  }
+
+  func layoutDimensions() throws -> (cellHeight: Int, rows: Int, width: Int, height: Int) {
+    let scaledHeight = Double(cellWidth) * Double(source.height) / Double(source.width)
+    guard scaledHeight.isFinite, scaledHeight <= Double(Self.maximumOutputDimension) else {
+      throw UniteAnalysisSwiftToolError.message("Derived cell height is too large")
+    }
+    let cellHeight = max(1, Int(scaledHeight.rounded()))
+    let retainedCount = (frameCount - 1) / decimation + 1
+    let rows = (retainedCount - 1) / columns + 1
+    let gutter = 4
+    let (cellWidthTotal, cellWidthOverflow) = columns.multipliedReportingOverflow(by: cellWidth)
+    let (gutterWidth, gutterWidthOverflow) = (columns - 1).multipliedReportingOverflow(by: gutter)
+    let (width, widthOverflow) = cellWidthTotal.addingReportingOverflow(gutterWidth)
+    let (cellHeightTotal, cellHeightOverflow) = rows.multipliedReportingOverflow(by: cellHeight)
+    let (gutterHeight, gutterHeightOverflow) = (rows - 1).multipliedReportingOverflow(by: gutter)
+    let (height, heightOverflow) = cellHeightTotal.addingReportingOverflow(gutterHeight)
+    guard !cellWidthOverflow, !gutterWidthOverflow, !widthOverflow,
+      !cellHeightOverflow, !gutterHeightOverflow, !heightOverflow,
+      width <= Self.maximumOutputDimension, height <= Self.maximumOutputDimension
+    else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Frame burst dimensions exceed \(Self.maximumOutputDimension)x\(Self.maximumOutputDimension)"
+      )
+    }
+    return (cellHeight, rows, width, height)
   }
 }
 
@@ -153,14 +188,12 @@ private func renderFrameBurst(
     CMTimeCompare(requestedTime, extractor.duration) < 0
   else { throw UniteAnalysisSwiftToolError.message("Frame burst starts outside the video range") }
 
-  let cellHeight = max(
-    1, Int((Double(job.cellWidth) * Double(job.source.height) / Double(job.source.width)).rounded())
-  )
-  let retainedCount = (job.frameCount + job.decimation - 1) / job.decimation
-  let rows = Int(ceil(Double(retainedCount) / Double(job.columns)))
+  let layout = try job.layoutDimensions()
+  let cellHeight = layout.cellHeight
+  let rows = layout.rows
   let gutter = 4
-  let width = job.columns * job.cellWidth + max(0, job.columns - 1) * gutter
-  let height = rows * cellHeight + max(0, rows - 1) * gutter
+  let width = layout.width
+  let height = layout.height
   guard
     let context = CGContext(
       data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
