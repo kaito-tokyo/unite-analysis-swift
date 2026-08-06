@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version = 1
+name = "unite-analysis-swift"
+
+[setup]
+script = """
+git -C "$CODEX_SOURCE_TREE_PATH" submodule update --init
+git submodule update --init --reference "$CODEX_SOURCE_TREE_PATH/Vendor/opencv" -- Vendor/opencv
+git submodule update --init --reference "$CODEX_SOURCE_TREE_PATH/Vendor/opencv_contrib" -- Vendor/opencv_contrib
+git submodule update --init --reference "$CODEX_SOURCE_TREE_PATH/Vendor/nanopb" -- Vendor/nanopb
+"""
