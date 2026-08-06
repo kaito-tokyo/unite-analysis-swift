@@ -128,6 +128,47 @@ public final class VideoFrameExtractor {
       ))
   }
 
+  /// Sequentially decodes source samples, beginning with the first sample at or after `time`.
+  /// Unlike a list of time-based requests, this returns every decoded video sample in order.
+  public func extractConsecutiveFrames(
+    startingAt time: CMTime,
+    count: Int,
+    handler: (_ index: Int, _ image: CGImage, _ presentationTime: CMTime) throws -> Void
+  ) throws {
+    guard count > 0 else {
+      throw VideoFrameSupportError.message("Consecutive frame count must be positive")
+    }
+    let reader = try AVAssetReader(asset: asset)
+    let requestedPreroll = CMTimeSubtract(time, CMTime(seconds: 2, preferredTimescale: 600))
+    let prerollStart = CMTimeCompare(requestedPreroll, .zero) > 0 ? requestedPreroll : .zero
+    reader.timeRange = CMTimeRange(start: prerollStart, end: duration)
+    let output = try makeOutput(reader: reader)
+    guard reader.startReading() else {
+      throw VideoFrameSupportError.message(
+        VideoFrameSupport.decodingFailureMessage(
+          "Could not start consecutive source-video decoding: \(reader.error?.localizedDescription ?? "unknown error")"
+        ))
+    }
+    var index = 0
+    while index < count, let sample = output.copyNextSampleBuffer() {
+      let presentationTime = CMSampleBufferGetPresentationTimeStamp(sample)
+      guard CMTimeCompare(presentationTime, time) >= 0,
+        let pixelBuffer = CMSampleBufferGetImageBuffer(sample)
+      else { continue }
+      // FrameSource rectangles use encoded-pixel coordinates, matching contact-sheet.
+      let image = try VideoFrameSupport.normalizedImage(
+        pixelBuffer, transform: .identity, context: context)
+      try handler(index, image, presentationTime)
+      index += 1
+    }
+    guard index == count else {
+      throw VideoFrameSupportError.message(
+        VideoFrameSupport.decodingFailureMessage(
+          "Source-video decoding ended after \(index) of \(count) consecutive frames: \(reader.error?.localizedDescription ?? "unknown error")"
+        ))
+    }
+  }
+
   public func extractFrames(
     at times: [CMTime],
     handler: (_ index: Int, _ image: CGImage) throws -> Void

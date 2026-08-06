@@ -67,7 +67,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
 
 @Test func everyCommandPrintsDetailedHelp() throws {
   let commands = [
-    "batch-frame", "sample-frames", "precise-frame", "contact-sheet",
+    "batch-frame", "sample-frames", "precise-frame", "contact-sheet", "frame-burst",
     "detect-chroma-events", "audio-peaks", "ocr", "scan-result",
     "recognize-draft-loadout", "recognize-blind-loadout",
     "eval-draw-text-script", "schema", "config",
@@ -90,6 +90,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   let commands = [
     ("batch-frame", "AVFoundation"), ("sample-frames", "AVFoundation"),
     ("precise-frame", "AVFoundation"), ("contact-sheet", "AVFoundation"),
+    ("frame-burst", "AVFoundation"),
     ("audio-peaks", "AVFoundation"), ("eval-draw-text-script", "AVFoundation"),
     ("recognize-draft-loadout", "AVFoundation"),
     ("recognize-blind-loadout", "AVFoundation"),
@@ -128,6 +129,7 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
 @Test func commandsDiagnoseMissingRequiredArguments() throws {
   let invocations = [
     ["batch-frame"], ["sample-frames"], ["precise-frame"], ["contact-sheet"],
+    ["frame-burst"],
     ["detect-chroma-events"], ["audio-peaks"], ["ocr"], ["scan-result"],
     ["recognize-draft-loadout"], ["recognize-blind-loadout"],
     ["eval-draw-text-script"], ["schema"], ["config", "get"], ["config", "set"],
@@ -153,6 +155,30 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   #expect(result.stdout.isEmpty)
   #expect(result.stderr.contains("--fps must be positive and finite"))
   #expect(!result.stderr.contains("No such file"))
+}
+
+@Test func frameBurstRejectsOverflowingLayoutsWithoutStoppingLaterJobs() throws {
+  let jobsURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("frame-burst-overflow-\(UUID().uuidString).jsonl")
+  defer { try? FileManager.default.removeItem(at: jobsURL) }
+  let jobs = """
+    {"jobId":"decode-count","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":601,"columns":1,"cellWidth":1,"output":"decode-count.jpg"}
+    {"jobId":"overflow","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":600,"columns":32768,"cellWidth":32768,"output":"overflow.jpg"}
+    {"jobId":"pixels","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"columns":1,"cellWidth":32768,"output":"pixels.jpg"}
+    {"jobId":"later","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"columns":1,"cellWidth":1,"output":"later.jpg"}
+    """
+  try Data(jobs.utf8).write(to: jobsURL)
+
+  let result = try runCommand([
+    "frame-burst", jobsURL.path, "--record-spec", "/does/not/exist/record-spec.json",
+  ])
+  #expect(result.status == 0)
+  let responses = result.stdout.split(separator: "\n")
+  #expect(responses.count == 4)
+  #expect(responses[0].contains("frameCount must be from 1 through"))
+  #expect(responses[1].contains("Frame burst dimensions exceed"))
+  #expect(responses[2].contains("Frame burst pixel count exceeds"))
+  #expect(responses[3].contains("later"))
 }
 
 @Test func loadoutCommandsRequireExactlyOneTimelineSource() throws {

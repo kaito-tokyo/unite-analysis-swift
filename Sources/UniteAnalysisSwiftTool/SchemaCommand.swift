@@ -45,6 +45,8 @@ enum EmbeddedSchemas {
     "chroma-events.output.schema.json",
     "contact-sheet.schema.json",
     "contact-sheet.output.schema.json",
+    "frame-burst.schema.json",
+    "frame-burst.output.schema.json",
     "loadout.output.schema.json",
     "ocr.schema.json",
     "ocr.output.schema.json",
@@ -60,6 +62,78 @@ enum EmbeddedSchemas {
   static var storedBasenames: [String] { schemas.keys.sorted() }
 
   private static let schemas = [
+    "frame-burst.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.schema.json",
+      "title": "unite-analysis-swift frame burst job",
+      "type": "object",
+      "required": ["jobId", "matchTimestamp", "source", "frameCount", "columns", "cellWidth", "output"],
+      "properties": {
+        "jobId": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "matchTimestamp": { "type": "number" },
+        "source": { "$ref": "#/$defs/rectangle" },
+        "frameCount": { "type": "integer", "minimum": 1, "maximum": 600 },
+        "decimate": { "type": "integer", "minimum": 1, "default": 1 },
+        "columns": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "cellWidth": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "output": { "type": "string", "minLength": 1 }
+      },
+      "$defs": {
+        "rectangle": {
+          "type": "object",
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "integer", "minimum": 0 },
+            "y": { "type": "integer", "minimum": 0 },
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+    """#,
+    "frame-burst.output.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.output.schema.json",
+      "title": "unite-analysis-swift frame-burst JSONL response",
+      "oneOf": [{ "$ref": "#/$defs/success" }, { "$ref": "#/$defs/failure" }],
+      "$defs": {
+        "success": {
+          "type": "object",
+          "required": ["$schema", "jobId", "ok", "result"],
+          "properties": {
+            "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.output.schema.json" },
+            "jobId": { "type": "string", "minLength": 1 },
+            "ok": { "const": true },
+            "result": {
+              "type": "object",
+              "required": ["output"],
+              "properties": { "output": { "type": "string", "minLength": 1 } }
+            }
+          }
+        },
+        "failure": {
+          "type": "object",
+          "required": ["$schema", "ok", "error"],
+          "properties": {
+            "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.output.schema.json" },
+            "jobId": { "type": "string" },
+            "ok": { "const": false },
+            "error": {
+              "type": "object",
+              "required": ["line", "message"],
+              "properties": {
+                "line": { "type": "integer", "minimum": 1 },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+    """#,
     "loadout.output.schema.json": #"""
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
