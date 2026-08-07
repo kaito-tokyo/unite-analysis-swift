@@ -58,13 +58,11 @@ jobs:
 
       - name: Build
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: |
-          swift build -c release --build-tests
-          swift build -c release --product unite-analysis-swift
+        run: swift build -c release
 
       - name: Test
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: swift test -c release --skip-build
+        run: swift test -c release
 
   swift-upload-artifacts:
     if: inputs.upload-artifacts
