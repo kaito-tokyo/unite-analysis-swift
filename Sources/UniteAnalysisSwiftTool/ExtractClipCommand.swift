@@ -89,9 +89,9 @@ func extractClip(
   if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
     RecordVisionInputLogger.unfinishedRecording(bundleURL)
   }
-  let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
-  RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let asset = AVURLAsset(url: recording.videoURL)
+  let videoURL = try extractClipVideoURL(in: bundleURL)
+  RecordVisionInputLogger.sourceVideo(videoURL)
+  let asset = AVURLAsset(url: videoURL)
   let assetDuration = try await asset.load(.duration)
   let matchStart = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
   let clipStart = CMTimeAdd(matchStart, CMTime(seconds: start, preferredTimescale: 60_000))
@@ -126,4 +126,26 @@ func extractClip(
     try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
   }
   print(outputURL.path)
+}
+
+func extractClipVideoURL(in bundleURL: URL) throws -> URL {
+  let infoURL = bundleURL.appendingPathComponent("Info.plist")
+  guard let data = try? Data(contentsOf: infoURL),
+    let plist = try? PropertyListSerialization.propertyList(from: data, options: 0, format: nil),
+    let dictionary = plist as? [String: Any]
+  else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Could not read LDTX recording metadata: \(infoURL.path)")
+  }
+  let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
+  guard formatVersion == 2 else {
+    throw UniteAnalysisSwiftToolError.message(
+      "extract-clip requires LDTX recording format version 2: \(infoURL.path)")
+  }
+  let videoURL = bundleURL.appendingPathComponent("main.fragmented.mp4").standardizedFileURL
+  guard FileManager.default.fileExists(atPath: videoURL.path) else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Recording format v2 main media file was not found: \(videoURL.path)")
+  }
+  return videoURL
 }
