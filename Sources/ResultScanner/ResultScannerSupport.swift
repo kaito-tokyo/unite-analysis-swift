@@ -12,10 +12,10 @@ struct Arguments {
   var output: String?
 }
 
-enum ScannerError: Error, CustomStringConvertible {
+package enum ScannerError: Error, CustomStringConvertible {
   case message(String)
 
-  var description: String {
+  package var description: String {
     switch self {
     case .message(let value): return value
     }
@@ -27,21 +27,34 @@ public struct NormalizedRect: Codable, Sendable {
   public let y: Double
   public let width: Double
   public let height: Double
+
+  package init(x: Double, y: Double, width: Double, height: Double) {
+    self.x = x
+    self.y = y
+    self.width = width
+    self.height = height
+  }
 }
 
 public struct TextObservation: Codable, Sendable {
   public let text: String
   public let confidence: Float
   public let box: NormalizedRect
+
+  package init(text: String, confidence: Float, box: NormalizedRect) {
+    self.text = text
+    self.confidence = confidence
+    self.box = box
+  }
 }
 
-struct OCRCell: Codable {
+package struct OCRCell: Codable {
   let text: String?
   let confidence: Float?
   let alternatives: [String]
 }
 
-struct BattleDataRow: Codable {
+package struct BattleDataRow: Codable {
   let side: String
   let row: Int
   let name: OCRCell
@@ -50,7 +63,7 @@ struct BattleDataRow: Codable {
   let healing: OCRCell
 }
 
-struct SummaryRow: Codable {
+package struct SummaryRow: Codable {
   let side: String
   let row: Int
   let name: OCRCell
@@ -60,16 +73,30 @@ struct SummaryRow: Codable {
   let rating: OCRCell
 }
 
-struct ScreenResult: Codable {
+package struct ScreenResult: Codable {
   let kind: String
   let detectionScore: Int
   let rawText: [TextObservation]
   let battleData: [BattleDataRow]?
   let summary: [SummaryRow]?
+
+  package init(
+    kind: String,
+    detectionScore: Int,
+    rawText: [TextObservation],
+    battleData: [BattleDataRow]?,
+    summary: [SummaryRow]?
+  ) {
+    self.kind = kind
+    self.detectionScore = detectionScore
+    self.rawText = rawText
+    self.battleData = battleData
+    self.summary = summary
+  }
 }
 
-struct ScanResult: Codable {
-  static let schemaURL =
+package struct ScanResult: Codable {
+  package static let schemaURL =
     "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json"
 
   let schema = schemaURL
@@ -78,6 +105,20 @@ struct ScanResult: Codable {
   let ocrOptions: [String: OCRRecognitionOptions]
   let screens: [ScreenResult]
   let warnings: [String]
+
+  package init(
+    input: String,
+    generatedAt: String,
+    ocrOptions: [String: OCRRecognitionOptions],
+    screens: [ScreenResult],
+    warnings: [String]
+  ) {
+    self.input = input
+    self.generatedAt = generatedAt
+    self.ocrOptions = ocrOptions
+    self.screens = screens
+    self.warnings = warnings
+  }
 
   private enum CodingKeys: String, CodingKey {
     case schema = "$schema"
@@ -145,7 +186,7 @@ public struct OCRInputResult: Codable, Sendable {
 }
 
 public enum OCRInput {
-  static func readingOrder(_ observations: [TextObservation]) -> [TextObservation] {
+  package static func readingOrder(_ observations: [TextObservation]) -> [TextObservation] {
     let verticallyOrdered = observations.sorted {
       if $0.box.y != $1.box.y { return $0.box.y > $1.box.y }
       return $0.box.x < $1.box.x
@@ -163,7 +204,7 @@ public enum OCRInput {
     return rows.flatMap { $0.sorted { $0.box.x < $1.box.x } }
   }
 
-  static func interpreted(
+  package static func interpreted(
     _ observations: [TextObservation], type: OCRInputType
   ) -> OCRInputResult {
     let ordered = readingOrder(observations)

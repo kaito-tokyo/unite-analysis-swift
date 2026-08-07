@@ -12,9 +12,8 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-@main
-struct UniteAnalysisSwiftTool: AsyncParsableCommand {
-  static let configuration = CommandConfiguration(
+package struct UniteAnalysisSwiftCommand: AsyncParsableCommand {
+  package static let configuration = CommandConfiguration(
     commandName: "unite-analysis-swift",
     abstract: "Extract and analyze Pokémon UNITE recording and still-image data.",
     discussion: """
@@ -43,4 +42,6 @@ struct UniteAnalysisSwiftTool: AsyncParsableCommand {
       EvaluateDrawText.self, Schema.self, Config.self,
     ]
   )
+
+  package init() {}
 }

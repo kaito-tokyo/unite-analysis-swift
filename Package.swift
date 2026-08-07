@@ -173,8 +173,8 @@ let package = Package(
     ),
     .target(name: "RecordVisionSupport", dependencies: ["LDTXRecordingSupport"]),
     .target(name: "UniteAnalysisConfiguration"),
-    .executableTarget(
-      name: "UniteAnalysisSwiftTool",
+    .target(
+      name: "UniteAnalysisSwiftCommands",
       dependencies: [
         "LDTXRecordingSupport",
         "RecordVisionSupport",
@@ -183,19 +183,38 @@ let package = Package(
         "IconMatcherNative",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ],
+      path: "Sources/UniteAnalysisSwiftTool",
       swiftSettings: [.interoperabilityMode(.Cxx)]),
     .executableTarget(
-      name: "UniteAnalysisModelTool",
+      name: "UniteAnalysisSwiftTool",
+      dependencies: [
+        "UniteAnalysisSwiftCommands",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ],
+      path: "Sources/UniteAnalysisSwiftExecutable",
+      swiftSettings: [.interoperabilityMode(.Cxx)]),
+    .target(
+      name: "UniteAnalysisModelCommands",
       dependencies: [
         "IconMatcherNative",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ],
+      path: "Sources/UniteAnalysisModelTool",
+      swiftSettings: [.interoperabilityMode(.Cxx)]),
+    .executableTarget(
+      name: "UniteAnalysisModelTool",
+      dependencies: [
+        "UniteAnalysisModelCommands",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ],
+      path: "Sources/UniteAnalysisModelExecutable",
       swiftSettings: [.interoperabilityMode(.Cxx)]),
     .testTarget(
       name: "LDTXRecordingSupportTests",
       dependencies: [
         "LDTXRecordingSupport", "RecordVisionSupport", "ResultScannerSupport",
-        "UniteAnalysisConfiguration", "UniteAnalysisSwiftTool", "UniteAnalysisModelTool",
+        "UniteAnalysisConfiguration", "UniteAnalysisSwiftCommands",
+        "UniteAnalysisModelCommands",
         "IconMatcherNative",
       ],
       swiftSettings: [.interoperabilityMode(.Cxx)]),

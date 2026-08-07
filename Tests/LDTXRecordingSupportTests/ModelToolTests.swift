@@ -6,10 +6,10 @@ import ArgumentParser
 import Foundation
 import Testing
 
-@testable import UniteAnalysisModelTool
+import UniteAnalysisModelCommands
 
 @Test func modelToolHelpDescribesBuildCommand() {
-  let help = UniteAnalysisModelTool.helpMessage()
+  let help = UniteAnalysisModelCommand.helpMessage()
   #expect(help.contains("USAGE: unite-analysis-model-tool <subcommand>"))
   #expect(help.contains("build"))
 }

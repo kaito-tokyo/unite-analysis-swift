@@ -155,7 +155,7 @@ public enum DrawTextScriptEngine {
     )
   }
 
-  static func evaluate(
+  package static func evaluate(
     script: String,
     index: Int,
     inmatch: Double?,
@@ -377,7 +377,7 @@ public enum ContactSheetGenerator {
     try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
   }
 
-  static func validatedOffsets(matchTimestamps: [Double]) throws -> [Double] {
+  package static func validatedOffsets(matchTimestamps: [Double]) throws -> [Double] {
     var offsets: [Double] = []
     offsets.reserveCapacity(matchTimestamps.count)
     for (index, frame) in matchTimestamps.enumerated() {

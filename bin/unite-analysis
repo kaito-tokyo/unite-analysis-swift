@@ -9,6 +9,7 @@ repository_url='https://github.com/kaito-tokyo/unite-analysis-swift'
 latest_version_url='https://kaito-tokyo.github.io/unite-analysis-swift/metadata/latest-version.txt'
 wrapper_url='https://raw.githubusercontent.com/kaito-tokyo/unite-analysis-swift/main/bin/unite-analysis'
 application_support_directory="$HOME/Library/Application Support/tokyo.kaito.unite-analysis-swift"
+developer_id_requirement='anchor apple generic and certificate leaf[subject.OU] = "4HMJS6J4MZ" and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
 
 case "${1-}" in
   swift)
@@ -45,9 +46,14 @@ case "${1-}" in
       exit 69
     fi
     download_directory=$(mktemp -d "${TMPDIR:-/tmp}/unite-analysis.XXXXXX")
+    mount_directory="$download_directory/mount"
     staging_directory=''
     backup_directory=''
+    mounted=''
     trap '
+      if [ -n "$mounted" ]; then
+        hdiutil detach "$mount_directory" >/dev/null 2>&1 || true
+      fi
       if [ -n "$backup_directory" ] && [ -d "$backup_directory" ] && [ ! -e "$application_support_directory" ]; then
         mv "$backup_directory" "$application_support_directory"
       fi
@@ -58,17 +64,40 @@ case "${1-}" in
 
     latest_version=$(curl -fsSL "$latest_version_url")
     release_tag="v$latest_version"
-    archive_name="unite-analysis-swift-$release_tag-macos-$architecture.zip"
-    archive_path="$download_directory/$archive_name"
+    disk_image_name="unite-analysis-swift-$release_tag-macos-$architecture.dmg"
+    disk_image_path="$download_directory/$disk_image_name"
     curl -fsSL \
-      -o "$archive_path" \
-      "$repository_url/releases/download/$release_tag/$archive_name"
+      -o "$disk_image_path" \
+      "$repository_url/releases/download/$release_tag/$disk_image_name"
 
-    extraction_directory="$download_directory/extracted"
-    ditto -x -k "$archive_path" "$extraction_directory"
-    release_directory="$extraction_directory/${archive_name%.zip}"
-    if [ ! -d "$release_directory" ]; then
-      release_directory=$extraction_directory
+    hdiutil verify "$disk_image_path"
+    codesign --verify --strict --check-notarization --verbose=2 \
+      -R="$developer_id_requirement" \
+      "$disk_image_path"
+    spctl --assess --type open --context context:primary-signature --verbose=2 "$disk_image_path"
+
+    mkdir "$mount_directory"
+    hdiutil attach \
+      -readonly \
+      -nobrowse \
+      -noautoopen \
+      -mountpoint "$mount_directory" \
+      "$disk_image_path" >/dev/null
+    mounted=1
+
+    for product in unite-analysis-swift unite-analysis-model-tool; do
+      product_path="$mount_directory/$product"
+      if [ ! -f "$product_path" ] || [ -L "$product_path" ]; then
+        printf 'unite-analysis: release disk image does not contain a regular %s executable.\n' "$product" >&2
+        exit 65
+      fi
+      codesign --verify --strict --verbose=2 \
+        -R="$developer_id_requirement" \
+        "$product_path"
+    done
+    if [ ! -f "$mount_directory/descriptors.pb" ] || [ -L "$mount_directory/descriptors.pb" ]; then
+      printf 'unite-analysis: release disk image does not contain a regular descriptors.pb file.\n' >&2
+      exit 65
     fi
 
     application_support_parent=${application_support_directory%/*}
@@ -77,7 +106,12 @@ case "${1-}" in
     if [ -d "$application_support_directory" ]; then
       ditto --norsrc "$application_support_directory" "$staging_directory"
     fi
-    ditto --norsrc "$release_directory" "$staging_directory"
+    ditto --norsrc "$mount_directory/unite-analysis-swift" "$staging_directory/unite-analysis-swift"
+    ditto --norsrc "$mount_directory/unite-analysis-model-tool" "$staging_directory/unite-analysis-model-tool"
+    ditto --norsrc "$mount_directory/descriptors.pb" "$staging_directory/descriptors.pb"
+
+    hdiutil detach "$mount_directory" >/dev/null
+    mounted=''
 
     if [ -d "$application_support_directory" ]; then
       backup_directory=$(mktemp -d "$application_support_parent/.unite-analysis-backup.XXXXXX")

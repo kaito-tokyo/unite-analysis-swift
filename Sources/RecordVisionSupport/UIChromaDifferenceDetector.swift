@@ -28,6 +28,28 @@ public struct ChromaEventSample: Codable, Equatable, Sendable {
   public let crChangedPixelCount: Int
   public let bothChangedPixelCount: Int
   public let changedPixelCount: Int
+
+  package init(
+    requestedInmatch: Double,
+    actualInmatch: Double,
+    score: Int,
+    cbThreshold: Int,
+    crThreshold: Int,
+    cbChangedPixelCount: Int,
+    crChangedPixelCount: Int,
+    bothChangedPixelCount: Int,
+    changedPixelCount: Int
+  ) {
+    self.requestedInmatch = requestedInmatch
+    self.actualInmatch = actualInmatch
+    self.score = score
+    self.cbThreshold = cbThreshold
+    self.crThreshold = crThreshold
+    self.cbChangedPixelCount = cbChangedPixelCount
+    self.crChangedPixelCount = crChangedPixelCount
+    self.bothChangedPixelCount = bothChangedPixelCount
+    self.changedPixelCount = changedPixelCount
+  }
 }
 
 public struct ChromaEventResult: Codable, Equatable, Sendable {
@@ -213,9 +235,14 @@ public enum ChromaEventDetector {
     try encoder.encode(result).write(to: outputURL, options: .atomic)
   }
 
-  struct ChromaPlane {
-    let cb: [Int16]
-    let cr: [Int16]
+  package struct ChromaPlane {
+    package let cb: [Int16]
+    package let cr: [Int16]
+
+    package init(cb: [Int16], cr: [Int16]) {
+      self.cb = cb
+      self.cr = cr
+    }
   }
 
   static func chromaPlane(
@@ -260,7 +287,7 @@ public enum ChromaEventDetector {
     return ChromaPlane(cb: cb, cr: cr)
   }
 
-  static func analyze(previous: ChromaPlane, current: ChromaPlane) -> (
+  package static func analyze(previous: ChromaPlane, current: ChromaPlane) -> (
     cbThreshold: Int,
     crThreshold: Int,
     cbChangedPixelCount: Int,
@@ -289,7 +316,7 @@ public enum ChromaEventDetector {
   }
 
   /// Returns nil for a degenerate plane. Otsu must not invent foreground when every pixel has the same change.
-  static func otsuThreshold(_ values: [Int]) -> Int? {
+  package static func otsuThreshold(_ values: [Int]) -> Int? {
     guard let minimum = values.min(), let maximum = values.max(), minimum < maximum else {
       return nil
     }

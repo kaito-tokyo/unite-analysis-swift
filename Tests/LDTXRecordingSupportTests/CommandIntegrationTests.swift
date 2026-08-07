@@ -5,7 +5,7 @@
 import Foundation
 import Testing
 
-@testable import UniteAnalysisSwiftTool
+import UniteAnalysisSwiftCommands
 
 private struct CommandResult {
   let status: Int32

@@ -27,6 +27,10 @@ brew install apm
 apm install -g --target codex kaito-tokyo/unite-analysis-swift --skill review-unite-matches-ja
 ```
 
+The download command verifies the signed, notarized, and stapled release disk
+image and its Developer ID-signed executables before installing them in the
+current user's Application Support directory.
+
 ## Usage
 
 Ask your agent to analyze a Pokémon UNITE match recording.

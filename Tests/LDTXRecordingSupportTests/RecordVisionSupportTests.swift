@@ -6,11 +6,9 @@ import AVFoundation
 import CoreGraphics
 import Foundation
 import LDTXRecordingSupport
+import RecordVisionSupport
+import ResultScannerSupport
 import Testing
-
-@testable import LDTXRecordingSupport
-@testable import RecordVisionSupport
-@testable import ResultScannerSupport
 
 @Test func videoDecodingFailureIncludesSandboxRecoveryGuidance() {
   let message = VideoFrameSupport.decodingFailureMessage("Cannot Decode")
