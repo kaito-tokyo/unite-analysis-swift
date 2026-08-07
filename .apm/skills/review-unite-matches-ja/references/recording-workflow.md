@@ -13,14 +13,14 @@ SPDX-License-Identifier: Apache-2.0
 このスキルの標準分析CLIは、配置済みの次のコマンドだけとする。
 
 ```text
-~/.local/bin/unite-analysis-swift
+~/.local/bin/unite-analysis swift
 ```
 
 実行前に次を確認する。
 
 ```sh
-test -x ~/.local/bin/unite-analysis-swift
-~/.local/bin/unite-analysis-swift --help
+test -x ~/.local/bin/unite-analysis
+~/.local/bin/unite-analysis swift --help
 ```
 
 PATH上の同名コマンドではなく、この絶対パスを使う。コマンドがない、実行できない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
@@ -51,8 +51,8 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 オプションとJSON契約の正本は、インストール済みコマンドのヘルプとバイナリ内蔵schemaとする。
 
 ```sh
-~/.local/bin/unite-analysis-swift help <subcommand>
-~/.local/bin/unite-analysis-swift schema <schema-basename>
+~/.local/bin/unite-analysis swift help <subcommand>
+~/.local/bin/unite-analysis swift schema <schema-basename>
 ```
 
 | サブコマンド | 用途 |
@@ -204,7 +204,7 @@ OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`sourc
 
 1. ユーザーが指定した録画と対象試合を確認する。
 2. `.finalized`、`Info.plist`、`record-spec.json`を確認し、specがなければ根拠を集めて候補を復元・記録する。
-3. `~/.local/bin/unite-analysis-swift --help`でCLIを確認する。
+3. `~/.local/bin/unite-analysis swift --help`でCLIを確認する。
 4. 既存の`_PokemonUniteAnalysis`成果物を調べ、現行入力と一致するものを再利用する。
 5. 事前イベント点候補生成の実行契約を実行し、候補または未取得理由を保存する。
 6. `batch-frame`または`contact-sheet`で、候補生成とは別に試合全体の概要を作る。

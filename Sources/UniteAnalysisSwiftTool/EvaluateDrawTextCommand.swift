@@ -23,7 +23,7 @@ struct EvaluateDrawText: AsyncParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift eval-draw-text-script '"#" + (FRAME.index + 1) + " / " + MATCH.duration' --record-spec _PokemonUniteMatches/match-01/record-spec.json --index 0 --inmatch 45.5
+      unite-analysis swift eval-draw-text-script '"#" + (FRAME.index + 1) + " / " + MATCH.duration' --record-spec _PokemonUniteMatches/match-01/record-spec.json --index 0 --inmatch 45.5
 
       INPUT. Pass the expression as the script argument, or pass - to read it from stdin. --record-spec is required. Run from the .ldtxrecord root; this caller responsibility is not checked separately.
 

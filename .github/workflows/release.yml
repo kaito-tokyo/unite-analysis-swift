@@ -36,11 +36,19 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      - name: Check if the source version matches tag version
-        shell: bash --noprofile --norc -euo pipefail {0}
+      - name: Set up APM
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          apm-version: 0.27.0
+          setup-only: true
+
+      - name: Check if the APM package version matches tag version
+        shell: pwsh
         run: |
-          grep -Fqx -- "version: ${GITHUB_REF_NAME#v}" apm.yml
-          grep -Fqx -- "    version: \"${GITHUB_REF_NAME#v}\"," Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift
+          Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
+
+          apm pack --format plugin --output "$env:RUNNER_TEMP/apm-version-check" --offline --force
+          if (-not (Test-Path -LiteralPath "$env:RUNNER_TEMP/apm-version-check/unite-analysis-swift-$($env:GITHUB_REF_NAME.Substring(1))/plugin.json" -PathType Leaf)) { throw 'APM package version does not match tag version.' }
 
       - name: Check if the release commit belongs to main
         shell: pwsh
@@ -61,13 +69,12 @@ jobs:
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
 
-          $runsUrl = "repos/$env:GITHUB_REPOSITORY/actions/runs?branch=main&event=push&head_sha=$env:GITHUB_SHA&per_page=100"
-          $runs = gh api $runsUrl | ConvertFrom-Json
-          if ($runs.workflow_runs.Count -eq 0) {
+          $runs = @(gh run list --branch main --commit $env:GITHUB_SHA --event push --limit 100 --json conclusion,name | ConvertFrom-Json)
+          if ($runs.Count -eq 0) {
               throw "No main push workflow runs were found for release commit $env:GITHUB_SHA."
           }
 
-          $unsuccessfulRuns = @($runs.workflow_runs | Where-Object conclusion -NE 'success')
+          $unsuccessfulRuns = @($runs | Where-Object conclusion -NE 'success')
           if ($unsuccessfulRuns.Count -ne 0) {
               $names = $unsuccessfulRuns.name -join ', '
               throw "Main push workflow runs are not all successful: $names."
@@ -80,9 +87,8 @@ jobs:
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
 
-          $runsUrl = "repos/$env:GITHUB_REPOSITORY/actions/workflows/check.yml/runs?branch=main&event=push&head_sha=$env:GITHUB_SHA&status=success&per_page=1"
-          $runs = gh api $runsUrl | ConvertFrom-Json
-          if ($runs.workflow_runs.Count -ne 1) {
+          $runId = gh run list --workflow check.yml --branch main --commit $env:GITHUB_SHA --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          if ([string]::IsNullOrWhiteSpace($runId)) {
               throw "Successful Check CI run was not found for release commit $env:GITHUB_SHA."
           }
 
@@ -94,12 +100,11 @@ jobs:
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
 
-          $runsUrl = "repos/$env:GITHUB_REPOSITORY/actions/workflows/swift.yml/runs?branch=main&event=push&head_sha=$env:GITHUB_SHA&status=success&per_page=1"
-          $runs = gh api $runsUrl | ConvertFrom-Json
-          if ($runs.workflow_runs.Count -ne 1) {
+          $runId = gh run list --workflow swift.yml --branch main --commit $env:GITHUB_SHA --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          if ([string]::IsNullOrWhiteSpace($runId)) {
               throw "Successful Swift CI run was not found for release commit $env:GITHUB_SHA."
           }
-          "run_id=$($runs.workflow_runs[0].id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "run_id=$runId" -Encoding utf8
 
   sign-release:
     name: Sign and notarize release
@@ -145,22 +150,46 @@ jobs:
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true
 
-          $binaryPath = Join-Path $env:DOWNLOAD_DIRECTORY 'unite-analysis-swift'
-          if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) { throw 'Release executable is missing.' }
           $signerWorkflow = "$env:GITHUB_REPOSITORY/.github/workflows/swift.yml"
-          gh attestation verify $binaryPath `
-              --repo $env:GITHUB_REPOSITORY `
-              --signer-workflow $signerWorkflow `
-              --source-ref refs/heads/main `
-              --source-digest $env:GITHUB_SHA `
-              --signer-digest $env:GITHUB_SHA `
-              --deny-self-hosted-runners
+          $products = @(
+              @{ Name = 'unite-analysis-swift'; Output = 'runtime'; Executable = $true },
+              @{ Name = 'unite-analysis-model-tool'; Output = 'model_tool'; Executable = $true },
+              @{ Name = 'descriptors.pb'; Output = 'descriptors'; Executable = $false }
+          )
+          foreach ($product in $products) {
+              $productPath = Join-Path $env:DOWNLOAD_DIRECTORY $product.Name
+              if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
+                  throw "Release product $($product.Name) is missing."
+              }
+              gh attestation verify $productPath `
+                  --repo $env:GITHUB_REPOSITORY `
+                  --signer-workflow $signerWorkflow `
+                  --source-ref refs/heads/main `
+                  --source-digest $env:GITHUB_SHA `
+                  --signer-digest $env:GITHUB_SHA `
+                  --deny-self-hosted-runners
 
-          chmod +x $binaryPath
-          $unsignedDigest = (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "binary_path=$binaryPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "staging_directory=$env:DOWNLOAD_DIRECTORY" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "unsigned_sha256=$unsignedDigest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              if (-not $product.Executable) {
+                  $digest = (Get-FileHash -LiteralPath $productPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                  Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "$($product.Output)_path=$productPath" -Encoding utf8
+                  Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "$($product.Output)_sha256=$digest" -Encoding utf8
+                  continue
+              }
+
+              chmod +x $productPath
+              if ($product.Name -eq 'unite-analysis-swift') {
+                  $expectedVersion = $env:GITHUB_REF_NAME.Substring(1)
+                  $actualVersion = (& $productPath --version).Trim()
+                  if ($actualVersion -ne $expectedVersion) {
+                      throw "CLI version $actualVersion does not match tag version $expectedVersion."
+                  }
+              }
+
+              $unsignedDigest = (Get-FileHash -LiteralPath $productPath -Algorithm SHA256).Hash.ToLowerInvariant()
+              Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "$($product.Output)_binary_path=$productPath" -Encoding utf8
+              Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "$($product.Output)_unsigned_sha256=$unsignedDigest" -Encoding utf8
+          }
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "staging_directory=$env:DOWNLOAD_DIRECTORY" -Encoding utf8
 
       - name: Set up Apple code signing
         uses: kaito-tokyo/setup-apple-codesigning@b9f7d7c6819fe6f6bb44694b75963918dcbddd27 # v1.0.0
@@ -168,11 +197,12 @@ jobs:
           MACOS_SIGNING_CERT: ${{ env.MACOS_SIGNING_CERT }}
           MACOS_SIGNING_CERT_PASSWORD: ${{ env.MACOS_SIGNING_CERT_PASSWORD }}
 
-      - name: Sign release executable
+      - name: Sign release executables
         id: sign
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          BINARY_PATH: ${{ steps.main-build.outputs.binary_path }}
+          RUNTIME_BINARY_PATH: ${{ steps.main-build.outputs.runtime_binary_path }}
+          MODEL_TOOL_BINARY_PATH: ${{ steps.main-build.outputs.model_tool_binary_path }}
         run: |
           if [[ -z "$MACOS_SIGNING_APPLICATION_IDENTITY" ]]; then
             echo 'MACOS_SIGNING_APPLICATION_IDENTITY is not configured.' >&2
@@ -185,21 +215,24 @@ jobs:
             exit 1
           fi
 
-          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$BINARY_PATH"
-          codesign --verify --strict --verbose=2 "$BINARY_PATH"
-          printf 'signed_sha256=%s\n' "$(shasum -a 256 "$BINARY_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          for binary_path in "$RUNTIME_BINARY_PATH" "$MODEL_TOOL_BINARY_PATH"; do
+            codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$binary_path"
+            codesign --verify --strict --verbose=2 "$binary_path"
+          done
+          printf 'runtime_signed_sha256=%s\n' "$(shasum -a 256 "$RUNTIME_BINARY_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          printf 'model_tool_signed_sha256=%s\n' "$(shasum -a 256 "$MODEL_TOOL_BINARY_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Attest signed unite-analysis-swift
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ steps.main-build.outputs.binary_path }}
+          subject-path: ${{ steps.main-build.outputs.runtime_binary_path }}
           predicate-type: https://kaito.tokyo/attestations/apple-codesign/v1
           predicate: |
             {
               "input": {
                 "name": "unite-analysis-swift",
                 "digest": {
-                  "sha256": "${{ steps.main-build.outputs.unsigned_sha256 }}"
+                  "sha256": "${{ steps.main-build.outputs.runtime_unsigned_sha256 }}"
                 },
                 "repository": "${{ github.repository }}",
                 "workflow": "${{ github.repository }}/.github/workflows/swift.yml",
@@ -212,7 +245,30 @@ jobs:
               }
             }
 
-      - name: Package signed executable
+      - name: Attest signed unite-analysis-model-tool
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.main-build.outputs.model_tool_binary_path }}
+          predicate-type: https://kaito.tokyo/attestations/apple-codesign/v1
+          predicate: |
+            {
+              "input": {
+                "name": "unite-analysis-model-tool",
+                "digest": {
+                  "sha256": "${{ steps.main-build.outputs.model_tool_unsigned_sha256 }}"
+                },
+                "repository": "${{ github.repository }}",
+                "workflow": "${{ github.repository }}/.github/workflows/swift.yml",
+                "run_id": "${{ needs.validate-release.outputs.swift_run_id }}",
+                "source_commit": "${{ github.sha }}"
+              },
+              "operation": {
+                "name": "apple-codesign",
+                "identity": ${{ toJSON(vars.MACOS_SIGNING_APPLICATION_IDENTITY) }}
+              }
+            }
+
+      - name: Package release products
         id: package
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
@@ -223,8 +279,12 @@ jobs:
           staging_directory="$RUNNER_TEMP/$artifact_name"
           archive_path="$RUNNER_TEMP/$artifact_name.zip"
 
-          ditto "$SOURCE_DIRECTORY" "$staging_directory"
-          ditto -c -k --keepParent "$staging_directory" "$archive_path"
+          ditto --norsrc "$SOURCE_DIRECTORY" "$staging_directory"
+          ditto -c -k --norsrc --zlibCompressionLevel 9 "$staging_directory" "$archive_path"
+          if zipinfo -1 "$archive_path" | grep -Eq '(^|/)(__MACOSX(/|$)|\._)'; then
+            echo 'Release archive contains AppleDouble metadata.' >&2
+            exit 1
+          fi
           printf 'archive_name=%s.zip\n' "$artifact_name" >> "$GITHUB_OUTPUT"
           printf 'archive_path=%s\n' "$archive_path" >> "$GITHUB_OUTPUT"
 
@@ -252,12 +312,19 @@ jobs:
           predicate: |
             {
               "input": {
-                "name": "unite-analysis-swift",
+                "name": "unite-analysis-swift release products",
                 "digest": {
-                  "sha256": "${{ steps.sign.outputs.signed_sha256 }}"
+                  "unite-analysis-swift.sha256": "${{ steps.sign.outputs.runtime_signed_sha256 }}",
+                  "unite-analysis-model-tool.sha256": "${{ steps.sign.outputs.model_tool_signed_sha256 }}",
+                  "descriptors.pb.sha256": "${{ steps.main-build.outputs.descriptors_sha256 }}"
                 },
-                "attestation": {
-                  "predicate_type": "https://kaito.tokyo/attestations/apple-codesign/v1"
+                "attestations": {
+                  "executables": {
+                    "predicate_type": "https://kaito.tokyo/attestations/apple-codesign/v1"
+                  },
+                  "descriptors.pb": {
+                    "predicate_type": "https://slsa.dev/provenance/v1"
+                  }
                 }
               },
               "operations": [
@@ -326,15 +393,9 @@ jobs:
           ARCHIVE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.archive_name }}
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
-          tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")"
-          tag_type="$(jq -r '.object.type' <<< "$tag_object")"
-          tag_sha="$(jq -r '.object.sha' <<< "$tag_object")"
-          while [[ "$tag_type" == 'tag' ]]; do
-            tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha")"
-            tag_type="$(jq -r '.object.type' <<< "$tag_object")"
-            tag_sha="$(jq -r '.object.sha' <<< "$tag_object")"
-          done
-          if [[ "$tag_type" != 'commit' || "$tag_sha" != "$GITHUB_SHA" ]]; then
+          git fetch --force --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-verification/tag"
+          tag_sha="$(git rev-parse 'refs/release-verification/tag^{commit}')"
+          if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
             echo "Release tag $GITHUB_REF_NAME no longer points to $GITHUB_SHA." >&2
             exit 1
           fi

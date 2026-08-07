@@ -1,0 +1,108 @@
+#!/bin/dash
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+set -eu
+
+repository_url='https://github.com/kaito-tokyo/unite-analysis-swift'
+latest_version_url='https://kaito-tokyo.github.io/unite-analysis-swift/metadata/latest-version.txt'
+wrapper_url='https://raw.githubusercontent.com/kaito-tokyo/unite-analysis-swift/main/bin/unite-analysis'
+application_support_directory="$HOME/Library/Application Support/tokyo.kaito.unite-analysis-swift"
+
+case "${1-}" in
+  swift)
+    shift
+    executable="$application_support_directory/unite-analysis-swift"
+    if [ ! -x "$executable" ]; then
+      printf "unite-analysis: unite-analysis-swift is not installed. Run 'unite-analysis download'.\n" >&2
+      exit 69
+    fi
+    exec "$executable" "$@"
+    ;;
+  model-tool)
+    shift
+    executable="$application_support_directory/unite-analysis-model-tool"
+    if [ ! -x "$executable" ]; then
+      printf "unite-analysis: unite-analysis-model-tool is not installed. Run 'unite-analysis download'.\n" >&2
+      exit 69
+    fi
+    exec "$executable" "$@"
+    ;;
+  download)
+    shift
+    if [ "$#" -ne 0 ]; then
+      printf 'Usage: unite-analysis download\n' >&2
+      exit 64
+    fi
+
+    architecture=$(uname -m)
+    if [ "$architecture" = x86_64 ] && [ "$(/usr/sbin/sysctl -in hw.optional.arm64 2>/dev/null || printf 0)" = 1 ]; then
+      architecture=arm64
+    fi
+    if [ "$architecture" != arm64 ]; then
+      printf 'unite-analysis: release downloads support Apple Silicon only.\n' >&2
+      exit 69
+    fi
+    download_directory=$(mktemp -d "${TMPDIR:-/tmp}/unite-analysis.XXXXXX")
+    staging_directory=''
+    backup_directory=''
+    trap '
+      if [ -n "$backup_directory" ] && [ -d "$backup_directory" ] && [ ! -e "$application_support_directory" ]; then
+        mv "$backup_directory" "$application_support_directory"
+      fi
+      [ -z "$staging_directory" ] || rm -rf -- "$staging_directory"
+      [ -z "$backup_directory" ] || rm -rf -- "$backup_directory"
+      rm -rf -- "$download_directory"
+    ' 0 HUP INT TERM
+
+    latest_version=$(curl -fsSL "$latest_version_url")
+    release_tag="v$latest_version"
+    archive_name="unite-analysis-swift-$release_tag-macos-$architecture.zip"
+    archive_path="$download_directory/$archive_name"
+    curl -fsSL \
+      -o "$archive_path" \
+      "$repository_url/releases/download/$release_tag/$archive_name"
+
+    extraction_directory="$download_directory/extracted"
+    ditto -x -k "$archive_path" "$extraction_directory"
+    release_directory="$extraction_directory/${archive_name%.zip}"
+    if [ ! -d "$release_directory" ]; then
+      release_directory=$extraction_directory
+    fi
+
+    application_support_parent=${application_support_directory%/*}
+    install -d "$application_support_parent"
+    staging_directory=$(mktemp -d "$application_support_parent/.unite-analysis.XXXXXX")
+    if [ -d "$application_support_directory" ]; then
+      ditto --norsrc "$application_support_directory" "$staging_directory"
+    fi
+    ditto --norsrc "$release_directory" "$staging_directory"
+
+    if [ -d "$application_support_directory" ]; then
+      backup_directory=$(mktemp -d "$application_support_parent/.unite-analysis-backup.XXXXXX")
+      rmdir "$backup_directory"
+      mv "$application_support_directory" "$backup_directory"
+    fi
+    mv "$staging_directory" "$application_support_directory"
+    staging_directory=''
+    [ -z "$backup_directory" ] || rm -rf -- "$backup_directory"
+    backup_directory=''
+    ;;
+  wrapper-update)
+    shift
+    if [ "$#" -ne 0 ]; then
+      printf 'Usage: unite-analysis wrapper-update\n' >&2
+      exit 64
+    fi
+
+    printf '%s\n' \
+      "install -d \"\$HOME/.local/bin\"" \
+      "curl -fsSL $wrapper_url -o \"\$HOME/.local/bin/unite-analysis\"" \
+      "chmod +x \"\$HOME/.local/bin/unite-analysis\""
+    ;;
+  *)
+    printf 'Usage: unite-analysis {swift|model-tool} <command> [arguments...]\n       unite-analysis {download|wrapper-update}\n' >&2
+    exit 64
+    ;;
+esac

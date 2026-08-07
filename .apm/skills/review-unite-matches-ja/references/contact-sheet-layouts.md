@@ -12,7 +12,7 @@ SPDX-License-Identifier: Apache-2.0
 mkdir -p _PokemonUniteAnalysis/matches/match-01
 cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
-~/.local/bin/unite-analysis-swift contact-sheet \
+~/.local/bin/unite-analysis swift contact-sheet \
   --record-spec _PokemonUniteMatches/match-01/record-spec.json \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ```

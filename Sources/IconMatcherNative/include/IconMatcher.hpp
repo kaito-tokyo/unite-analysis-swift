@@ -33,6 +33,31 @@ class IconMatchResults final {
   friend class IconMatcher;
 };
 
+class IconDescriptors final {
+ public:
+  IconDescriptors(
+      const std::uint8_t *bytes,
+      std::size_t byteCount,
+      std::uint32_t width,
+      std::uint32_t height,
+      std::size_t bytesPerRow,
+      std::uint32_t imageHeight,
+      std::uint32_t descriptorSize,
+      float threshold,
+      float paddingFraction);
+
+  [[nodiscard]] bool isValid() const noexcept;
+  [[nodiscard]] std::string errorMessage() const;
+  [[nodiscard]] std::uint32_t rows() const noexcept;
+  [[nodiscard]] std::uint32_t columns() const noexcept;
+  [[nodiscard]] std::size_t byteCount() const noexcept;
+  [[nodiscard]] std::uint8_t byte(std::size_t index) const noexcept;
+
+ private:
+  class Implementation;
+  std::shared_ptr<Implementation> implementation_;
+};
+
 class IconMatcher final {
  public:
   explicit IconMatcher(const std::string &path);
