@@ -53,3 +53,10 @@ import Testing
     try validateDescriptorDatabaseByteCount(64 * 1024 * 1024 + 1)
   }
 }
+
+@Test func descriptorEntryHonorsLoaderRowLimit() throws {
+  try validateDescriptorEntryRows(1_000_000)
+  #expect(throws: ValidationError.self) {
+    try validateDescriptorEntryRows(1_000_001)
+  }
+}

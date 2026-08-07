@@ -166,6 +166,12 @@ func validateDescriptorDatabaseByteCount(_ count: Int) throws {
   }
 }
 
+func validateDescriptorEntryRows(_ rows: UInt32) throws {
+  guard rows <= 1_000_000 else {
+    throw ValidationError("Descriptor entry exceeds the 1000000-row loader limit")
+  }
+}
+
 struct BuildDescriptorDatabase: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "build",
@@ -239,6 +245,7 @@ struct BuildDescriptorDatabase: ParsableCommand {
       guard descriptors.isValid() else {
         throw ValidationError("\(item.name): \(modelString(from: descriptors.errorMessage()))")
       }
+      try validateDescriptorEntryRows(descriptors.rows())
       let raw = Data((0..<descriptors.byteCount()).map { descriptors.byte($0) })
       let entry = [
         Protobuf.string(1, item.name),
