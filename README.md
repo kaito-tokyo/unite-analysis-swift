@@ -21,7 +21,7 @@ install -d "$HOME/.local/bin"
 curl -fsSL https://raw.githubusercontent.com/kaito-tokyo/unite-analysis-swift/main/bin/unite-analysis \
   -o "$HOME/.local/bin/unite-analysis"
 chmod +x "$HOME/.local/bin/unite-analysis"
-unite-analysis download
+"$HOME/.local/bin/unite-analysis" download
 
 brew install apm
 apm install -g --target codex kaito-tokyo/unite-analysis-swift --skill review-unite-matches-ja

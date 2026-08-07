@@ -492,10 +492,13 @@ IconDescriptors::IconDescriptors(
       padding,
       cv::BORDER_CONSTANT,
       cv::Scalar(0, 0, 0, 0));
-  const int scaledWidth = std::max(
-      1,
-      static_cast<int>(
-          static_cast<std::uint64_t>(padded.cols) * imageHeight / padded.rows));
+  const auto scaledWidthValue =
+      static_cast<std::uint64_t>(padded.cols) * imageHeight / padded.rows;
+  if (scaledWidthValue > 4096) {
+    implementation_->error = "resized descriptor image exceeds 4096 pixels in width";
+    return;
+  }
+  const int scaledWidth = std::max(1, static_cast<int>(scaledWidthValue));
   cv::Mat scaled;
   cv::resize(
       padded,

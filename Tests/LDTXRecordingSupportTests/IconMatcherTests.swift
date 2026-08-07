@@ -59,6 +59,20 @@ import Testing
   #expect(!descriptors.isValid())
 }
 
+@Test func descriptorSourceRejectsExcessiveResizeWidth() {
+  let width = 10_000
+  let bgra = [UInt8](repeating: 255, count: width * 4)
+  let descriptors = bgra.withUnsafeBufferPointer { buffer in
+    unite_analysis.IconDescriptors(
+      buffer.baseAddress, buffer.count, UInt32(width), 1, width * 4,
+      256, 128, 0.0001, 0)
+  }
+  #expect(!descriptors.isValid())
+  #expect(
+    descriptors.errorMessage()
+      == std.string("resized descriptor image exceeds 4096 pixels in width"))
+}
+
 @Test func missingDescriptorDatabaseIsRejected() {
   let matcher = unite_analysis.IconMatcher(std.string("/definitely-missing/descriptors.pb"))
   #expect(!matcher.isValid())
