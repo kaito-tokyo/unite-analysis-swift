@@ -27,3 +27,12 @@ SPDX-License-Identifier: Apache-2.0
 - Run `swift test` after changing Swift implementation or tests.
 - Run `reuse --no-multiprocessing lint` after changing tracked files.
 - Report each verification command and its result separately.
+
+## Release artifact zero trust
+
+- Apply this policy only to products that can become GitHub Release assets. It does not apply to source code, runner environments, caches, test artifacts, or other outputs that cannot enter the release path.
+- Attest every release-bound product in the job that produces it, before transferring it to another job or workflow.
+- After receiving a release-bound product from another job or workflow, verify its attestation before reading, transforming, signing, packaging, notarizing, or publishing it.
+- Attest transformed release products separately. An attestation for an input does not implicitly attest a signed, packaged, notarized, or otherwise transformed output.
+- Preserve enough provenance in attestations to trace a release product to its producing workflow, source commit, and relevant input product.
+- Rely on the provenance implications recorded by `actions/attest` for source and runner authenticity. Do not add separate source or environment verification solely for this policy.
