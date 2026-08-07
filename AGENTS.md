@@ -35,6 +35,12 @@ SPDX-License-Identifier: Apache-2.0
 - In the same pull request, advance both the APM package version in `apm.yml` and the Swift CLI version to the next release version.
 - Do not advance `docs/metadata/latest-version.txt` before the corresponding GitHub Release is available for download.
 
+## Shell scripts
+
+- Use `/bin/dash` for `bin/unite-analysis` and other POSIX shell entry points intended for the supported macOS environment.
+- Do not replace the Dash shebang with `/bin/sh`; on macOS `/bin/sh` starts Bash, which introduces unwanted compatibility-mode behavior and additional startup overhead.
+- Keep these scripts compatible with Dash and validate them with `dash -n` and ShellCheck's Dash dialect.
+
 ## Release artifact zero trust
 
 - Always run code-signing verification outside the sandbox. Do not treat
