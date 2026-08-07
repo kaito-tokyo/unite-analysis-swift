@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json",
-  "title": "Pokémon UNITE recognized loadout",
+  "title": "ポケモンユナイト recognized loadout",
   "type": "object",
   "required": [
     "$schema",

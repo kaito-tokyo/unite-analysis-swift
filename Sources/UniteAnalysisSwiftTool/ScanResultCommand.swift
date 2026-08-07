@@ -20,7 +20,7 @@ struct ScanResultCommand: ParsableCommand {
 
   static let configuration = CommandConfiguration(
     commandName: "scan-result",
-    abstract: "Scan Pokémon UNITE result and battle-data screens into JSON.",
+    abstract: "Scan ポケモンユナイト result and battle-data screens into JSON.",
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because Apple Vision text recognition is unavailable in the sandboxed execution environment.
 

@@ -6,7 +6,7 @@
 mkdir -p _PokemonUniteAnalysis/matches/match-01
 cp <skill-root>/references/overview-contact-sheet-jobs.jsonl \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
-~/.local/bin/unite-analysis swift contact-sheet \
+unite-analysis-swift contact-sheet \
   --record-spec _PokemonUniteMatches/match-01/record-spec.json \
   _PokemonUniteAnalysis/matches/match-01/overview-contact-sheet-jobs.jsonl
 ```

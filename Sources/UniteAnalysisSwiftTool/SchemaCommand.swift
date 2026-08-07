@@ -138,7 +138,7 @@ package enum EmbeddedSchemas {
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json",
-      "title": "Pokémon UNITE recognized loadout",
+      "title": "ポケモンユナイト recognized loadout",
       "type": "object",
       "required": ["$schema", "format", "match_format", "video", "time_basis", "recognizer", "allies", "enemies"],
       "properties": {
@@ -219,7 +219,7 @@ package enum EmbeddedSchemas {
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
-      "title": "Pokémon UNITE match publication state",
+      "title": "ポケモンユナイト match publication state",
       "type": "object",
       "required": [
         "$schema",

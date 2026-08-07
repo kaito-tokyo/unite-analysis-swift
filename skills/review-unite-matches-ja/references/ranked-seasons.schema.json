@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Pokémon UNITE ranked season registry",
+  "title": "ポケモンユナイト ranked season registry",
   "type": "object",
   "additionalProperties": false,
   "required": [

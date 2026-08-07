@@ -7,9 +7,11 @@ let package = Package(
   products: [
     .executable(name: "unite-analysis-swift", targets: ["UniteAnalysisSwiftTool"]),
     .executable(name: "unite-analysis-model-tool", targets: ["UniteAnalysisModelTool"]),
+    .executable(name: "unite-analysis-swift-mcp", targets: ["UniteAnalysisMCPServer"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2")
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
+    .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.12.1"),
   ],
   targets: [
     .target(
@@ -209,6 +211,12 @@ let package = Package(
       ],
       path: "Sources/UniteAnalysisModelExecutable",
       swiftSettings: [.interoperabilityMode(.Cxx)]),
+    .executableTarget(
+      name: "UniteAnalysisMCPServer",
+      dependencies: [
+        .product(name: "MCP", package: "swift-sdk")
+      ],
+      path: "Sources/UniteAnalysisMCPServer"),
     .testTarget(
       name: "LDTXRecordingSupportTests",
       dependencies: [

@@ -4,22 +4,21 @@
 
 ## 実行契約
 
-このスキルの標準分析CLIは、配置済みの次のコマンドだけとする。
+このスキルの標準分析手段は、プラグイン同梱の`run_unite_analysis` MCPツールだけとする。ツールの`arguments`へCLI引数を文字列配列として渡し、録画ルートは`currentDirectory`へ渡す。JSONLを`-`から読む場合は`standardInput`へ内容を渡す。
 
 ```text
-~/.local/bin/unite-analysis swift
+run_unite_analysis(arguments: ["--help"])
 ```
 
-実行前に次を確認する。
+実行前に、MCPツールで次に相当する引数を実行して機能を確認する。
 
-```sh
-test -x ~/.local/bin/unite-analysis
-~/.local/bin/unite-analysis swift --help
+```text
+arguments: ["--help"]
 ```
 
-PATH上の同名コマンドではなく、この絶対パスを使う。コマンドがない、実行できない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
+以下のコード例にある`unite-analysis-swift`は、MCPツールへ渡す`arguments`を読みやすく示すCLI表記であり、シェルから実行しない。MCPツールがない、実行できない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
 
-APMはスキルを配布するものであり、Swiftバイナリをインストールするものではない。`apm_modules`、APMキャッシュ、Swiftソースのチェックアウト、`.build`内の成果物へ依存しない。
+プラグインにはスキルと署名済みappバンドルが同じバージョンで含まれる。Swiftソースのチェックアウト、`.build`内の成果物、プラグイン外の実行ファイルへ依存しない。
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
@@ -45,8 +44,8 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 オプションとJSON契約の正本は、インストール済みコマンドのヘルプとバイナリ内蔵schemaとする。
 
 ```sh
-~/.local/bin/unite-analysis swift help <subcommand>
-~/.local/bin/unite-analysis swift schema <schema-basename>
+unite-analysis-swift help <subcommand>
+unite-analysis-swift schema <schema-basename>
 ```
 
 | サブコマンド | 用途 |
@@ -89,7 +88,7 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 `.ldtxrecord`ルートから、`--start`と`--end`を試合開始からの秒数で指定する。`--start`の既定値は`0`、`--end`を省略すると試合終了までとなる。出力は`_PokemonUniteAnalysis/matches/match-<NN>/`以下の`.mp4`へ書く。
 
 ```sh
-~/.local/bin/unite-analysis-swift extract-clip \
+unite-analysis-swift extract-clip \
   --record-spec _PokemonUniteMatches/match-01/record-spec.json \
   --start 420 \
   --end 510 \
@@ -198,7 +197,7 @@ OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`sourc
 
 1. ユーザーが指定した録画と対象試合を確認する。
 2. `.finalized`、`Info.plist`、`record-spec.json`を確認し、specがなければ根拠を集めて候補を復元・記録する。
-3. `~/.local/bin/unite-analysis swift --help`でCLIを確認する。
+3. `run_unite_analysis`へ`["--help"]`を渡してCLIを確認する。
 4. 既存の`_PokemonUniteAnalysis`成果物を調べ、現行入力と一致するものを再利用する。
 5. 事前イベント点候補生成の実行契約を実行し、候補または未取得理由を保存する。
 6. `batch-frame`または`contact-sheet`で、候補生成とは別に試合全体の概要を作る。

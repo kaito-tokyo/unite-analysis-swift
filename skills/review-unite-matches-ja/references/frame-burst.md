@@ -10,7 +10,7 @@
 ```
 
 ```sh
-~/.local/bin/unite-analysis swift frame-burst \
+unite-analysis-swift frame-burst \
   --record-spec _PokemonUniteMatches/match-01/record-spec.json \
   _PokemonUniteAnalysis/matches/match-01/frame-burst-jobs.jsonl
 ```

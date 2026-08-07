@@ -98,7 +98,7 @@ public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
 }
 
 public enum AudioPeakDetector {
-  // Pokémon UNITE-specific fixed detector. These are deliberately not CLI settings.
+  // ポケモンユナイト-specific fixed detector. These are deliberately not CLI settings.
   package static let blockDuration = 0.010
   package static let fastBlockCount = 5
   package static let slowBlockCount = 20

@@ -61,7 +61,12 @@ private struct DecodedLoadoutFrame {
 }
 
 private func defaultDescriptorDatabaseURL() -> URL {
-  UserConfigurationStore.defaultFileURL.deletingLastPathComponent()
+  if let path = ProcessInfo.processInfo.environment["UNITE_ANALYSIS_DESCRIPTOR_DATABASE"],
+    !path.isEmpty
+  {
+    return URL(fileURLWithPath: path)
+  }
+  return UserConfigurationStore.defaultFileURL.deletingLastPathComponent()
     .appendingPathComponent("descriptors.pb")
 }
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "unite-analysis-swift": {
+      "command": "./runtime/unite-analysis-swift.app/Contents/MacOS/unite-analysis-swift-mcp",
+      "cwd": "."
+    }
+  }
+}
