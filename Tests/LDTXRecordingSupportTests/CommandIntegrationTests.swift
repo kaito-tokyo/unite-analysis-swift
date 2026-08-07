@@ -163,6 +163,84 @@ private func runCommand(_ arguments: [String]) throws -> CommandResult {
   #expect(!result.stderr.contains("missing.json"))
 }
 
+@Test func extractClipRejectsSourceVideoAsOutput() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let sourceVideoURL = directory.appendingPathComponent("main.fragmented.mp4")
+  FileManager.default.createFile(atPath: sourceVideoURL.path, contents: Data())
+
+  #expect(throws: (any Error).self) {
+    try validateClipOutput(sourceVideoURL, isDistinctFrom: sourceVideoURL)
+  }
+
+  let symbolicLinkURL = directory.appendingPathComponent("source-link.mp4")
+  try FileManager.default.createSymbolicLink(
+    at: symbolicLinkURL, withDestinationURL: sourceVideoURL)
+  #expect(throws: (any Error).self) {
+    try validateClipOutput(symbolicLinkURL, isDistinctFrom: sourceVideoURL)
+  }
+}
+
+@Test func extractClipResultIsOneMachineReadableJSONObject() throws {
+  let result = ExtractedClipResult(
+    output: "/tmp/clip.mp4",
+    requestedStart: 420,
+    requestedEnd: 510,
+    requestedDuration: 90,
+    actualDuration: 90.034,
+    durationDifference: 0.034,
+    firstVideoPTS: 0,
+    firstVideoSampleIsSync: true,
+    precedingSourceVideoSyncPTS: 480,
+    startGOPAlignmentOffset: 1.25)
+  let object = try #require(
+    JSONSerialization.jsonObject(with: encodeExtractedClipResult(result)) as? [String: Any])
+  #expect(object["output"] as? String == "/tmp/clip.mp4")
+  #expect(object["requestedStart"] as? Double == 420)
+  #expect(object["requestedEnd"] as? Double == 510)
+  #expect(object["requestedDuration"] as? Double == 90)
+  #expect(object["actualDuration"] as? Double == 90.034)
+  #expect(object["durationDifference"] as? Double == 0.034)
+  #expect(object["firstVideoPTS"] as? Double == 0)
+  #expect(object["firstVideoSampleIsSync"] as? Bool == true)
+  #expect(object["precedingSourceVideoSyncPTS"] as? Double == 480)
+  #expect(object["startGOPAlignmentOffset"] as? Double == 1.25)
+}
+
+@Test func extractClipFinalizationDoesNotReplaceNoForceCollision() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let temporaryURL = directory.appendingPathComponent("temporary.mp4")
+  let outputURL = directory.appendingPathComponent("output.mp4")
+  try Data("new".utf8).write(to: temporaryURL)
+  try Data("existing".utf8).write(to: outputURL)
+
+  #expect(throws: (any Error).self) {
+    try finalizeExtractedClip(at: temporaryURL, outputURL: outputURL, force: false)
+  }
+  #expect(try Data(contentsOf: outputURL) == Data("existing".utf8))
+  #expect(try Data(contentsOf: temporaryURL) == Data("new".utf8))
+}
+
+@Test func extractClipFinalizationPublishesNoForceOutput() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let temporaryURL = directory.appendingPathComponent("temporary.mp4")
+  let outputURL = directory.appendingPathComponent("output.mp4")
+  try Data("new".utf8).write(to: temporaryURL)
+
+  try finalizeExtractedClip(at: temporaryURL, outputURL: outputURL, force: false)
+
+  #expect(try Data(contentsOf: outputURL) == Data("new".utf8))
+  #expect(!FileManager.default.fileExists(atPath: temporaryURL.path))
+}
+
 @Test func commandValidationFailsBeforeOpeningInputs() throws {
   let result = try runCommand([
     "detect-chroma-events",

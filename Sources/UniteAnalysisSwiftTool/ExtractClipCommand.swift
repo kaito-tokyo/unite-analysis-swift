@@ -27,7 +27,7 @@ struct ExtractClip: AsyncParsableCommand {
       keyframe, so a player may begin decoding from an adjacent sync sample. Use re-encoding when a
       frame-exact independently decodable start is required.
 
-      OUTPUT. The output must have the .mp4 extension. An existing output is an error unless --force is supplied. Export first writes a temporary sibling and only replaces the destination after a successful export. The generated absolute output path is printed to stdout.
+      OUTPUT. The output must have the .mp4 extension. An existing output is an error unless --force is supplied. Export first writes a temporary sibling and only replaces the destination after a successful export. stdout contains one JSON object with the output path, requested interval, actual duration, duration difference, first output-video sample PTS and sync status, preceding source-video sync PTS, and the requested start's GOP alignment offset.
 
       DIAGNOSTICS. The resolved record-spec.json and main video, unfinished-recording warnings, and requested source PTS interval are written to stderr.
       """.reflowedHelp()
@@ -91,6 +91,7 @@ func extractClip(
   }
   let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
   RecordVisionInputLogger.sourceVideo(recording.videoURL)
+  try validateClipOutput(outputURL, isDistinctFrom: recording.videoURL)
   let asset = AVURLAsset(url: recording.videoURL)
   let assetDuration = try await asset.load(.duration)
   let matchStart = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
@@ -101,6 +102,7 @@ func extractClip(
       "Requested clip is outside source-video range [0.000, \(canonicalSeconds(assetDuration.seconds))]s"
     )
   }
+  let gopAlignment = try await inspectSourceGOPAlignment(asset: asset, requestedStart: clipStart)
   guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough)
   else {
     throw UniteAnalysisSwiftToolError.message("Source media does not support passthrough export")
@@ -120,10 +122,150 @@ func extractClip(
       "unite-analysis-swift: clip requested PTS [\(canonicalSeconds(clipStart.seconds)), \(canonicalSeconds(clipEnd.seconds)))s\n"
         .utf8))
   try await session.export(to: temporaryURL, as: .mp4)
-  if FileManager.default.fileExists(atPath: outputURL.path) {
-    _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
-  } else {
-    try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
+  let result = try await inspectExtractedClip(
+    at: temporaryURL, outputURL: outputURL, requestedStart: start, requestedEnd: end,
+    gopAlignment: gopAlignment)
+  try finalizeExtractedClip(at: temporaryURL, outputURL: outputURL, force: force)
+  FileHandle.standardOutput.write(try encodeExtractedClipResult(result) + Data("\n".utf8))
+}
+
+func finalizeExtractedClip(at temporaryURL: URL, outputURL: URL, force: Bool) throws {
+  if force {
+    if FileManager.default.fileExists(atPath: outputURL.path) {
+      _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
+    } else {
+      try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
+    }
+    return
   }
-  print(outputURL.path)
+
+  do {
+    try FileManager.default.linkItem(at: temporaryURL, to: outputURL)
+    try FileManager.default.removeItem(at: temporaryURL)
+  } catch CocoaError.fileWriteFileExists {
+    throw UniteAnalysisSwiftToolError.message(
+      "Output collision: \(outputURL.path). Pass --force to replace.")
+  }
+}
+
+struct ExtractedClipResult: Encodable {
+  let output: String
+  let requestedStart: Double
+  let requestedEnd: Double
+  let requestedDuration: Double
+  let actualDuration: Double
+  let durationDifference: Double
+  let firstVideoPTS: Double
+  let firstVideoSampleIsSync: Bool
+  let precedingSourceVideoSyncPTS: Double?
+  let startGOPAlignmentOffset: Double?
+}
+
+func inspectExtractedClip(
+  at clipURL: URL, outputURL: URL, requestedStart: Double, requestedEnd: Double,
+  gopAlignment: SourceGOPAlignment
+) async throws -> ExtractedClipResult {
+  let asset = AVURLAsset(url: clipURL)
+  let duration = try await asset.load(.duration).seconds
+  guard duration.isFinite, duration > 0 else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Could not determine a positive extracted-clip duration: \(clipURL.path)")
+  }
+  guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
+    throw UniteAnalysisSwiftToolError.message("Extracted clip has no video track: \(clipURL.path)")
+  }
+  let reader = try AVAssetReader(asset: asset)
+  let output = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: nil)
+  output.alwaysCopiesSampleData = false
+  guard reader.canAdd(output) else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Could not inspect extracted-clip video samples: \(clipURL.path)")
+  }
+  reader.add(output)
+  guard reader.startReading(), let sample = output.copyNextSampleBuffer() else {
+    throw reader.error
+      ?? UniteAnalysisSwiftToolError.message(
+        "Extracted clip contains no readable video samples: \(clipURL.path)")
+  }
+  let firstPTS = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+  guard firstPTS.isFinite else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Extracted clip has no finite first video PTS: \(clipURL.path)")
+  }
+  let requestedDuration = requestedEnd - requestedStart
+  return ExtractedClipResult(
+    output: outputURL.path,
+    requestedStart: requestedStart,
+    requestedEnd: requestedEnd,
+    requestedDuration: requestedDuration,
+    actualDuration: duration,
+    durationDifference: duration - requestedDuration,
+    firstVideoPTS: firstPTS,
+    firstVideoSampleIsSync: videoSampleIsSync(sample),
+    precedingSourceVideoSyncPTS: gopAlignment.precedingSyncPTS,
+    startGOPAlignmentOffset: gopAlignment.offset)
+}
+
+struct SourceGOPAlignment {
+  let precedingSyncPTS: Double?
+  let offset: Double?
+}
+
+func inspectSourceGOPAlignment(asset: AVAsset, requestedStart: CMTime) async throws
+  -> SourceGOPAlignment
+{
+  guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
+    throw UniteAnalysisSwiftToolError.message("Source media has no video track")
+  }
+  let reader = try AVAssetReader(asset: asset)
+  let output = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: nil)
+  output.alwaysCopiesSampleData = false
+  guard reader.canAdd(output) else {
+    throw UniteAnalysisSwiftToolError.message("Could not inspect source-video GOP alignment")
+  }
+  reader.add(output)
+  reader.timeRange = CMTimeRange(
+    start: .zero,
+    end: CMTimeAdd(requestedStart, CMTime(value: 1, timescale: 60_000)))
+  guard reader.startReading() else {
+    throw reader.error
+      ?? UniteAnalysisSwiftToolError.message("Could not read source-video GOP alignment")
+  }
+  var precedingSyncPTS: Double?
+  while let sample = output.copyNextSampleBuffer() {
+    let pts = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+    if pts.isFinite, pts <= requestedStart.seconds, videoSampleIsSync(sample) {
+      precedingSyncPTS = pts
+    }
+  }
+  if reader.status == .failed {
+    throw reader.error
+      ?? UniteAnalysisSwiftToolError.message("Could not read source-video GOP alignment")
+  }
+  let offset = precedingSyncPTS.map { requestedStart.seconds - $0 }
+  return SourceGOPAlignment(precedingSyncPTS: precedingSyncPTS, offset: offset)
+}
+
+func videoSampleIsSync(_ sample: CMSampleBuffer) -> Bool {
+  guard
+    let attachments = CMSampleBufferGetSampleAttachmentsArray(
+      sample, createIfNecessary: false) as? [[CFString: Any]],
+    let first = attachments.first
+  else { return true }
+  return first[kCMSampleAttachmentKey_NotSync] as? Bool != true
+}
+
+func encodeExtractedClipResult(_ result: ExtractedClipResult) throws -> Data {
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+  return try encoder.encode(result)
+}
+
+func validateClipOutput(_ outputURL: URL, isDistinctFrom sourceVideoURL: URL) throws {
+  let resolvedOutputURL = outputURL.standardizedFileURL.resolvingSymlinksInPath()
+  let resolvedSourceVideoURL = sourceVideoURL.standardizedFileURL.resolvingSymlinksInPath()
+  guard resolvedOutputURL != resolvedSourceVideoURL else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Output path must not replace the source video: \(sourceVideoURL.path)")
+  }
 }
