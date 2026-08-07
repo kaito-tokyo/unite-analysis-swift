@@ -10,17 +10,9 @@ path = [
   "Package.resolved",
   "Package.swift",
   "docs/*.json",
+  "docs/metadata/*",
   "Sources/IconMatcherNative/Generated/*.pb.c",
   "Sources/IconMatcherNative/Generated/*.pb.h",
-]
-SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = [
-  ".apm/skills/review-unite-matches-ja/SKILL.md",
-  ".apm/skills/review-unite-matches-ja/references/*.json",
-  ".apm/skills/review-unite-matches-ja/references/*.md",
 ]
 SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
 SPDX-License-Identifier = "Apache-2.0"
