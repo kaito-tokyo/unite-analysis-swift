@@ -162,7 +162,7 @@ private func loadoutInputs(
   )
 }
 
-func validateLegacyLoadoutInputBundle(_ bundleURL: URL) throws {
+package func validateLegacyLoadoutInputBundle(_ bundleURL: URL) throws {
   let infoURL = bundleURL.appendingPathComponent("Info.plist")
   let data = try Data(contentsOf: infoURL)
   guard
@@ -175,7 +175,7 @@ func validateLegacyLoadoutInputBundle(_ bundleURL: URL) throws {
   }
 }
 
-func normalizedGameScreen(
+package func normalizedGameScreen(
   _ image: CGImage,
   component: RecordSpec.VideoComponent?
 ) throws -> CGImage {

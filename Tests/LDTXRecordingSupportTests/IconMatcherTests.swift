@@ -9,7 +9,7 @@ import IconMatcherNative
 import RecordVisionSupport
 import Testing
 
-@testable import UniteAnalysisSwiftTool
+import UniteAnalysisSwiftCommands
 
 @Test func openCV5AkazeIsAvailable() {
   #expect(unite_analysis.isAkazeAvailable())

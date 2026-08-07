@@ -128,7 +128,7 @@ func extractClip(
   print(outputURL.path)
 }
 
-func extractClipVideoURL(in bundleURL: URL) throws -> URL {
+package func extractClipVideoURL(in bundleURL: URL) throws -> URL {
   let infoURL = bundleURL.appendingPathComponent("Info.plist")
   guard let data = try? Data(contentsOf: infoURL),
     let plist = try? PropertyListSerialization.propertyList(from: data, options: 0, format: nil),

@@ -5,7 +5,7 @@
 import Foundation
 import Testing
 
-@testable import UniteAnalysisConfiguration
+import UniteAnalysisConfiguration
 
 @Test func storesAndUnsetsCanonicalObsidianDirectoriesIndependently() throws {
   let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

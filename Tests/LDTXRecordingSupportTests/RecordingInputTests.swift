@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Foundation
+import LDTXRecordingSupport
 import Testing
-
-@testable import LDTXRecordingSupport
 
 private func temporaryDirectory() throws -> URL {
   let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

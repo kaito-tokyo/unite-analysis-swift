@@ -9,18 +9,21 @@ name: Swift CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+  workflow_call:
+    inputs:
+      upload-artifacts:
+        description: Package, attest, and upload release products
+        type: boolean
+        default: false
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-swift-ci
   cancel-in-progress: true
 
 jobs:
-  swift-build-and-test:
-    name: Build and test
+  swift-ci:
     runs-on: macos-26
     timeout-minutes: 20
     permissions:
@@ -34,6 +37,7 @@ jobs:
           printf 'version=%s\n' "$(xcodebuild -version | awk '{print $NF}' | paste -s -d _ -)" | tee -a "$GITHUB_OUTPUT"
 
       - name: Print Swift version
+        shell: bash --noprofile --norc -euo pipefail {0}
         run: swift --version
 
       - name: Checkout
@@ -45,28 +49,28 @@ jobs:
       - name: Cache SwiftPM
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            .build
-            ~/Library/Caches/org.swift.swiftpm
-          key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          path: .build
+          key: release-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
           restore-keys: |
-            swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+            release-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+            release-swiftpm-${{ runner.os }}-${{ runner.arch }}-
             swiftpm-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Build release configuration
+      - name: Build
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: swift build --configuration release
+        run: swift build -c release
 
       - name: Test
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: swift test
+        run: swift test -c release
 
-  release-build:
-    name: Build and attest release
-    if: github.event_name == 'push'
-    needs: swift-build-and-test
+  swift-upload-artifacts:
+    if: inputs.upload-artifacts
+    needs: swift-ci
     runs-on: macos-26
     timeout-minutes: 20
+    env:
+      UNSIGNED_ARCHIVE_NAME: unite-analysis-swift-unsigned-macos-arm64-${{ github.sha }}.tar.gz
     permissions:
       artifact-metadata: write
       attestations: write
@@ -74,6 +78,16 @@ jobs:
       id-token: write
 
     steps:
+      - name: Print Xcode version
+        id: xcode
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          printf 'version=%s\n' "$(xcodebuild -version | awk '{print $NF}' | paste -s -d _ -)" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Print Swift version
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift --version
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,45 +97,37 @@ jobs:
       - name: Cache SwiftPM
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            .build
-            ~/Library/Caches/org.swift.swiftpm
-          key: release-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          path: .build
+          key: release-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
           restore-keys: |
+            release-swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
             release-swiftpm-${{ runner.os }}-${{ runner.arch }}-
             swiftpm-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Build release configuration
+      - name: Build release products
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: swift build --configuration release
+        run: swift build -c release
 
-      - name: Stage release products
+      - name: Package release products
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
-          install -d "$RUNNER_TEMP/release-products"
-          install -m 755 .build/arm64-apple-macosx/release/unite-analysis-swift "$RUNNER_TEMP/release-products/"
-          install -m 755 .build/arm64-apple-macosx/release/unite-analysis-model-tool "$RUNNER_TEMP/release-products/"
-          install -m 644 Models/descriptors.pb "$RUNNER_TEMP/release-products/"
+          bin_path="$(swift build --show-bin-path -c release)"
+          COPYFILE_DISABLE=1 tar -czf "$RUNNER_TEMP/$UNSIGNED_ARCHIVE_NAME" \
+            -C "$bin_path" \
+            unite-analysis-swift \
+            unite-analysis-model-tool \
+            -C "$GITHUB_WORKSPACE/Models" \
+            descriptors.pb
 
-      - name: Attest unite-analysis-swift release build
+      - name: Attest release products
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ runner.temp }}/release-products/unite-analysis-swift
-
-      - name: Attest unite-analysis-model-tool release build
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ runner.temp }}/release-products/unite-analysis-model-tool
-
-      - name: Attest descriptor database
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ runner.temp }}/release-products/descriptors.pb
+          subject-path: ${{ runner.temp }}/${{ env.UNSIGNED_ARCHIVE_NAME }}
 
       - name: Upload release build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-macos-${{ github.sha }}
-          path: ${{ runner.temp }}/release-products
+          path: ${{ runner.temp }}/${{ env.UNSIGNED_ARCHIVE_NAME }}
+          archive: false
           if-no-files-found: error
           retention-days: 30

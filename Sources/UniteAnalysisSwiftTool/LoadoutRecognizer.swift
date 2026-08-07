@@ -7,27 +7,27 @@ import CxxStdlib
 import Foundation
 import IconMatcherNative
 
-struct IconMatch: Codable, Sendable, Equatable {
-  var name: String
-  var score: Float
+package struct IconMatch: Codable, Sendable, Equatable {
+  package var name: String
+  package var score: Float
 }
 
-func swiftString(from value: std.string) -> String {
+package func swiftString(from value: std.string) -> String {
   String(decoding: value.map { UInt8(bitPattern: $0) }, as: UTF8.self)
 }
 
-enum LoadoutRecognitionError: Error, Equatable {
+package enum LoadoutRecognitionError: Error, Equatable {
   case invalidImage
   case invalidCanvas(width: Int, height: Int)
 }
 
-struct BGRImage: Sendable {
-  var width: Int
-  var height: Int
-  var bytesPerRow: Int
-  var bytes: [UInt8]
+package struct BGRImage: Sendable {
+  package var width: Int
+  package var height: Int
+  package var bytesPerRow: Int
+  package var bytes: [UInt8]
 
-  init(width: Int, height: Int, bytesPerRow: Int, bytes: [UInt8]) throws {
+  package init(width: Int, height: Int, bytesPerRow: Int, bytes: [UInt8]) throws {
     guard width > 0, height > 0, bytesPerRow >= width * 3,
       bytes.count >= bytesPerRow * height
     else {
@@ -71,7 +71,7 @@ struct BGRImage: Sendable {
 }
 
 extension unite_analysis.IconMatcher {
-  func matchHeldItem(in image: BGRImage) -> [IconMatch] {
+  package func matchHeldItem(in image: BGRImage) -> [IconMatch] {
     image.bytes.withUnsafeBufferPointer { buffer in
       iconMatches(
         matchHeldBGR(
@@ -125,11 +125,11 @@ struct RecognizedItem: Codable, Sendable, Equatable {
   }
 }
 
-struct DeclaredRoute: Codable, Sendable, Equatable {
-  var name: String?
-  var method = "hsv"
-  var medianHue: Float?
-  var chromaticFraction: Float
+package struct DeclaredRoute: Codable, Sendable, Equatable {
+  package var name: String?
+  package var method = "hsv"
+  package var medianHue: Float?
+  package var chromaticFraction: Float
 }
 
 struct RecognizedAllyLoadout: Codable, Sendable, Equatable {
@@ -151,7 +151,7 @@ struct LoadoutRecognition: Codable, Sendable, Equatable {
   var enemies: [RecognizedEnemyLoadout]
 }
 
-enum LoadoutRecognizer {
+package enum LoadoutRecognizer {
   static func recognizeDraft(
     finalPreparation: CGImage,
     versus: CGImage,
@@ -225,7 +225,7 @@ enum LoadoutRecognizer {
       enemies: [])
   }
 
-  static func classifyRoute(_ image: BGRImage) -> DeclaredRoute {
+  package static func classifyRoute(_ image: BGRImage) -> DeclaredRoute {
     let hues = image.chromaticHues(minimumSaturation: 120, minimumValue: 80)
     let fraction = Float(hues.count) / Float(image.width * image.height)
     guard fraction >= 0.15 else {

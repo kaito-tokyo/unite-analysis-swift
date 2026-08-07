@@ -37,8 +37,8 @@ struct Schema: ParsableCommand {
   }
 }
 
-enum EmbeddedSchemas {
-  static let basenames = [
+package enum EmbeddedSchemas {
+  package static let basenames = [
     "audio-peaks.output.schema.json",
     "batch-frame.schema.json",
     "batch-frame.output.schema.json",
@@ -55,11 +55,11 @@ enum EmbeddedSchemas {
     "scan-result.output.schema.json",
   ]
 
-  static func data(basename: String) -> Data? {
+  package static func data(basename: String) -> Data? {
     schemas[basename].map { Data($0.utf8) }
   }
 
-  static var storedBasenames: [String] { schemas.keys.sorted() }
+  package static var storedBasenames: [String] { schemas.keys.sorted() }
 
   private static let schemas = [
     "frame-burst.schema.json": #"""

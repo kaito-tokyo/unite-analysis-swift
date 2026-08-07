@@ -23,7 +23,7 @@ enum UniteAnalysisSwiftToolError: Error, CustomStringConvertible {
   }
 }
 
-typealias RecordSpec = RecordVisionRecordSpec
+package typealias RecordSpec = RecordVisionRecordSpec
 
 enum Scene {
   case matchRelative(Double)

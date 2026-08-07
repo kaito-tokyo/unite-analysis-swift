@@ -5,7 +5,7 @@
 import Foundation
 import Testing
 
-@testable import UniteAnalysisSwiftTool
+import UniteAnalysisSwiftCommands
 
 let repositoryRoot = URL(fileURLWithPath: #filePath)
   .deletingLastPathComponent()

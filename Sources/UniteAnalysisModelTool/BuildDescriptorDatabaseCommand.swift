@@ -136,7 +136,7 @@ private func modelString(from value: std.string) -> String {
   String(decoding: value.map { UInt8(bitPattern: $0) }, as: UTF8.self)
 }
 
-func resolveDescriptorDatabaseID(_ value: String?) throws -> String {
+package func resolveDescriptorDatabaseID(_ value: String?) throws -> String {
   guard let value else { return UUID().uuidString.lowercased() }
   guard let identifier = UUID(uuidString: value) else {
     throw ValidationError("database-id must be a UUIDv4")
@@ -148,32 +148,32 @@ func resolveDescriptorDatabaseID(_ value: String?) throws -> String {
   return identifier.uuidString.lowercased()
 }
 
-func validateDescriptorCategoryCounts(held: UInt64, battle: UInt64) throws {
+package func validateDescriptorCategoryCounts(held: UInt64, battle: UInt64) throws {
   guard held != 1, battle != 1 else {
     throw ValidationError("Each populated descriptor category needs at least two descriptors")
   }
 }
 
-func validateDescriptorOutputPaths(output: URL, xzOutput: URL?) throws {
+package func validateDescriptorOutputPaths(output: URL, xzOutput: URL?) throws {
   guard xzOutput != output else {
     throw ValidationError("xz-output must differ from output")
   }
 }
 
-func validateDescriptorDatabaseByteCount(_ count: Int) throws {
+package func validateDescriptorDatabaseByteCount(_ count: Int) throws {
   guard count <= 64 * 1024 * 1024 else {
     throw ValidationError("Descriptor database exceeds the 64 MiB loader limit")
   }
 }
 
-func validateDescriptorEntryRows(_ rows: UInt32) throws {
+package func validateDescriptorEntryRows(_ rows: UInt32) throws {
   guard rows <= 1_000_000 else {
     throw ValidationError("Descriptor entry exceeds the 1000000-row loader limit")
   }
 }
 
-struct BuildDescriptorDatabase: ParsableCommand {
-  static let configuration = CommandConfiguration(
+package struct BuildDescriptorDatabase: ParsableCommand {
+  package static let configuration = CommandConfiguration(
     commandName: "build",
     abstract: "Build an AKAZE item-recognition database from reference icon images.")
 
@@ -192,7 +192,9 @@ struct BuildDescriptorDatabase: ParsableCommand {
   )
   var xzOutput: String?
 
-  mutating func run() throws {
+  package init() {}
+
+  package mutating func run() throws {
     let outputURL = resolveModelPath(output)
     let xzOutputURL = xzOutput.map(resolveModelPath)
     try validateDescriptorOutputPaths(output: outputURL, xzOutput: xzOutputURL)

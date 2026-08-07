@@ -20,6 +20,12 @@ public struct AudioPeak: Codable, Equatable, Sendable {
   public let recordingPTS: Double
   public let inmatch: Double
   public let score: Double
+
+  package init(recordingPTS: Double, inmatch: Double, score: Double) {
+    self.recordingPTS = recordingPTS
+    self.inmatch = inmatch
+    self.score = score
+  }
 }
 
 public struct AudioPeakInterval: Codable, Equatable, Sendable {
@@ -93,12 +99,12 @@ public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
 
 public enum AudioPeakDetector {
   // Pokémon UNITE-specific fixed detector. These are deliberately not CLI settings.
-  static let blockDuration = 0.010
-  static let fastBlockCount = 5
-  static let slowBlockCount = 20
-  static let minimumNormalizedRise = 0.000_005
-  static let minimumPeakSeparation = 0.75
-  static let peakDilation = 0.5
+  package static let blockDuration = 0.010
+  package static let fastBlockCount = 5
+  package static let slowBlockCount = 20
+  package static let minimumNormalizedRise = 0.000_005
+  package static let minimumPeakSeparation = 0.75
+  package static let peakDilation = 0.5
 
   public static func audioURL(in bundleURL: URL) throws -> URL {
     let infoURL = bundleURL.appendingPathComponent("Info.plist")
@@ -239,7 +245,7 @@ public enum AudioPeakDetector {
     )
   }
 
-  static func dilatedIntervals(
+  package static func dilatedIntervals(
     peaks: [AudioPeak],
     matchStartSeconds: Double,
     requestedInmatchStart: Double,
@@ -286,7 +292,9 @@ public enum AudioPeakDetector {
     return intervals
   }
 
-  static func normalizedRiseScores(blockEnergies: [Int64], samplesPerBlock: Int) -> [Double] {
+  package static func normalizedRiseScores(
+    blockEnergies: [Int64], samplesPerBlock: Int
+  ) -> [Double] {
     guard blockEnergies.count >= slowBlockCount, samplesPerBlock > 0 else {
       return Array(repeating: 0, count: blockEnergies.count)
     }
@@ -310,7 +318,7 @@ public enum AudioPeakDetector {
     return scores
   }
 
-  static func peakIndices(
+  package static func peakIndices(
     blockEnergies: [Int64],
     samplesPerBlock: Int,
     blockPTS: [Double],

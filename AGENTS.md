@@ -46,9 +46,10 @@ SPDX-License-Identifier: Apache-2.0
 - Always run code-signing verification outside the sandbox. Do not treat
   `codesign`, `spctl`, or equivalent results produced inside a sandbox as valid
   evidence that a release artifact's signature is valid or invalid.
-- Apply this policy only to products that can become GitHub Release assets. It does not apply to source code, runner environments, caches, test artifacts, or other outputs that cannot enter the release path.
+- Apply this policy only to release-bound products: files or containers that are independently transferred between jobs or workflows for release, or published as GitHub Release assets. It does not apply to source code, runner environments, caches, test artifacts, or other outputs that cannot enter the release path.
+- Treat files contained in a release-bound archive or disk image as components of that container, not as separate release-bound products, unless those files are independently transferred or published. Signing or otherwise transforming a component within the job that creates the final container does not by itself require a separate attestation for that component.
 - Attest every release-bound product in the job that produces it, before transferring it to another job or workflow.
 - After receiving a release-bound product from another job or workflow, verify its attestation before reading, transforming, signing, packaging, notarizing, or publishing it.
-- Attest transformed release products separately. An attestation for an input does not implicitly attest a signed, packaged, notarized, or otherwise transformed output.
+- Attest each transformed release-bound product separately before transferring or publishing that product. An attestation for an input container does not implicitly attest a signed, packaged, notarized, or otherwise transformed output container.
 - Preserve enough provenance in attestations to trace a release product to its producing workflow, source commit, and relevant input product.
 - Rely on the provenance implications recorded by `actions/attest` for source and runner authenticity. Do not add separate source or environment verification solely for this policy.
