@@ -116,7 +116,6 @@ jobs:
             -C "$bin_path" \
             unite-analysis-swift \
             unite-analysis-model-tool \
-            unite-analysis-swift-mcp \
             -C "$GITHUB_WORKSPACE/Models" \
             descriptors.pb \
             -C "$GITHUB_WORKSPACE" \

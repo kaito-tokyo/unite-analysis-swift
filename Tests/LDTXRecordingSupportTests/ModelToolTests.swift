@@ -5,7 +5,6 @@
 import ArgumentParser
 import Foundation
 import Testing
-
 import UniteAnalysisModelCommands
 
 @Test func modelToolHelpDescribesBuildCommand() {

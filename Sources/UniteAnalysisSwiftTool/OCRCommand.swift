@@ -28,7 +28,7 @@ private struct OCRJob: Decodable {
   }
 }
 
-private struct OCRJobResult: Encodable {
+struct OCRJobResult: Encodable {
   let input: String
   let source: FrameSource
   let region: String
@@ -37,7 +37,7 @@ private struct OCRJobResult: Encodable {
   let values: [String]
 }
 
-private struct OCRCommandOutput: Encodable {
+struct OCRCommandOutput: Encodable {
   static let schemaURL =
     "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.output.schema.json"
 
@@ -52,7 +52,7 @@ private struct OCRCommandOutput: Encodable {
   }
 }
 
-struct OCRCommand: AsyncParsableCommand {
+struct OCRCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "ocr",
     abstract: "Recognize named still-image regions from JSONL jobs.",
@@ -90,45 +90,53 @@ struct OCRCommand: AsyncParsableCommand {
     help: "JSONL path to replace atomically after EOF. Writes responses to stdout when omitted.")
   var output: String?
 
-  mutating func run() async throws {
-    let namedOptions = try loadOCROptions(ocrOptions)
-    let writer = try JSONLResponseWriter(output: output)
-    var jobIds = Set<String>()
-    let count = try await forEachJSONLInputLine(jobs) { line in
-      let recoveredJobId = jsonlJobID(in: line.data)
-      do {
-        if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
-          throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+}
+
+extension OCRCommand {
+  enum OutputRecord {
+    case success(OCRCommandOutput)
+    case failure(JSONLJobFailure)
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let namedOptions = try loadOCROptions(command.ocrOptions)
+      var jobIds = Set<String>()
+      let count = try await forEachJSONLInputLine(command.jobs) { line in
+        let recoveredJobId = jsonlJobID(in: line.data)
+        do {
+          if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
+            throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+          }
+          let job = try JSONDecoder().decode(OCRJob.self, from: line.data)
+          try job.validate()
+          let options = try requiredOCROptions(named: job.region, in: namedOptions)
+          let inputURL = resolvePath(job.input)
+          let image = try StillImageInput.load(inputURL)
+          let rect = job.source.rect.integral
+          guard rect.maxX <= CGFloat(image.width), rect.maxY <= CGFloat(image.height),
+            let crop = image.cropping(to: rect)
+          else {
+            throw UniteAnalysisSwiftToolError.message(
+              "OCR source is outside input image bounds: \(inputURL.path)")
+          }
+          let recognized = try OCRInput.recognize(crop, type: job.type, options: options)
+          let result = OCRJobResult(
+            input: inputURL.path,
+            source: job.source,
+            region: job.region,
+            type: job.type,
+            observations: recognized.observations,
+            values: recognized.values
+          )
+          continuation.yield(.success(OCRCommandOutput(jobId: job.jobId, result: result)))
+        } catch {
+          continuation.yield(
+            .failure(.init(line: line.number, jobId: recoveredJobId, error: error)))
         }
-        let job = try JSONDecoder().decode(OCRJob.self, from: line.data)
-        try job.validate()
-        let options = try requiredOCROptions(named: job.region, in: namedOptions)
-        let inputURL = resolvePath(job.input)
-        let image = try StillImageInput.load(inputURL)
-        let rect = job.source.rect.integral
-        guard rect.maxX <= CGFloat(image.width), rect.maxY <= CGFloat(image.height),
-          let crop = image.cropping(to: rect)
-        else {
-          throw UniteAnalysisSwiftToolError.message(
-            "OCR source is outside input image bounds: \(inputURL.path)")
-        }
-        let recognized = try OCRInput.recognize(crop, type: job.type, options: options)
-        let result = OCRJobResult(
-          input: inputURL.path,
-          source: job.source,
-          region: job.region,
-          type: job.type,
-          observations: recognized.observations,
-          values: recognized.values
-        )
-        try writer.write(OCRCommandOutput(jobId: job.jobId, result: result))
-      } catch {
-        try writeJSONLFailure(
-          error, line: line, jobId: recoveredJobId, schema: OCRCommandOutput.schemaURL,
-          to: writer)
       }
+      guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
     }
-    guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
-    try writer.finish()
   }
 }

@@ -4,7 +4,6 @@
 
 import Foundation
 import Testing
-
 import UniteAnalysisSwiftCommands
 
 let repositoryRoot = URL(fileURLWithPath: #filePath)

@@ -91,7 +91,20 @@ struct ScanResultCommand: ParsableCommand {
   @Option(help: "JSON path to replace atomically. Writes to stdout when omitted.")
   var output: String?
 
-  mutating func run() throws {
+}
+
+extension ScanResultCommand {
+  typealias OutputRecord = ScanResult
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      try Task.checkCancellation()
+      continuation.yield(try command.result())
+    }
+  }
+
+  private func result() throws -> OutputRecord {
     let options = try loadOCROptions(ocrOptions)
     _ = try requiredOCROptions(named: ScanResultOCRRegion.screenText, in: options)
     _ = try requiredOCROptions(named: ScanResultOCRRegion.playerName, in: options)
@@ -101,10 +114,9 @@ struct ScanResultCommand: ParsableCommand {
       case .summary: .summary
       case .battleData: .battleData
       }
-    try ResultScannerRunner.run(
+    return try ResultScannerRunner.scan(
       input: input,
       type: resultType,
-      ocrOptions: options,
-      output: output)
+      ocrOptions: options)
   }
 }

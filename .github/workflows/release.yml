@@ -141,7 +141,6 @@ jobs:
 
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "runtime_binary_path=$(Join-Path $stagingDirectory 'unite-analysis-swift')" -Encoding utf8
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "model_tool_binary_path=$(Join-Path $stagingDirectory 'unite-analysis-model-tool')" -Encoding utf8
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "mcp_binary_path=$(Join-Path $stagingDirectory 'unite-analysis-swift-mcp')" -Encoding utf8
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "staging_directory=$stagingDirectory" -Encoding utf8
 
       - name: Validate release products
@@ -150,25 +149,20 @@ jobs:
         env:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
-          MCP_BINARY_PATH: ${{ steps.release-build.outputs.mcp_binary_path }}
           DESCRIPTORS_PATH: ${{ steps.release-build.outputs.staging_directory }}/descriptors.pb
           SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
         run: |
-          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:MCP_BINARY_PATH, $env:DESCRIPTORS_PATH)) {
+          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH)) {
               if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
                   throw "Release product $productPath is missing."
               }
           }
 
-          chmod +x $env:RUNTIME_BINARY_PATH $env:MODEL_TOOL_BINARY_PATH $env:MCP_BINARY_PATH
+          chmod +x $env:RUNTIME_BINARY_PATH $env:MODEL_TOOL_BINARY_PATH
           $expectedVersion = $env:GITHUB_REF_NAME.Substring(1)
           $actualVersion = (& $env:RUNTIME_BINARY_PATH --version).Trim()
           if ($actualVersion -ne $expectedVersion) {
               throw "CLI version $actualVersion does not match tag version $expectedVersion."
-          }
-          $mcpVersion = (& $env:MCP_BINARY_PATH --version).Trim()
-          if ($mcpVersion -ne $expectedVersion) {
-              throw "MCP version $mcpVersion does not match tag version $expectedVersion."
           }
           $pluginVersion = (Get-Content -LiteralPath (Join-Path $env:SOURCE_DIRECTORY '.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
           $appVersion = (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:SOURCE_DIRECTORY 'Packaging/App/Info.plist')).Trim()
@@ -191,7 +185,6 @@ jobs:
         env:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
-          MCP_BINARY_PATH: ${{ steps.release-build.outputs.mcp_binary_path }}
         run: |
           if [[ -z "$MACOS_SIGNING_APPLICATION_IDENTITY" ]]; then
             echo 'MACOS_SIGNING_APPLICATION_IDENTITY is not configured.' >&2
@@ -204,14 +197,13 @@ jobs:
             exit 1
           fi
 
-          for binary_path in "$RUNTIME_BINARY_PATH" "$MODEL_TOOL_BINARY_PATH" "$MCP_BINARY_PATH"; do
+          for binary_path in "$RUNTIME_BINARY_PATH" "$MODEL_TOOL_BINARY_PATH"; do
             codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$binary_path"
             codesign --verify --strict --verbose=2 "$binary_path"
           done
           {
             printf 'runtime_signed_sha256=%s\n' "$(shasum -a 256 "$RUNTIME_BINARY_PATH" | awk '{print $1}')"
             printf 'model_tool_signed_sha256=%s\n' "$(shasum -a 256 "$MODEL_TOOL_BINARY_PATH" | awk '{print $1}')"
-            printf 'mcp_signed_sha256=%s\n' "$(shasum -a 256 "$MCP_BINARY_PATH" | awk '{print $1}')"
           } >> "$GITHUB_OUTPUT"
 
       - name: Assemble and sign app bundle
@@ -221,14 +213,12 @@ jobs:
           SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
-          MCP_BINARY_PATH: ${{ steps.release-build.outputs.mcp_binary_path }}
         run: |
           app_path="$RUNNER_TEMP/unite-analysis-swift.app"
           mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
           ditto --norsrc "$SOURCE_DIRECTORY/Packaging/App/Info.plist" "$app_path/Contents/Info.plist"
           ditto --norsrc "$RUNTIME_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-swift"
           ditto --norsrc "$MODEL_TOOL_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-model-tool"
-          ditto --norsrc "$MCP_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-swift-mcp"
           ditto --norsrc "$SOURCE_DIRECTORY/descriptors.pb" "$app_path/Contents/Resources/descriptors.pb"
           codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$app_path"
           codesign --verify --strict --verbose=2 "$app_path"
@@ -361,8 +351,7 @@ jobs:
                   "signed_executables": {
                     "digest": {
                       "unite-analysis-swift.sha256": "${{ steps.sign.outputs.runtime_signed_sha256 }}",
-                      "unite-analysis-model-tool.sha256": "${{ steps.sign.outputs.model_tool_signed_sha256 }}",
-                      "unite-analysis-swift-mcp.sha256": "${{ steps.sign.outputs.mcp_signed_sha256 }}"
+                      "unite-analysis-model-tool.sha256": "${{ steps.sign.outputs.model_tool_signed_sha256 }}"
                     }
                   },
                   "descriptor_database": {

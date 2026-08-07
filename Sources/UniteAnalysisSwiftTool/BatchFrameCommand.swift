@@ -12,7 +12,7 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-private struct BatchFrameJobOutput: Encodable {
+struct BatchFrameJobOutput: Encodable {
   static let schemaURL =
     "https://kaito-tokyo.github.io/unite-analysis-swift/batch-frame.output.schema.json"
 
@@ -29,7 +29,7 @@ private struct BatchFrameJobOutput: Encodable {
   }
 }
 
-struct BatchFrame: AsyncParsableCommand {
+struct BatchFrame: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "batch-frame",
     abstract: "Write source-video screenshots from JSONL frame jobs.",
@@ -68,42 +68,54 @@ struct BatchFrame: AsyncParsableCommand {
   @Flag(help: "Overwrite every existing or duplicate generated output path.")
   var force = false
 
-  mutating func run() async throws {
+  func validate() throws {
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
-    let writer = try JSONLResponseWriter()
-    var jobIds = Set<String>()
-    let count = try await forEachJSONLInputLine(jobs) { line in
-      let recoveredJobId = jsonlJobID(in: line.data)
-      do {
-        if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
-          throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+  }
+
+}
+
+extension BatchFrame {
+  enum OutputRecord {
+    case success(BatchFrameJobOutput)
+    case failure(JSONLJobFailure)
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      var jobIds = Set<String>()
+      let count = try await forEachJSONLInputLine(command.jobs) { line in
+        let recoveredJobId = jsonlJobID(in: line.data)
+        do {
+          if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
+            throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+          }
+          let job = try JSONDecoder().decode(BatchFrameJob.self, from: line.data)
+          _ = try job.validatedMatchTimestamps()
+          let prefixURL = resolvePath(job.outputPrefix)
+          let requests = job.matchTimestamps.enumerated().map { index, matchTimestamp in
+            let suffix = String(format: "-%06d.jpg", index + 1)
+            return FrameRequest(
+              scene: .matchRelative(matchTimestamp),
+              source: job.source,
+              outputURL: URL(fileURLWithPath: prefixURL.path + suffix).standardizedFileURL)
+          }
+          let outputs = try await renderFrames(
+            recordSpecURL: resolveRecordSpec(command.recordSpec),
+            requests: requests,
+            quality: command.quality,
+            force: command.force
+          )
+          continuation.yield(
+            .success(BatchFrameJobOutput(jobId: job.jobId, result: .init(outputs: outputs))))
+        } catch {
+          continuation.yield(
+            .failure(.init(line: line.number, jobId: recoveredJobId, error: error)))
         }
-        let job = try JSONDecoder().decode(BatchFrameJob.self, from: line.data)
-        _ = try job.validatedMatchTimestamps()
-        let prefixURL = resolvePath(job.outputPrefix)
-        let requests = job.matchTimestamps.enumerated().map { index, matchTimestamp in
-          let suffix = String(format: "-%06d.jpg", index + 1)
-          return FrameRequest(
-            scene: .matchRelative(matchTimestamp),
-            source: job.source,
-            outputURL: URL(fileURLWithPath: prefixURL.path + suffix).standardizedFileURL)
-        }
-        let outputs = try await renderFrames(
-          recordSpecURL: resolveRecordSpec(recordSpec),
-          requests: requests,
-          quality: quality,
-          force: force
-        )
-        try writer.write(
-          BatchFrameJobOutput(jobId: job.jobId, result: .init(outputs: outputs)))
-      } catch {
-        try writeJSONLFailure(
-          error, line: line, jobId: recoveredJobId, schema: BatchFrameJobOutput.schemaURL,
-          to: writer)
       }
+      guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
     }
-    guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
   }
 }

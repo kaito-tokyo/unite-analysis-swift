@@ -7,7 +7,6 @@ let package = Package(
   products: [
     .executable(name: "unite-analysis-swift", targets: ["UniteAnalysisSwiftTool"]),
     .executable(name: "unite-analysis-model-tool", targets: ["UniteAnalysisModelTool"]),
-    .executable(name: "unite-analysis-swift-mcp", targets: ["UniteAnalysisMCPServer"]),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
@@ -184,6 +183,7 @@ let package = Package(
         "UniteAnalysisConfiguration",
         "IconMatcherNative",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        .product(name: "MCP", package: "swift-sdk"),
       ],
       path: "Sources/UniteAnalysisSwiftTool",
       swiftSettings: [.interoperabilityMode(.Cxx)]),
@@ -211,12 +211,6 @@ let package = Package(
       ],
       path: "Sources/UniteAnalysisModelExecutable",
       swiftSettings: [.interoperabilityMode(.Cxx)]),
-    .executableTarget(
-      name: "UniteAnalysisMCPServer",
-      dependencies: [
-        .product(name: "MCP", package: "swift-sdk")
-      ],
-      path: "Sources/UniteAnalysisMCPServer"),
     .testTarget(
       name: "LDTXRecordingSupportTests",
       dependencies: [

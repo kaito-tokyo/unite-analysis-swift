@@ -5,7 +5,7 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>unite-analysis-swift-mcp</string>
+  <string>unite-analysis-swift</string>
   <key>CFBundleIdentifier</key>
   <string>tokyo.kaito.unite-analysis-swift</string>
   <key>CFBundleInfoDictionaryVersion</key>

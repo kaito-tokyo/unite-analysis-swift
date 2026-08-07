@@ -665,12 +665,11 @@ func summaryRows(
 }
 
 public enum ResultScannerRunner {
-  public static func run(
+  package static func scan(
     input: String,
     type: ResultScreenType,
-    ocrOptions: [String: OCRRecognitionOptions],
-    output: String? = nil
-  ) throws {
+    ocrOptions: [String: OCRRecognitionOptions]
+  ) throws -> ScanResult {
     guard let screenTextOptions = ocrOptions[ScanResultOCRRegion.screenText],
       let playerNameOptions = ocrOptions[ScanResultOCRRegion.playerName],
       let numericOptions = ocrOptions[ScanResultOCRRegion.numeric]
@@ -679,8 +678,7 @@ public enum ResultScannerRunner {
         "scan-result requires OCR options for \(ScanResultOCRRegion.screenText), \(ScanResultOCRRegion.playerName), and \(ScanResultOCRRegion.numeric)"
       )
     }
-    let arguments = Arguments(input: input, output: output)
-    let inputURL = URL(fileURLWithPath: arguments.input).standardizedFileURL
+    let inputURL = URL(fileURLWithPath: input).standardizedFileURL
     let image = try StillImageInput.load(inputURL)
     let raw = try OCR.recognizeResultScreen(
       image,
@@ -736,10 +734,20 @@ public enum ResultScannerRunner {
       screens: [screen],
       warnings: warnings
     )
+    return result
+  }
+
+  public static func run(
+    input: String,
+    type: ResultScreenType,
+    ocrOptions: [String: OCRRecognitionOptions],
+    output: String? = nil
+  ) throws {
+    let result = try scan(input: input, type: type, ocrOptions: ocrOptions)
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     let data = try encoder.encode(result)
-    if let output = arguments.output {
+    if let output {
       try data.write(to: URL(fileURLWithPath: output), options: .atomic)
     } else {
       FileHandle.standardOutput.write(data)

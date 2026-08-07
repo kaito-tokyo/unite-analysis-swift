@@ -4,7 +4,6 @@
 
 import Foundation
 import Testing
-
 import UniteAnalysisConfiguration
 
 @Test func storesAndUnsetsCanonicalObsidianDirectoriesIndependently() throws {

@@ -12,7 +12,7 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-struct EvaluateDrawText: AsyncParsableCommand {
+struct EvaluateDrawText: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "eval-draw-text-script",
     abstract: "Evaluate one drawText JSC expression and print its resulting string.",
@@ -44,17 +44,31 @@ struct EvaluateDrawText: AsyncParsableCommand {
   @Option(help: "Seconds before the match start.") var beforeStart: Double?
   @Option(help: "Seconds after the match end.") var afterEnd: Double?
 
-  mutating func run() async throws {
+  func validate() throws {
     guard index >= 0 else { throw ValidationError("--index must be non-negative") }
-    let result = try await DrawTextScriptEngine.evaluate(
-      script: script == "-"
-        ? String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self) : script,
-      recordSpecURL: resolveRecordSpec(recordSpec),
-      index: index,
-      inmatch: inmatch,
-      beforeStart: beforeStart,
-      afterEnd: afterEnd
-    )
-    print(result)
   }
+
+}
+
+extension EvaluateDrawText {
+  struct OutputRecord: Sendable {
+    let text: String
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let result = try await DrawTextScriptEngine.evaluate(
+        script: command.script == "-"
+          ? String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
+          : command.script,
+        recordSpecURL: resolveRecordSpec(command.recordSpec),
+        index: command.index,
+        inmatch: command.inmatch,
+        beforeStart: command.beforeStart,
+        afterEnd: command.afterEnd)
+      continuation.yield(.init(text: result))
+    }
+  }
+
 }

@@ -4,7 +4,6 @@
 
 import Foundation
 import Testing
-
 import UniteAnalysisSwiftCommands
 
 @Test func extractClipUsesV2FixedNameInsteadOfConflictingMetadata() throws {

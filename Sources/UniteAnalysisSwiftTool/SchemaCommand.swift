@@ -24,15 +24,17 @@ struct Schema: ParsableCommand {
   @Argument(help: "Basename from a supported $schema URL.")
   var basename: String
 
-  mutating func run() throws {
-    guard let data = EmbeddedSchemas.data(basename: basename) else {
-      throw ValidationError(
-        "Unknown schema basename '\(basename)'. Expected one of: "
-          + EmbeddedSchemas.basenames.joined(separator: ", "))
-    }
-    FileHandle.standardOutput.write(data)
-    if data.last != 0x0A {
-      FileHandle.standardOutput.write(Data("\n".utf8))
+  struct OutputRecord: @unchecked Sendable { let data: Data }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      guard let data = EmbeddedSchemas.data(basename: command.basename) else {
+        throw ValidationError(
+          "Unknown schema basename '\(command.basename)'. Expected one of: "
+            + EmbeddedSchemas.basenames.joined(separator: ", "))
+      }
+      continuation.yield(.init(data: data))
     }
   }
 }

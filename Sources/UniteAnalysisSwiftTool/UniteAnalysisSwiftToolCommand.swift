@@ -12,7 +12,7 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-package struct UniteAnalysisSwiftCommand: AsyncParsableCommand {
+package struct UniteAnalysisSwiftCommand: ParsableCommand {
   package static let configuration = CommandConfiguration(
     commandName: "unite-analysis-swift",
     abstract: "Extract and analyze ポケモンユナイト recording and still-image data.",
@@ -39,7 +39,7 @@ package struct UniteAnalysisSwiftCommand: AsyncParsableCommand {
       DetectChromaEvents.self, AudioPeaks.self, ExtractClip.self, OCRCommand.self,
       ScanResultCommand.self,
       RecognizeDraftLoadout.self, RecognizeBlindLoadout.self,
-      EvaluateDrawText.self, Schema.self, Config.self,
+      EvaluateDrawText.self, Schema.self, Config.self, MCPCommand.self,
     ]
   )
 

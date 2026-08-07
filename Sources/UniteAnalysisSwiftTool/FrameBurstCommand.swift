@@ -90,7 +90,7 @@ private struct FrameBurstJob: Decodable {
   }
 }
 
-private struct FrameBurstJobOutput: Encodable {
+struct FrameBurstJobOutput: Encodable {
   static let schemaURL =
     "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.output.schema.json"
 
@@ -107,7 +107,7 @@ private struct FrameBurstJobOutput: Encodable {
   }
 }
 
-struct FrameBurst: AsyncParsableCommand {
+struct FrameBurst: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "frame-burst",
     abstract: "Render consecutive decoded source-frame bursts from JSONL jobs.",
@@ -140,33 +140,45 @@ struct FrameBurst: AsyncParsableCommand {
   @Option(help: "JPEG quality from 0 through 1.") var quality: Double = 0.8
   @Flag(help: "Overwrite an existing output file.") var force = false
 
-  mutating func run() async throws {
+  func validate() throws {
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
-    let writer = try JSONLResponseWriter()
-    var jobIds = Set<String>()
-    let count = try await forEachJSONLInputLine(jobs) { line in
-      let recoveredJobId = jsonlJobID(in: line.data)
-      do {
-        if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
-          throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+  }
+
+}
+
+extension FrameBurst {
+  enum OutputRecord {
+    case success(FrameBurstJobOutput)
+    case failure(JSONLJobFailure)
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      var jobIds = Set<String>()
+      let count = try await forEachJSONLInputLine(command.jobs) { line in
+        let recoveredJobId = jsonlJobID(in: line.data)
+        do {
+          if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
+            throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+          }
+          let job = try JSONDecoder().decode(FrameBurstJob.self, from: line.data)
+          try job.validate()
+          let outputURL = resolvePath(job.output)
+          try await renderFrameBurst(
+            job: job, recordSpecURL: resolveRecordSpec(command.recordSpec), outputURL: outputURL,
+            quality: command.quality, force: command.force)
+          continuation.yield(
+            .success(FrameBurstJobOutput(jobId: job.jobId, result: .init(output: outputURL.path))))
+        } catch {
+          continuation.yield(
+            .failure(.init(line: line.number, jobId: recoveredJobId, error: error)))
         }
-        let job = try JSONDecoder().decode(FrameBurstJob.self, from: line.data)
-        try job.validate()
-        let outputURL = resolvePath(job.output)
-        try await renderFrameBurst(
-          job: job, recordSpecURL: resolveRecordSpec(recordSpec), outputURL: outputURL,
-          quality: quality, force: force)
-        try writer.write(
-          FrameBurstJobOutput(jobId: job.jobId, result: .init(output: outputURL.path)))
-      } catch {
-        try writeJSONLFailure(
-          error, line: line, jobId: recoveredJobId, schema: FrameBurstJobOutput.schemaURL,
-          to: writer)
       }
+      guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
     }
-    guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
   }
 }
 

@@ -67,14 +67,32 @@ struct DetectChromaEvents: ParsableCommand {
   @Flag(help: "Overwrite the output if it already exists.")
   var force = false
 
-  mutating func run() throws {
+  func validate() throws {
     guard fps.isFinite, fps > 0 else {
       throw ValidationError("--fps must be positive and finite")
     }
+  }
+
+}
+
+extension DetectChromaEvents {
+  struct OutputRecord: Sendable {
+    let output: String
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      try Task.checkCancellation()
+      continuation.yield(.init(output: try command.execute()))
+    }
+  }
+
+  private func execute() throws -> String {
     let outputURL = resolvePath(output)
     try ChromaEventDetector.run(
       inputSampleDirectoryURL: resolvePath(inputSampleDir), fps: fps, outputURL: outputURL,
       force: force)
-    print(outputURL.path)
+    return outputURL.path
   }
 }

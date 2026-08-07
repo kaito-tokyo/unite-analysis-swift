@@ -19,6 +19,10 @@ Install **Kaito-Tokyo Unite Analysis** from the Codex Plugins Directory. The
 plugin contains the review skill, native MCP server, analysis runtime, and
 descriptor database as one versioned and signed app bundle.
 
+The app uses one native executable for both interfaces: ordinary commands run
+as `unite-analysis-swift <command>`, and the stdio server runs as
+`unite-analysis-swift mcp`.
+
 ## Standalone CLI installation
 
 ```sh

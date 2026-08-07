@@ -52,7 +52,16 @@ struct ConfigGet: ParsableCommand {
   @Argument(help: "Configuration key: obsidian-match-reports-root or obsidian-strategy-books-root.")
   var key: ConfigKey
 
-  func run() throws {
+  struct OutputRecord: Sendable { let value: String }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      continuation.yield(.init(value: try command.value()))
+    }
+  }
+
+  private func value() throws -> String {
     let configuration = try UserConfigurationStore().load()
     let value: String?
     switch key {
@@ -64,7 +73,7 @@ struct ConfigGet: ParsableCommand {
     guard let value else {
       throw UniteAnalysisSwiftToolError.message("\(key.rawValue) is not configured")
     }
-    print(value)
+    return value
   }
 }
 
@@ -78,9 +87,15 @@ struct ConfigSet: ParsableCommand {
   @Argument(help: "Value to save.")
   var value: String
 
-  func run() throws {
-    print(
-      try UserConfigurationStore().setObsidianDirectory(key.obsidianDirectory, path: value).path)
+  struct OutputRecord: Sendable { let value: String }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let path = try UserConfigurationStore()
+        .setObsidianDirectory(command.key.obsidianDirectory, path: command.value).path
+      continuation.yield(.init(value: path))
+    }
   }
 }
 
@@ -91,8 +106,14 @@ struct ConfigUnset: ParsableCommand {
   @Argument(help: "Configuration key: obsidian-match-reports-root or obsidian-strategy-books-root.")
   var key: ConfigKey
 
-  func run() throws {
-    try UserConfigurationStore().unsetObsidianDirectory(key.obsidianDirectory)
+  enum OutputRecord: Sendable { case completed }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      try UserConfigurationStore().unsetObsidianDirectory(command.key.obsidianDirectory)
+      continuation.yield(.completed)
+    }
   }
 }
 
@@ -100,7 +121,11 @@ struct ConfigPath: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "path", abstract: "Print the user configuration file path.")
 
-  func run() {
-    print(UserConfigurationStore.defaultFileURL.path)
+  struct OutputRecord: Sendable { let value: String }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      continuation.yield(.init(value: UserConfigurationStore.defaultFileURL.path))
+    }
   }
 }

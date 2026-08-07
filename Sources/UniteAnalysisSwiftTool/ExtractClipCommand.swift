@@ -9,7 +9,7 @@ import Foundation
 import LDTXRecordingSupport
 import RecordVisionSupport
 
-struct ExtractClip: AsyncParsableCommand {
+struct ExtractClip: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "extract-clip",
     abstract: "Copy a match-relative interval into an MP4 without re-encoding.",
@@ -41,20 +41,33 @@ struct ExtractClip: AsyncParsableCommand {
   @Option(help: "Required .mp4 output path.") var output: String
   @Flag(help: "Replace the output if it already exists.") var force = false
 
-  mutating func run() async throws {
+  func validate() throws {
     guard start.isFinite else {
       throw ValidationError("--start must be finite")
     }
     if let end, !end.isFinite {
       throw ValidationError("--end must be finite")
     }
-    try await extractClip(
-      recordSpecURL: resolveRecordSpec(recordSpec),
-      start: start,
-      end: end,
-      outputURL: resolvePath(output),
-      force: force
-    )
+  }
+
+}
+
+extension ExtractClip {
+  struct OutputRecord: Sendable {
+    let output: String
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let output = try await extractClip(
+        recordSpecURL: resolveRecordSpec(command.recordSpec),
+        start: command.start,
+        end: command.end,
+        outputURL: resolvePath(command.output),
+        force: command.force)
+      continuation.yield(.init(output: output))
+    }
   }
 }
 
@@ -64,7 +77,7 @@ func extractClip(
   end requestedEnd: Double?,
   outputURL: URL,
   force: Bool
-) async throws {
+) async throws -> String {
   let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
   RecordVisionInputLogger.recordSpec(recordSpecURL)
   guard spec.startPTS.timescale > 0, spec.duration.isFinite, spec.duration > 0 else {
@@ -125,7 +138,7 @@ func extractClip(
   } else {
     try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
   }
-  print(outputURL.path)
+  return outputURL.path
 }
 
 package func extractClipVideoURL(in bundleURL: URL) throws -> URL {
