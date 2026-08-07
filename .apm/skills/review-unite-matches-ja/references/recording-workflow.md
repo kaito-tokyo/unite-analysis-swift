@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 録画とSwift CLIのワークフロー
 
 録画を調べる前、または分析コマンドを実行する前に、この文書を最後まで読む。

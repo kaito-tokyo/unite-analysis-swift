@@ -31,6 +31,7 @@ SPDX-License-Identifier: Apache-2.0
 ## Release follow-up
 
 - After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
+- Treat the version bump as one combined operation: update the published latest-version notification to the newest Git tag and prepare the package and CLI for the next release.
 - In that pull request, set `docs/metadata/latest-version.txt` to the version of the tag that was just released, without the leading `v`.
 - In the same pull request, advance both the APM package version in `apm.yml` and the Swift CLI version to the next release version.
 - Do not advance `docs/metadata/latest-version.txt` before the corresponding GitHub Release is available for download.

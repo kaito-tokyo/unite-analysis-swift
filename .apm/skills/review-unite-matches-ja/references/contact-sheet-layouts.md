@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 標準overviewコンタクトシート
 
 標準として固定するコンタクトシートは、10列×10行、6秒間隔で10分試合全体を俯瞰する5種類の`overview`だけとする。標準HUD、原点`(0,0)`のゲーム領域`1632x918`、10分、`match-01`では、[overview-contact-sheet-jobs.jsonl](overview-contact-sheet-jobs.jsonl)を変更せず使う。ジョブファイルはスキルの配置場所にあるため、録画ルートをカレントディレクトリにしてから、`SKILL.md`があるディレクトリを`<skill-root>`として分析成果物領域へコピーする。

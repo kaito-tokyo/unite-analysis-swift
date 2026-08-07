@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ランクシーズンの分類規約
 
 ランクシーズンの実データは[ranked-seasons.json](ranked-seasons.json)を正本とし、この文書には分類規約だけを置く。台帳はインストール済みスキルの利用中には読み取り専用として扱い、追加、訂正、推測による補完をしない。

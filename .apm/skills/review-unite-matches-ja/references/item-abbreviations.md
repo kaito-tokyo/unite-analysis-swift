@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 持ち物の表示略称
 
 この対応表は、人が読む試合コンテキストの表示にだけ使う。
