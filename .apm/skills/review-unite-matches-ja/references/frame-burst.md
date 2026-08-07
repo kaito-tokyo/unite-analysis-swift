@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # フレーム連写
 
 フレーム連写はコンタクトシートとは別の証拠形式とする。振り向き、照準修正、技の発生、命中確認など1秒未満の動作は、`frame-burst`で連続するソースフレームを並べる。既存`contact-sheet`へ細かい時刻列を渡す方法は近似シークで同一フレームへ吸着し得るため、この用途には使わない。

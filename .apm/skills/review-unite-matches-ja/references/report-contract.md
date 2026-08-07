@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 試合レポート契約
 
 完全な試合スタッツを表示する前、または試合レポートを作成・更新・公開する前に、この文書を最後まで読む。

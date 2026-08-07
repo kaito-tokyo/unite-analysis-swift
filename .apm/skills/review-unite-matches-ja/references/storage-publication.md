@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 保存と公開
 
 正本レポートの作成・移行、Obsidian同期、Google Drive公開、公開分類体系の変更を行う場合にだけ、この文書を最後まで読む。
