@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: unite-analysis-swift
+version: 0.1.4
+description: Pokémon UNITE recording evidence tools and match-review skill.
+author: Kaito Udagawa
+license: Apache-2.0
+targets:
+  - codex
+includes: auto
+dependencies:
+  apm: []
+  mcp:
+    - name: unite-analysis-swift
+      registry: false
+      transport: stdio
+      command: /bin/dash
+      args:
+        - -c
+        - |
+          for app in "$HOME/Applications/unite-analysis-swift.app" "/Applications/unite-analysis-swift.app"; do
+            executable="$app/Contents/MacOS/unite-analysis-swift"
+            if [ -x "$executable" ]; then
+              exec "$executable" mcp
+            fi
+          done
+          printf '%s\n' 'unite-analysis-swift: install the signed PKG from https://github.com/kaito-tokyo/unite-analysis-swift/releases/latest' >&2
+          exit 69
+scripts: {}

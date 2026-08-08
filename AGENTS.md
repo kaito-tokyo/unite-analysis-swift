@@ -33,17 +33,18 @@ SPDX-License-Identifier: Apache-2.0
 - After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
 - Treat the version bump as one combined operation: update the published latest-version notification to the newest Git tag and prepare the package and CLI for the next release.
 - In that pull request, set `docs/metadata/latest-version.txt` to the version of the tag that was just released, without the leading `v`.
-- In the same pull request, advance the plugin version in `.codex-plugin/plugin.json`, the app version in `Packaging/App/Info.plist`, and all native executable versions to the next release version.
+- In the same pull request, advance the APM package version in `apm.yml`, the app version in `Packaging/App/Info.plist`, and all native executable versions to the next release version.
 - Do not advance `docs/metadata/latest-version.txt` before the corresponding GitHub Release is available for download.
 
 ## Shell scripts
 
-- Use `/bin/dash` for `bin/unite-analysis` and other POSIX shell entry points intended for the supported macOS environment.
+- Use `/bin/dash` for POSIX shell entry points intended for the supported macOS environment.
 - Do not replace the Dash shebang with `/bin/sh`; on macOS `/bin/sh` starts Bash, which introduces unwanted compatibility-mode behavior and additional startup overhead.
 - Keep these scripts compatible with Dash and validate them with `dash -n` and ShellCheck's Dash dialect.
 
 ## Release artifact zero trust
 
+- The `release-macos` environment must provide both `MACOS_SIGNING_APPLICATION_IDENTITY` and `MACOS_SIGNING_INSTALLER_IDENTITY`. The signing PKCS#12 secret imported by the release workflow must contain the corresponding Developer ID Application and Developer ID Installer identities.
 - Always run code-signing verification outside the sandbox. Do not treat
   `codesign`, `spctl`, or equivalent results produced inside a sandbox as valid
   evidence that a release artifact's signature is valid or invalid.

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+<installer-gui-script minSpecVersion="2">
+  <title>unite-analysis-swift</title>
+  <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+  <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="true"/>
+  <volume-check>
+    <allowed-os-versions>
+      <os-version min="26.0"/>
+    </allowed-os-versions>
+  </volume-check>
+  <conclusion file="Conclusion.html" mime-type="text/html"/>
+  <choices-outline>
+    <line choice="default"/>
+  </choices-outline>
+  <choice id="default" visible="false">
+    <pkg-ref id="tokyo.kaito.unite-analysis-swift"/>
+  </choice>
+  <pkg-ref id="tokyo.kaito.unite-analysis-swift">
+    <must-close>
+      <app id="tokyo.kaito.unite-analysis-swift"/>
+    </must-close>
+  </pkg-ref>
+  <pkg-ref id="tokyo.kaito.unite-analysis-swift">unite-analysis-swift-component.pkg</pkg-ref>
+</installer-gui-script>
