@@ -81,7 +81,16 @@ private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       }
     }
   case let command as ScanResultCommand:
-    for try await record in command.outputRecords() { records.append(try encodedObject(record)) }
+    for try await record in command.outputRecords() {
+      if let output = command.output {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        var data = try encoder.encode(record)
+        data.append(0x0A)
+        try data.write(to: resolvePath(output), options: .atomic)
+      }
+      records.append(try encodedObject(record))
+    }
   case let command as RecognizeDraftLoadout:
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as RecognizeBlindLoadout:
@@ -108,8 +117,46 @@ private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
   return records
 }
 
+private actor MCPExecutionGate {
+  private var isLocked = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func acquire() async {
+    if !isLocked {
+      isLocked = true
+      return
+    }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    if waiters.isEmpty {
+      isLocked = false
+    } else {
+      waiters.removeFirst().resume()
+    }
+  }
+}
+
 private actor MCPCommandRunner {
+  private let executionGate = MCPExecutionGate()
+
   func run(
+    arguments: [String], currentDirectory: String?, standardInput: String?
+  ) async throws -> String {
+    await executionGate.acquire()
+    do {
+      let result = try await runExclusively(
+        arguments: arguments, currentDirectory: currentDirectory, standardInput: standardInput)
+      await executionGate.release()
+      return result
+    } catch {
+      await executionGate.release()
+      throw error
+    }
+  }
+
+  private func runExclusively(
     arguments: [String], currentDirectory: String?, standardInput: String?
   ) async throws -> String {
     let originalDirectory = FileManager.default.currentDirectoryPath
@@ -140,6 +187,16 @@ private actor MCPCommandRunner {
     defer { if let inputURL { try? FileManager.default.removeItem(at: inputURL) } }
 
     let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(parsedArguments)
+    let requiresStandardInput =
+      (parsed as? BatchFrame)?.jobs == "-"
+      || (parsed as? ContactSheet)?.jobs == "-"
+      || (parsed as? FrameBurst)?.jobs == "-"
+      || (parsed as? OCRCommand)?.jobs == "-"
+      || (parsed as? EvaluateDrawText)?.script == "-"
+    if requiresStandardInput && standardInput == nil {
+      throw ValidationError(
+        "standardInput is required when an MCP command reads from standard input")
+    }
     let command: any ParsableCommand
     if var evaluate = parsed as? EvaluateDrawText, evaluate.script == "-",
       let standardInput

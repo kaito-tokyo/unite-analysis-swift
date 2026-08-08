@@ -164,6 +164,10 @@ jobs:
           if ($actualVersion -ne $expectedVersion) {
               throw "CLI version $actualVersion does not match tag version $expectedVersion."
           }
+          $modelToolVersion = (& $env:MODEL_TOOL_BINARY_PATH --version).Trim()
+          if ($modelToolVersion -ne $expectedVersion) {
+              throw "Model tool version $modelToolVersion does not match tag version $expectedVersion."
+          }
           $pluginVersion = (Get-Content -LiteralPath (Join-Path $env:SOURCE_DIRECTORY '.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
           $appVersion = (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:SOURCE_DIRECTORY 'Packaging/App/Info.plist')).Trim()
           if ($pluginVersion -ne $expectedVersion -or $appVersion -ne $expectedVersion) {
@@ -310,6 +314,8 @@ jobs:
           ditto --norsrc "$SOURCE_DIRECTORY/.codex-plugin" "$plugin_root/.codex-plugin"
           ditto --norsrc "$SOURCE_DIRECTORY/.mcp.json" "$plugin_root/.mcp.json"
           ditto --norsrc "$SOURCE_DIRECTORY/skills" "$plugin_root/skills"
+          ditto --norsrc "$SOURCE_DIRECTORY/LICENSE" "$plugin_root/LICENSE"
+          ditto --norsrc "$SOURCE_DIRECTORY/NOTICE" "$plugin_root/NOTICE"
           ditto --norsrc "$APP_PATH" "$plugin_root/runtime/unite-analysis-swift.app"
           ditto -c -k --keepParent "$plugin_root" "$plugin_archive"
           printf 'plugin_archive_name=%s\n' "${plugin_archive##*/}" >> "$GITHUB_OUTPUT"
