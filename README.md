@@ -42,7 +42,7 @@ Ask your agent to analyze a ポケモンユナイト match recording.
 
 For direct CLI use, run the executable inside the installed app bundle. For
 example, use
-`~/Applications/Kaito-Tokyo Unite Analysis.app/Contents/MacOS/unite-analysis-swift --help`
+`"$HOME/Applications/Kaito-Tokyo Unite Analysis.app/Contents/MacOS/unite-analysis-swift" --help`
 for a per-user installation, or the corresponding path under `/Applications`
 for a system installation.
 
