@@ -41,6 +41,36 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
+      - name: Verify release tag
+        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tagReference = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:GITHUB_REF_NAME" | ConvertFrom-Json
+          if ($tagReference.object.type -ne 'tag') {
+              throw "Release tag $env:GITHUB_REF_NAME must be an annotated tag."
+          }
+
+          $tag = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($tagReference.object.sha)" | ConvertFrom-Json
+          if ($tag.tag -ne $env:GITHUB_REF_NAME) {
+              throw "Annotated tag name $($tag.tag) does not match $env:GITHUB_REF_NAME."
+          }
+          if ($tag.object.type -ne 'commit' -or $tag.object.sha -ne $env:GITHUB_SHA) {
+              throw "Release tag $env:GITHUB_REF_NAME does not point directly to commit $env:GITHUB_SHA."
+          }
+          if (-not $tag.verification.verified -or $tag.verification.reason -ne 'valid') {
+              throw "Release tag $env:GITHUB_REF_NAME does not have a valid signature: $($tag.verification.reason)."
+          }
+
+          $payloadSeparator = $tag.verification.payload.IndexOf("`n`n")
+          if ($payloadSeparator -lt 0) {
+              throw "Release tag $env:GITHUB_REF_NAME has an invalid signed payload."
+          }
+          $signedMessage = $tag.verification.payload.Substring($payloadSeparator + 2)
+          if ($signedMessage -ne "$env:GITHUB_REF_NAME`n") {
+              throw "Release tag message must exactly match $env:GITHUB_REF_NAME."
+          }
+
       - name: Set up APM
         uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
         with:
