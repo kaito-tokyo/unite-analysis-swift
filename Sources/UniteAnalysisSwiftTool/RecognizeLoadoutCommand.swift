@@ -66,7 +66,7 @@ private func defaultDescriptorDatabaseURL() -> URL {
   {
     return URL(fileURLWithPath: path)
   }
-  return UserConfigurationStore.defaultFileURL.deletingLastPathComponent()
+  return (Bundle.main.resourceURL ?? Bundle.main.bundleURL)
     .appendingPathComponent("descriptors.pb")
 }
 
@@ -240,7 +240,7 @@ struct RecognizeDraftLoadout: ParsableCommand {
   var finalPreparationTime: Double
   @Option(name: .customLong("vs-time"), help: "Versus-screen time relative to match start.")
   var versusTime: Double
-  @Option(help: "Combined descriptor database; defaults to Application Support/descriptors.pb.")
+  @Option(help: "Combined descriptor database; defaults to the app bundle resource.")
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
@@ -295,7 +295,7 @@ struct RecognizeBlindLoadout: ParsableCommand {
   @Option(help: "v1 .ldtxrecord path for recording-relative times; exclusive with --record-spec.")
   var input: String?
   @Option(help: "Stable blind-selection screen time relative to match start.") var prepTime: Double
-  @Option(help: "Combined descriptor database; defaults to Application Support/descriptors.pb.")
+  @Option(help: "Combined descriptor database; defaults to the app bundle resource.")
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?

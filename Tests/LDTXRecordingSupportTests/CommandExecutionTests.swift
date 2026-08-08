@@ -42,3 +42,17 @@ import Testing
   #expect(parsed is MCPCommand)
   #expect(!(parsed is any AsyncParsableCommand))
 }
+
+@Test func mcpInterpretsBuiltInCLIOptionsBeforeParsingCommands() throws {
+  let help = try #require(try builtInMCPOutput(arguments: ["--help"]))
+  let helpObject = try #require(
+    JSONSerialization.jsonObject(with: Data(help.utf8)) as? [String: Any])
+  let helpRecords = try #require(helpObject["records"] as? [[String: String]])
+  #expect(helpRecords.first?["text"]?.contains("USAGE: unite-analysis-swift") == true)
+
+  let version = try #require(try builtInMCPOutput(arguments: ["--version"]))
+  let versionObject = try #require(
+    JSONSerialization.jsonObject(with: Data(version.utf8)) as? [String: Any])
+  let versionRecords = try #require(versionObject["records"] as? [[String: String]])
+  #expect(versionRecords == [["text": UniteAnalysisSwiftCommand.configuration.version]])
+}

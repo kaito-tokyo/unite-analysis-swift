@@ -30,6 +30,13 @@ private func failureObject(_ failure: JSONLJobFailure) -> [String: Any] {
   ]
 }
 
+package func builtInMCPOutput(arguments: [String]) throws -> String? {
+  guard let output = builtInCLIOutput(arguments: arguments) else { return nil }
+  let data = try JSONSerialization.data(
+    withJSONObject: ["records": [["text": output]]], options: [.sortedKeys])
+  return String(decoding: data, as: UTF8.self)
+}
+
 private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] {
   var records: [Any] = []
   switch parsed {
@@ -116,6 +123,10 @@ private actor MCPCommandRunner {
       }
     }
     defer { _ = FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+
+    if let output = try builtInMCPOutput(arguments: arguments) {
+      return output
+    }
 
     var parsedArguments = arguments
     var inputURL: URL?

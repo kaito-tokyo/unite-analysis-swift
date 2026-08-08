@@ -19,7 +19,8 @@ case "${1-}" in
       printf "unite-analysis: unite-analysis-swift is not installed. Run 'unite-analysis download'.\n" >&2
       exit 69
     fi
-    exec "$executable" "$@"
+    UNITE_ANALYSIS_DESCRIPTOR_DATABASE="$application_support_directory/descriptors.pb" \
+      exec "$executable" "$@"
     ;;
   model-tool)
     shift
