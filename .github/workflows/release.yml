@@ -23,10 +23,11 @@ env:
 jobs:
   validate-release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     permissions:
       actions: read
+      checks: read
       contents: read
 
     outputs:
@@ -69,16 +70,24 @@ jobs:
               throw "Release commit $env:GITHUB_SHA is not contained in main."
           }
 
-      - name: Find successful main push
+      - name: Wait for successful main push
         id: swift-run
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $runId = gh run list --workflow push-main.yml --branch main --commit $env:GITHUB_SHA --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId'
-          if ([string]::IsNullOrWhiteSpace($runId)) {
-              throw "Successful main push run was not found for release commit $env:GITHUB_SHA."
+          $runId = $null
+          foreach ($attempt in 1..60) {
+              $runId = gh run list --workflow push-main.yml --branch main --commit $env:GITHUB_SHA --event push --limit 1 --json databaseId --jq '.[0].databaseId'
+              if (-not [string]::IsNullOrWhiteSpace($runId)) {
+                  break
+              }
+              Start-Sleep -Seconds 5
           }
+          if ([string]::IsNullOrWhiteSpace($runId)) {
+              throw "Main push run was not found for release commit $env:GITHUB_SHA."
+          }
+          gh run watch $runId --compact --exit-status
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "run_id=$runId" -Encoding utf8
 
   sign-release:

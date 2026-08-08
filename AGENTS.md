@@ -6,6 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Repository instructions
 
+## Protected files
+
+- Agents must not edit `README.md`. Changes to `README.md` are reserved for human maintainers.
+
 ## Local instructions
 
 - If `AGENTS.local.md` exists in the repository root, read it completely before performing dataset-related work.
@@ -30,11 +34,15 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Release follow-up
 
+- Release tags must be signed annotated tags.
+- The annotated tag message must exactly match the tag name. For example, tag `v0.1.4` must have the message `v0.1.4` with no additional text.
 - After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
-- Treat the version bump as one combined operation: update the published latest-version notification to the newest Git tag and prepare the package and CLI for the next release.
-- In that pull request, set `docs/metadata/latest-version.txt` to the version of the tag that was just released, without the leading `v`.
-- In the same pull request, advance the APM package version in `apm.yml`, the app version in `Packaging/App/Info.plist`, and all native executable versions to the next release version.
-- Do not advance `docs/metadata/latest-version.txt` before the corresponding GitHub Release is available for download.
+- Keep two distinct version values on `main`:
+  - `apm.yml` and the native CLI `--version` must always contain the next, unreleased version. No Git tag for that version may exist yet.
+  - `README.md` and `docs/metadata/latest-version.txt` must always contain the newest released version, for which a Git tag already exists.
+- Treat the post-release version update as one combined operation: update `docs/metadata/latest-version.txt` to the version of the newly published tag, without the leading `v`, and advance `apm.yml`, `Packaging/App/Info.plist`, and all native executable versions to the following release version.
+- Do not advance `docs/metadata/latest-version.txt` or the released-version references in `README.md` before the corresponding GitHub Release is available for download.
+- Because agents must not edit `README.md`, report any stale or inconsistent released-version reference there for a human maintainer to update.
 
 ## Shell scripts
 
