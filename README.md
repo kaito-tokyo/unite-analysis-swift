@@ -17,7 +17,7 @@ A macOS command-line tool for extracting and analyzing evidence from
 
 Download the signed and notarized macOS installer package from
 [GitHub Releases](https://github.com/kaito-tokyo/unite-analysis-swift/releases/latest).
-Apple Installer can place `unite-analysis-swift.app` in either the current
+Apple Installer can place `Kaito-Tokyo Unite Analysis.app` in either the current
 user's `~/Applications` directory or the system `/Applications` directory.
 
 Install the review skill and MCP configuration with
@@ -42,7 +42,7 @@ Ask your agent to analyze a ポケモンユナイト match recording.
 
 For direct CLI use, run the executable inside the installed app bundle. For
 example, use
-`~/Applications/unite-analysis-swift.app/Contents/MacOS/unite-analysis-swift --help`
+`~/Applications/Kaito-Tokyo Unite Analysis.app/Contents/MacOS/unite-analysis-swift --help`
 for a per-user installation, or the corresponding path under `/Applications`
 for a system installation.
 

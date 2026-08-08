@@ -17,7 +17,7 @@ SPDX-License-Identifier: Apache-2.0
     <key>BundleOverwriteAction</key>
     <string>upgrade</string>
     <key>RootRelativeBundlePath</key>
-    <string>unite-analysis-swift.app</string>
+    <string>Kaito-Tokyo Unite Analysis.app</string>
   </dict>
 </array>
 </plist>

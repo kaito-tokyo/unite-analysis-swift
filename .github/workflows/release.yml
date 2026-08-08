@@ -228,7 +228,7 @@ jobs:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
         run: |
-          app_path="$RUNNER_TEMP/unite-analysis-swift.app"
+          app_path="$RUNNER_TEMP/Kaito-Tokyo Unite Analysis.app"
           mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
           ditto --norsrc "$SOURCE_DIRECTORY/Packaging/App/Info.plist" "$app_path/Contents/Info.plist"
           ditto --norsrc "$RUNTIME_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-swift"
@@ -257,7 +257,7 @@ jobs:
           installer_package="$RUNNER_TEMP/$artifact_name.pkg"
 
           mkdir -p "$component_root"
-          ditto --norsrc "$APP_PATH" "$component_root/unite-analysis-swift.app"
+          ditto --norsrc "$APP_PATH" "$component_root/Kaito-Tokyo Unite Analysis.app"
           COPYFILE_DISABLE=1 pkgbuild \
             --root "$component_root" \
             --component-plist "$SOURCE_DIRECTORY/Packaging/Installer/Components.plist" \

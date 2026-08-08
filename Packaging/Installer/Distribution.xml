@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 <installer-gui-script minSpecVersion="2">
-  <title>unite-analysis-swift</title>
+  <title>Kaito-Tokyo Unite Analysis</title>
   <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
   <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="true"/>
   <volume-check>
