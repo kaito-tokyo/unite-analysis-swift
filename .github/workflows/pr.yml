@@ -17,6 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-ci:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check-ci.yml
+
   swift-ci:
     permissions:
       contents: read

@@ -21,10 +21,6 @@ on:
         description: Name of the uploaded unsigned release archive
         value: ${{ jobs.swift-ci.outputs.UNSIGNED_ARM64_ARTIFACT_NAME }}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-swift-ci
-  cancel-in-progress: true
-
 jobs:
   swift-ci:
     runs-on: macos-26
