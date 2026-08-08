@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: unite-analysis-swift
-version: 0.1.4
+version: 0.1.5
 description: Pokémon UNITE recording evidence tools and match-review skill.
 author: Kaito Udagawa
 license: Apache-2.0
@@ -20,7 +20,7 @@ dependencies:
       args:
         - -c
         - |
-          expected_version=0.1.4
+          expected_version=0.1.5
           for app in "$HOME/Applications/Kaito-Tokyo Unite Analysis.app" "/Applications/Kaito-Tokyo Unite Analysis.app"; do
             executable="$app/Contents/MacOS/unite-analysis-swift"
             if [ -x "$executable" ] && [ "$("$executable" --version 2>/dev/null)" = "$expected_version" ]; then
