@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Protected files
 
-- Agents must not edit `README.md`. Changes to `README.md` are reserved for human maintainers.
+- Agents may edit `README.md` only in a post-release pull request whose branch is named `bump/<next-version>`. In every other branch or pull request, changes to `README.md` are reserved for human maintainers.
 
 ## Local instructions
 
@@ -41,12 +41,13 @@ SPDX-License-Identifier: Apache-2.0
 - The annotated tag message must exactly match the tag name. For example, tag `v0.1.4` must have the message `v0.1.4` with no additional text.
 - After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
 - Name the post-release follow-up branch `bump/<next-version>`, for example `bump/0.1.5`.
+- Treat a `bump/<next-version>` pull request as a special, narrowly scoped pull request whose only purpose is to align released-version references and advance unreleased-version values after a release. The permission to edit `README.md` is exclusive to this narrow scope; do not include features, fixes, refactors, or unrelated maintenance in a bump pull request.
 - Keep two distinct version values on `main`:
   - `apm.yml` and the native CLI `--version` must always contain the next, unreleased version. No Git tag for that version may exist yet.
   - `README.md` and `docs/metadata/latest-version.txt` must always contain the newest released version, for which a Git tag already exists.
-- Treat the post-release version update as one combined operation: update `docs/metadata/latest-version.txt` to the version of the newly published tag, without the leading `v`, and advance `apm.yml`, `Contents/Info.plist`, and all native executable versions to the following release version.
+- Treat the post-release version update as one combined operation: update `README.md` and `docs/metadata/latest-version.txt` to the version of the newly published tag, using each file's existing version format, and advance `apm.yml`, `Contents/Info.plist`, and all native executable versions to the following release version.
 - Do not advance `docs/metadata/latest-version.txt` or the released-version references in `README.md` before the corresponding GitHub Release is available for download.
-- Because agents must not edit `README.md`, report any stale or inconsistent released-version reference there for a human maintainer to update.
+- Outside a `bump/<next-version>` post-release pull request, report any stale or inconsistent released-version reference in `README.md` for a human maintainer to update instead of editing it.
 
 ## Shell scripts
 
