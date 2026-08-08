@@ -20,7 +20,7 @@ jobs:
   check-ci:
     permissions:
       contents: read
-    uses: ./.github/workflows/check-ci.yml
+    uses: ./.github/workflows/check.yml
 
   swift-ci:
     permissions:

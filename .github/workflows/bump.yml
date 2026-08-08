@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bump CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  check-bump-version:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        if: startsWith(github.head_ref, 'bump/')
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get versions
+        id: versions
+        if: startsWith(github.head_ref, 'bump/')
+        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          $publishedTags = @(git tag --list 'v*' --sort=-version:refname)
+          if ($publishedTags.Count -eq 0) {
+              throw 'No published version tag was found.'
+          }
+          $publishedTag = $publishedTags[0].Trim()
+          if ($publishedTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+              throw "Latest version tag is invalid: $publishedTag"
+          }
+          $publishedVersion = $publishedTag.Substring(1)
+
+          $branchPrefix = 'bump/'
+          if (-not $env:BRANCH_NAME.StartsWith($branchPrefix)) {
+              throw 'Version bump branches must be named bump/<major>.<minor>.<patch>.'
+          }
+          $nextVersion = $env:BRANCH_NAME.Substring($branchPrefix.Length)
+          if ($nextVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+              throw 'Version bump branches must be named bump/<major>.<minor>.<patch>.'
+          }
+
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "published_version=$publishedVersion" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "next_version=$nextVersion" -Encoding utf8
+
+      - name: Check versions
+        if: startsWith(github.head_ref, 'bump/')
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          PUBLISHED: ${{ steps.versions.outputs.published_version }}
+          NEXT: ${{ steps.versions.outputs.next_version }}
+        run: |
+          require_version() {
+            grep -Fq "$1" "$2" || { echo "Missing version $1 in $2." >&2; exit 1; }
+          }
+
+          require_version "$PUBLISHED" docs/metadata/latest-version.txt
+
+          require_version "$NEXT" apm.yml
+          require_version "$NEXT" Contents/Info.plist
+          require_version "$NEXT" Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift
+          require_version "$NEXT" Sources/UniteAnalysisModelTool/UniteAnalysisModelToolCommand.swift
+          require_version "$NEXT" Tests/LDTXRecordingSupportTests/ModelToolTests.swift
+
+      - name: Pass unless bump PR
+        if: "!startsWith(github.head_ref, 'bump/')"
+        run: echo OK
