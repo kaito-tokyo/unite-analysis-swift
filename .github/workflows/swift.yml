@@ -119,12 +119,12 @@ jobs:
             -C "$GITHUB_WORKSPACE/Models" \
             descriptors.pb \
             -C "$GITHUB_WORKSPACE" \
-            .codex-plugin \
-            .mcp.json \
-            skills \
+            apm.yml \
             LICENSE \
             NOTICE \
-            Packaging/App/Info.plist
+            Packaging/App/Info.plist \
+            Packaging/Installer/Components.plist \
+            Packaging/Installer/Distribution.xml
 
       - name: Attest release products
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2

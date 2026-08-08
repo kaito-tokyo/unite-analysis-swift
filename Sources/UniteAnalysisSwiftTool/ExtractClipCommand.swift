@@ -20,7 +20,7 @@ struct ExtractClip: ParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis swift extract-clip --record-spec _PokemonUniteMatches/match-01/record-spec.json --start 420 --end 510 --output _PokemonUniteAnalysis/matches/match-01/final-stretch.mp4
+      unite-analysis-swift extract-clip --record-spec _PokemonUniteMatches/match-01/record-spec.json --start 420 --end 510 --output _PokemonUniteAnalysis/matches/match-01/final-stretch.mp4
 
       COPYING. AVAssetExportPresetPassthrough copies compatible compressed audio and video samples
       without decoding and re-encoding them. The requested start does not create a new video

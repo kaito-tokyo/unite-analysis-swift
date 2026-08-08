@@ -16,7 +16,7 @@ struct SampleFrames: ParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis swift sample-frames --record-spec _PokemonUniteMatches/match-01/record-spec.json --crop-x 430 --crop-y 105 --crop-width 800 --crop-height 115 --fps 2 --scale-x 400 --scale-y 58 --output sampled/top-event-banner/frame-%06d.jpg --quality 0.95
+      unite-analysis-swift sample-frames --record-spec _PokemonUniteMatches/match-01/record-spec.json --crop-x 430 --crop-y 105 --crop-width 800 --crop-height 115 --fps 2 --scale-x 400 --scale-y 58 --output sampled/top-event-banner/frame-%06d.jpg --quality 0.95
 
       INPUT. --record-spec identifies one match. Run from the .ldtxrecord root; this caller responsibility is not checked separately. Relative output paths use the current directory.
 

@@ -17,17 +17,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DMG_PREDICATE_TYPE: https://kaito.tokyo/attestations/apple-notarized-disk-image/v1
-  PLUGIN_PREDICATE_TYPE: https://kaito.tokyo/attestations/codex-plugin/v1
+  PKG_PREDICATE_TYPE: https://kaito.tokyo/attestations/apple-notarized-installer-package/v1
   UNSIGNED_ARCHIVE_NAME: unite-analysis-swift-unsigned-macos-arm64-${{ github.sha }}.tar.gz
 
 jobs:
   validate-release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 60
 
     permissions:
       actions: read
+      checks: read
       contents: read
 
     outputs:
@@ -41,13 +41,53 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      - name: Check plugin package version
+      - name: Verify release tag
+        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tagReference = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:GITHUB_REF_NAME" | ConvertFrom-Json
+          if ($tagReference.object.type -ne 'tag') {
+              throw "Release tag $env:GITHUB_REF_NAME must be an annotated tag."
+          }
+
+          $tag = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($tagReference.object.sha)" | ConvertFrom-Json
+          if ($tag.tag -ne $env:GITHUB_REF_NAME) {
+              throw "Annotated tag name $($tag.tag) does not match $env:GITHUB_REF_NAME."
+          }
+          if ($tag.object.type -ne 'commit' -or $tag.object.sha -ne $env:GITHUB_SHA) {
+              throw "Release tag $env:GITHUB_REF_NAME does not point directly to commit $env:GITHUB_SHA."
+          }
+          if (-not $tag.verification.verified -or $tag.verification.reason -ne 'valid') {
+              throw "Release tag $env:GITHUB_REF_NAME does not have a valid signature: $($tag.verification.reason)."
+          }
+
+          $payloadSeparator = $tag.verification.payload.IndexOf("`n`n")
+          if ($payloadSeparator -lt 0) {
+              throw "Release tag $env:GITHUB_REF_NAME has an invalid signed payload."
+          }
+          $signedMessage = $tag.verification.payload.Substring($payloadSeparator + 2)
+          if ($signedMessage -ne "$env:GITHUB_REF_NAME`n") {
+              throw "Release tag message must exactly match $env:GITHUB_REF_NAME."
+          }
+
+      - name: Set up APM
+        uses: microsoft/apm-action@d723bb64ed70c135bbaf87d126b721dd2dae0439 # v1.10.0
+        with:
+          apm-version: 0.27.0
+          setup-only: true
+
+      - name: Validate APM package
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: apm pack --format plugin --offline --dry-run
+
+      - name: Check APM package version
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
         run: |
-          $packageVersion = (jq -er '.version' .codex-plugin/plugin.json).Trim()
+          $packageVersion = (ruby -ryaml -e 'version = YAML.safe_load(File.read("apm.yml"))["version"]; abort "Missing APM package version." unless version.is_a?(String); puts version').Trim()
           $tagVersion = $env:GITHUB_REF_NAME.Substring(1)
           if ($packageVersion -ne $tagVersion) {
-              throw "Plugin version $packageVersion does not match tag version $tagVersion."
+              throw "APM package version $packageVersion does not match tag version $tagVersion."
           }
 
       - name: Check if the release commit belongs to main
@@ -60,16 +100,24 @@ jobs:
               throw "Release commit $env:GITHUB_SHA is not contained in main."
           }
 
-      - name: Find successful main push
+      - name: Wait for successful main push
         id: swift-run
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $runId = gh run list --workflow push-main.yml --branch main --commit $env:GITHUB_SHA --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId'
-          if ([string]::IsNullOrWhiteSpace($runId)) {
-              throw "Successful main push run was not found for release commit $env:GITHUB_SHA."
+          $runId = $null
+          foreach ($attempt in 1..60) {
+              $runId = gh run list --workflow push-main.yml --branch main --commit $env:GITHUB_SHA --event push --limit 1 --json databaseId --jq '.[0].databaseId'
+              if (-not [string]::IsNullOrWhiteSpace($runId)) {
+                  break
+              }
+              Start-Sleep -Seconds 5
           }
+          if ([string]::IsNullOrWhiteSpace($runId)) {
+              throw "Main push run was not found for release commit $env:GITHUB_SHA."
+          }
+          gh run watch $runId --compact --exit-status
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "run_id=$runId" -Encoding utf8
 
   sign-release:
@@ -82,6 +130,7 @@ jobs:
       APP_STORE_CONNECT_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
+      MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
       MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
       MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
 
@@ -93,8 +142,7 @@ jobs:
       id-token: write
 
     outputs:
-      disk_image_name: ${{ steps.package.outputs.disk_image_name }}
-      plugin_archive_name: ${{ steps.package-plugin.outputs.plugin_archive_name }}
+      installer_package_name: ${{ steps.package.outputs.installer_package_name }}
 
     steps:
       - name: Download release build
@@ -150,9 +198,10 @@ jobs:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
           DESCRIPTORS_PATH: ${{ steps.release-build.outputs.staging_directory }}/descriptors.pb
+          NOTICE_PATH: ${{ steps.release-build.outputs.staging_directory }}/NOTICE
           SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
         run: |
-          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH)) {
+          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH, $env:NOTICE_PATH)) {
               if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
                   throw "Release product $productPath is missing."
               }
@@ -168,10 +217,11 @@ jobs:
           if ($modelToolVersion -ne $expectedVersion) {
               throw "Model tool version $modelToolVersion does not match tag version $expectedVersion."
           }
-          $pluginVersion = (Get-Content -LiteralPath (Join-Path $env:SOURCE_DIRECTORY '.codex-plugin/plugin.json') -Raw | ConvertFrom-Json).version
+          $apmPath = Join-Path $env:SOURCE_DIRECTORY 'apm.yml'
+          $apmVersion = (ruby -ryaml -e 'version = YAML.safe_load(File.read(ARGV.fetch(0)))["version"]; abort "Missing APM package version." unless version.is_a?(String); puts version' $apmPath).Trim()
           $appVersion = (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:SOURCE_DIRECTORY 'Packaging/App/Info.plist')).Trim()
-          if ($pluginVersion -ne $expectedVersion -or $appVersion -ne $expectedVersion) {
-              throw "Plugin ($pluginVersion), app ($appVersion), and tag ($expectedVersion) versions must match."
+          if ($apmVersion -ne $expectedVersion -or $appVersion -ne $expectedVersion) {
+              throw "APM package ($apmVersion), app ($appVersion), and tag ($expectedVersion) versions must match."
           }
 
           $descriptorsDigest = (Get-FileHash -LiteralPath $env:DESCRIPTORS_PATH -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -218,131 +268,79 @@ jobs:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
         run: |
-          app_path="$RUNNER_TEMP/unite-analysis-swift.app"
+          app_path="$RUNNER_TEMP/Kaito-Tokyo Unite Analysis.app"
           mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
           ditto --norsrc "$SOURCE_DIRECTORY/Packaging/App/Info.plist" "$app_path/Contents/Info.plist"
           ditto --norsrc "$RUNTIME_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-swift"
           ditto --norsrc "$MODEL_TOOL_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-model-tool"
           ditto --norsrc "$SOURCE_DIRECTORY/descriptors.pb" "$app_path/Contents/Resources/descriptors.pb"
+          ditto --norsrc "$SOURCE_DIRECTORY/NOTICE" "$app_path/Contents/Resources/NOTICE"
           codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$app_path"
           codesign --verify --strict --verbose=2 "$app_path"
           printf 'app_path=%s\n' "$app_path" >> "$GITHUB_OUTPUT"
 
-      - name: Notarize and staple app bundle
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          APP_PATH: ${{ steps.app.outputs.app_path }}
-        run: |
-          key_path="$(mktemp)"
-          submission_path="$RUNNER_TEMP/unite-analysis-swift-notarization.zip"
-          trap 'rm -f "$key_path" "$submission_path"' EXIT
-          printf '%s' "$APP_STORE_CONNECT_KEY_BASE64" | base64 -D > "$key_path"
-          chmod 600 "$key_path"
-          ditto -c -k --keepParent "$APP_PATH" "$submission_path"
-          xcrun notarytool submit "$submission_path" \
-            --key "$key_path" \
-            --key-id "$APP_STORE_CONNECT_KEY_ID" \
-            --issuer "$APP_STORE_CONNECT_ISSUER" \
-            --wait
-          xcrun stapler staple "$APP_PATH"
-          xcrun stapler validate "$APP_PATH"
-          codesign --verify --strict --check-notarization --verbose=2 "$APP_PATH"
-          spctl --assess --type execute --verbose=2 "$APP_PATH"
-
-      - name: Package release products
+      - name: Package and sign installer
         id: package
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
+          APP_PATH: ${{ steps.app.outputs.app_path }}
           SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
         run: |
-          architecture="$(uname -m)"
-          artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$architecture"
-          staging_directory="$RUNNER_TEMP/$artifact_name"
-          disk_image_path="$RUNNER_TEMP/$artifact_name.dmg"
-
-          mkdir -p "$staging_directory"
-          for product in unite-analysis-swift unite-analysis-model-tool descriptors.pb; do
-            ditto --norsrc "$SOURCE_DIRECTORY/$product" "$staging_directory/$product"
-          done
-          hdiutil create \
-            -srcfolder "$staging_directory" \
-            -volname "$artifact_name" \
-            -format ULFO \
-            "$disk_image_path"
-          hdiutil verify "$disk_image_path"
-          disk_image_format="$(hdiutil imageinfo -format "$disk_image_path")"
-          if [[ "$disk_image_format" != ULFO ]]; then
-            echo "Release disk image has unexpected format $disk_image_format." >&2
+          if [[ -z "$MACOS_SIGNING_INSTALLER_IDENTITY" ]]; then
+            echo 'MACOS_SIGNING_INSTALLER_IDENTITY is not configured.' >&2
             exit 1
           fi
-          codesign --force --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$disk_image_path"
-          codesign --verify --strict --verbose=2 "$disk_image_path"
-          printf 'disk_image_name=%s.dmg\n' "$artifact_name" >> "$GITHUB_OUTPUT"
-          printf 'disk_image_path=%s\n' "$disk_image_path" >> "$GITHUB_OUTPUT"
 
-      - name: Notarize and staple disk image
+          architecture="$(uname -m)"
+          artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$architecture"
+          component_root="$RUNNER_TEMP/installer-root"
+          component_package="$RUNNER_TEMP/unite-analysis-swift-component.pkg"
+          installer_package="$RUNNER_TEMP/$artifact_name.pkg"
+
+          mkdir -p "$component_root"
+          ditto --norsrc "$APP_PATH" "$component_root/Kaito-Tokyo Unite Analysis.app"
+          COPYFILE_DISABLE=1 pkgbuild \
+            --root "$component_root" \
+            --component-plist "$SOURCE_DIRECTORY/Packaging/Installer/Components.plist" \
+            --identifier tokyo.kaito.unite-analysis-swift \
+            --version "${GITHUB_REF_NAME#v}" \
+            --install-location /Applications \
+            "$component_package"
+          productbuild \
+            --distribution "$SOURCE_DIRECTORY/Packaging/Installer/Distribution.xml" \
+            --package-path "$RUNNER_TEMP" \
+            --resources "$SOURCE_DIRECTORY" \
+            --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
+            "$installer_package"
+          pkgutil --check-signature "$installer_package"
+          printf 'installer_package_name=%s.pkg\n' "$artifact_name" >> "$GITHUB_OUTPUT"
+          printf 'installer_package_path=%s\n' "$installer_package" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize and staple installer
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          DISK_IMAGE_PATH: ${{ steps.package.outputs.disk_image_path }}
+          INSTALLER_PACKAGE_PATH: ${{ steps.package.outputs.installer_package_path }}
         run: |
           key_path="$(mktemp)"
           trap 'rm -f "$key_path"' EXIT
           printf '%s' "$APP_STORE_CONNECT_KEY_BASE64" | base64 -D > "$key_path"
           chmod 600 "$key_path"
 
-          xcrun notarytool submit "$DISK_IMAGE_PATH" \
+          xcrun notarytool submit "$INSTALLER_PACKAGE_PATH" \
             --key "$key_path" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --issuer "$APP_STORE_CONNECT_ISSUER" \
             --wait
-          xcrun stapler staple "$DISK_IMAGE_PATH"
-          xcrun stapler validate "$DISK_IMAGE_PATH"
-          hdiutil verify "$DISK_IMAGE_PATH"
-          codesign --verify --strict --check-notarization --verbose=2 "$DISK_IMAGE_PATH"
-          spctl --assess --type open --context context:primary-signature --verbose=2 "$DISK_IMAGE_PATH"
+          xcrun stapler staple "$INSTALLER_PACKAGE_PATH"
+          xcrun stapler validate "$INSTALLER_PACKAGE_PATH"
+          pkgutil --check-signature "$INSTALLER_PACKAGE_PATH"
+          spctl --assess --type install --verbose=2 "$INSTALLER_PACKAGE_PATH"
 
-      - name: Package Codex plugin
-        id: package-plugin
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          APP_PATH: ${{ steps.app.outputs.app_path }}
-          SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
-        run: |
-          plugin_root="$RUNNER_TEMP/unite-analysis-swift"
-          plugin_archive="$RUNNER_TEMP/unite-analysis-swift-$GITHUB_REF_NAME-codex-plugin.zip"
-          mkdir -p "$plugin_root/runtime"
-          ditto --norsrc "$SOURCE_DIRECTORY/.codex-plugin" "$plugin_root/.codex-plugin"
-          ditto --norsrc "$SOURCE_DIRECTORY/.mcp.json" "$plugin_root/.mcp.json"
-          ditto --norsrc "$SOURCE_DIRECTORY/skills" "$plugin_root/skills"
-          ditto --norsrc "$SOURCE_DIRECTORY/LICENSE" "$plugin_root/LICENSE"
-          ditto --norsrc "$SOURCE_DIRECTORY/NOTICE" "$plugin_root/NOTICE"
-          ditto --norsrc "$APP_PATH" "$plugin_root/runtime/unite-analysis-swift.app"
-          ditto -c -k --keepParent "$plugin_root" "$plugin_archive"
-          printf 'plugin_archive_name=%s\n' "${plugin_archive##*/}" >> "$GITHUB_OUTPUT"
-          printf 'plugin_archive_path=%s\n' "$plugin_archive" >> "$GITHUB_OUTPUT"
-
-      - name: Attest Codex plugin
+      - name: Attest installer package
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ steps.package-plugin.outputs.plugin_archive_path }}
-          predicate-type: ${{ env.PLUGIN_PREDICATE_TYPE }}
-          predicate: |
-            {
-              "plugin": "unite-analysis-swift",
-              "version": "${{ github.ref_name }}",
-              "app_bundle": "unite-analysis-swift.app",
-              "input_archive": {
-                "name": "${{ env.UNSIGNED_ARCHIVE_NAME }}",
-                "sha256": "${{ steps.release-attestation.outputs.archive_sha256 }}"
-              },
-              "source_commit": "${{ github.sha }}"
-            }
-
-      - name: Attest release disk image
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ steps.package.outputs.disk_image_path }}
-          predicate-type: ${{ env.DMG_PREDICATE_TYPE }}
+          subject-path: ${{ steps.package.outputs.installer_package_path }}
+          predicate-type: ${{ env.PKG_PREDICATE_TYPE }}
           predicate: |
             {
               "input": {
@@ -370,14 +368,18 @@ jobs:
               },
               "operations": [
                 {
-                  "name": "create-disk-image",
-                  "tool": "hdiutil",
-                  "format": "ULFO"
+                  "name": "assemble-app-bundle",
+                  "tool": "ditto"
                 },
                 {
                   "name": "apple-codesign",
                   "tool": "codesign",
                   "identity": ${{ toJSON(vars.MACOS_SIGNING_APPLICATION_IDENTITY) }}
+                },
+                {
+                  "name": "build-installer-package",
+                  "tool": "pkgbuild-and-productbuild",
+                  "identity": ${{ toJSON(vars.MACOS_SIGNING_INSTALLER_IDENTITY) }}
                 },
                 {
                   "name": "apple-notarization",
@@ -391,18 +393,10 @@ jobs:
               "source_commit": "${{ github.sha }}"
             }
 
-      - name: Upload signed release disk image
+      - name: Upload signed installer package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: ${{ steps.package.outputs.disk_image_path }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload Codex plugin
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          path: ${{ steps.package-plugin.outputs.plugin_archive_path }}
+          path: ${{ steps.package.outputs.installer_package_path }}
           archive: false
           if-no-files-found: error
           retention-days: 30
@@ -424,42 +418,21 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      - name: Download signed release disk image
+      - name: Download signed installer package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.sign-release.outputs.disk_image_name }}
+          name: ${{ needs.sign-release.outputs.installer_package_name }}
           path: ${{ runner.temp }}/signed-release
 
-      - name: Download Codex plugin
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.sign-release.outputs.plugin_archive_name }}
-          path: ${{ runner.temp }}/signed-release
-
-      - name: Verify release disk image attestation
+      - name: Verify installer package attestation
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
-          DISK_IMAGE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.disk_image_name }}
+          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.installer_package_name }}
         run: |
-          gh attestation verify "$DISK_IMAGE_PATH" \
+          gh attestation verify "$INSTALLER_PACKAGE_PATH" \
             --repo "$GITHUB_REPOSITORY" \
-            --predicate-type "$DMG_PREDICATE_TYPE" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-            --source-ref "$GITHUB_REF" \
-            --source-digest "$GITHUB_SHA" \
-            --signer-digest "$GITHUB_SHA" \
-            --deny-self-hosted-runners
-
-      - name: Verify Codex plugin attestation
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PLUGIN_ARCHIVE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.plugin_archive_name }}
-        run: |
-          gh attestation verify "$PLUGIN_ARCHIVE_PATH" \
-            --repo "$GITHUB_REPOSITORY" \
-            --predicate-type "$PLUGIN_PREDICATE_TYPE" \
+            --predicate-type "$PKG_PREDICATE_TYPE" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
             --source-ref "$GITHUB_REF" \
             --source-digest "$GITHUB_SHA" \
@@ -469,8 +442,7 @@ jobs:
       - name: Create or update draft GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          DISK_IMAGE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.disk_image_name }}
-          PLUGIN_ARCHIVE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.plugin_archive_name }}
+          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.installer_package_name }}
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
           git fetch --force --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-verification/tag"
@@ -481,9 +453,9 @@ jobs:
           fi
 
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$DISK_IMAGE_PATH" "$PLUGIN_ARCHIVE_PATH" --clobber
+            gh release upload "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$DISK_IMAGE_PATH" "$PLUGIN_ARCHIVE_PATH" \
+            gh release create "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" \
               --draft \
               --generate-notes \
               --title "$GITHUB_REF_NAME" \

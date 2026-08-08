@@ -23,7 +23,7 @@ struct PreciseFrame: ParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 45.5 --x 0 --y 0 --width 640 --height 360 --output screenshots/precise.jpg
+      unite-analysis-swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 45.5 --x 0 --y 0 --width 640 --height 360 --output screenshots/precise.jpg
 
       TIMING. --match-timestamp is one finite second value relative to match start. Negative values select pre-match frames. Values above the match duration select post-match frames. The resolved recording time must remain inside the source video.
 
