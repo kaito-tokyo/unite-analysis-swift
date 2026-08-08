@@ -74,12 +74,20 @@ private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
   case let command as ExtractClip:
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as OCRCommand:
+    let writer = try command.output.map { try JSONLResponseWriter(output: $0) }
     for try await record in command.outputRecords() {
       switch record {
-      case .success(let output): records.append(try encodedObject(output))
-      case .failure(let failure): records.append(failureObject(failure))
+      case .success(let output):
+        try writer?.write(output)
+        records.append(try encodedObject(output))
+      case .failure(let failure):
+        if let writer {
+          try writeJSONLFailure(failure, schema: OCRCommandOutput.schemaURL, to: writer)
+        }
+        records.append(failureObject(failure))
       }
     }
+    try writer?.finish()
   case let command as ScanResultCommand:
     for try await record in command.outputRecords() {
       if let output = command.output {

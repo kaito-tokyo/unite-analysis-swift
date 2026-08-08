@@ -122,6 +122,8 @@ jobs:
             .codex-plugin \
             .mcp.json \
             skills \
+            LICENSE \
+            NOTICE \
             Packaging/App/Info.plist
 
       - name: Attest release products

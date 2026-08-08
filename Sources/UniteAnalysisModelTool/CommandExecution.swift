@@ -6,6 +6,9 @@ import ArgumentParser
 import Foundation
 
 package func modelBuiltInCLIOutput(arguments: [String]) -> String? {
+  if arguments == ["--version"] {
+    return UniteAnalysisModelCommand.configuration.version
+  }
   let helpRequested = arguments.last == "--help" || arguments.last == "-h"
   let helpPath: [String]
   if arguments.first == "help" {

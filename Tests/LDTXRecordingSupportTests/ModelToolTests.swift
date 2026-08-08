@@ -7,6 +7,10 @@ import Foundation
 import Testing
 import UniteAnalysisModelCommands
 
+@Test func modelToolVersionIsHandledAsBuiltInOutput() {
+  #expect(modelBuiltInCLIOutput(arguments: ["--version"]) == "0.1.4")
+}
+
 @Test func modelToolHelpDescribesBuildCommand() {
   let help = UniteAnalysisModelCommand.helpMessage()
   #expect(help.contains("USAGE: unite-analysis-model-tool <subcommand>"))
