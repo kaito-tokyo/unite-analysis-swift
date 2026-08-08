@@ -1,0 +1,142 @@
+<!doctype html>
+<!--
+SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Verify a Unite Analysis release</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        line-height: 1.55;
+      }
+
+      body {
+        margin: 0 auto;
+        max-width: 52rem;
+        padding: 2rem 1rem 4rem;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.2;
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, monospace;
+      }
+
+      code {
+        overflow-wrap: anywhere;
+      }
+
+      pre {
+        border: 1px solid currentcolor;
+        border-radius: 0.4rem;
+        overflow-x: auto;
+        padding: 1rem;
+        white-space: pre;
+      }
+
+      .note {
+        border-inline-start: 0.25rem solid #b8860b;
+        padding-inline-start: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Verify a Unite Analysis release</h1>
+      <p>
+        These steps verify that a macOS installer package is the artifact
+        attested by the Unite Analysis release workflow. They also verify its
+        Apple Developer ID signature and notarization ticket.
+      </p>
+
+      <h2>Requirements</h2>
+      <ul>
+        <li>macOS 26 or later on Apple silicon</li>
+        <li><a href="https://cli.github.com/">GitHub CLI</a></li>
+        <li>Xcode command-line tools</li>
+      </ul>
+
+      <h2>Download the latest installer</h2>
+      <p>
+        Run these commands in an empty directory. The version is read from the
+        metadata published with this site.
+      </p>
+      <pre><code>VERSION="$(curl --fail --silent --show-error \
+  https://kaito-tokyo.github.io/unite-analysis-swift/metadata/latest-version.txt)"
+TAG="v${VERSION}"
+PACKAGE="unite-analysis-swift-${TAG}-macos-arm64.pkg"
+
+gh release download "$TAG" \
+  --repo kaito-tokyo/unite-analysis-swift \
+  --pattern "$PACKAGE"</code></pre>
+
+      <h2>Verify the GitHub attestation</h2>
+      <p>
+        Release tags are signed annotated tags. Resolve the commit referenced
+        by the tag, then require the attestation to match that commit, tag, and
+        release workflow.
+      </p>
+      <pre><code>TAG_OBJECT_SHA="$(gh api \
+  "repos/kaito-tokyo/unite-analysis-swift/git/ref/tags/${TAG}" \
+  --jq '.object.sha')"
+SOURCE_SHA="$(gh api \
+  "repos/kaito-tokyo/unite-analysis-swift/git/tags/${TAG_OBJECT_SHA}" \
+  --jq '.object.sha')"
+
+gh attestation verify "$PACKAGE" \
+  --repo kaito-tokyo/unite-analysis-swift \
+  --predicate-type https://in-toto.io/attestation/link/v0.3 \
+  --signer-workflow \
+    kaito-tokyo/unite-analysis-swift/.github/workflows/release.yml \
+  --source-ref "refs/tags/${TAG}" \
+  --source-digest "$SOURCE_SHA" \
+  --signer-digest "$SOURCE_SHA" \
+  --deny-self-hosted-runners</code></pre>
+
+      <aside class="note">
+        <p>
+          <strong>Why can verification return HTTP 404?</strong>
+          <code>gh attestation verify</code> assumes the predicate type
+          <code>https://slsa.dev/provenance/v1</code> by default. Unite Analysis
+          uses <code>https://in-toto.io/attestation/link/v0.3</code> for its
+          notarized installer claim. Omitting the
+          <code>--predicate-type</code> option filters out the existing
+          attestation and can produce a 404 response.
+        </p>
+      </aside>
+
+      <h2>Verify Apple signing and notarization</h2>
+      <pre><code>pkgutil --check-signature "$PACKAGE"
+spctl --assess --verbose=4 --type install "$PACKAGE"
+xcrun stapler validate "$PACKAGE"</code></pre>
+      <p>Successful verification reports all of the following:</p>
+      <ul>
+        <li>a Developer ID Installer certificate issued by Apple;</li>
+        <li>a trusted Apple notarization result;</li>
+        <li><code>accepted</code> from Gatekeeper; and</li>
+        <li><code>The validate action worked!</code> from Stapler.</li>
+      </ul>
+
+      <h2>Install</h2>
+      <p>
+        After all verification commands succeed, open the package in Finder or
+        install it for the current user:
+      </p>
+      <pre><code>installer -pkg "$PACKAGE" -target CurrentUserHomeDirectory</code></pre>
+      <p>
+        This installs
+        <code>~/Applications/Kaito-Tokyo Unite Analysis.app</code>.
+      </p>
+    </main>
+  </body>
+</html>
