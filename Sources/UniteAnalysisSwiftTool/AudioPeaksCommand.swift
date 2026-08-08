@@ -12,7 +12,7 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-struct AudioPeaks: AsyncParsableCommand {
+struct AudioPeaks: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "audio-peaks",
     abstract: "Print visually interesting recording-audio SE peak times as JSON.",
@@ -79,10 +79,25 @@ struct AudioPeaks: AsyncParsableCommand {
   @Option(help: "Fixed linear input gain applied before power calculation.")
   var gain = 1.0
 
-  mutating func run() async throws {
+  func validate() throws {
     guard gain.isFinite, gain > 0 else {
       throw ValidationError("--gain must be a finite value greater than zero")
     }
+  }
+
+}
+
+extension AudioPeaks {
+  typealias OutputRecord = AudioPeakDetectionResult
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      continuation.yield(try await command.result())
+    }
+  }
+
+  private func result() async throws -> OutputRecord {
     let recordSpecURL = resolveRecordSpec(recordSpec)
     let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
@@ -109,9 +124,6 @@ struct AudioPeaks: AsyncParsableCommand {
       duration: spec.duration,
       gain: gain
     )
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-    FileHandle.standardOutput.write(try encoder.encode(result))
-    FileHandle.standardOutput.write(Data("\n".utf8))
+    return result
   }
 }

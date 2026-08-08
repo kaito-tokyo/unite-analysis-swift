@@ -23,6 +23,26 @@ enum UniteAnalysisSwiftToolError: Error, CustomStringConvertible {
   }
 }
 
+func commandOutputStream<Output>(
+  _ operation:
+    @escaping @Sendable (
+      AsyncThrowingStream<Output, Error>.Continuation
+    ) async throws -> Void
+) -> AsyncThrowingStream<Output, Error> {
+  let (stream, continuation) = AsyncThrowingStream<Output, Error>.makeStream()
+  let task = Task {
+    do {
+      try Task.checkCancellation()
+      try await operation(continuation)
+      continuation.finish()
+    } catch {
+      continuation.finish(throwing: error)
+    }
+  }
+  continuation.onTermination = { _ in task.cancel() }
+  return stream
+}
+
 package typealias RecordSpec = RecordVisionRecordSpec
 
 enum Scene {
@@ -114,12 +134,19 @@ struct JSONLInputLine {
   let data: Data
 }
 
+struct JSONLJobFailure {
+  let line: Int
+  let jobId: String?
+  let error: Error
+}
+
 func forEachJSONLInputLine(
   _ input: String,
   body: (JSONLInputLine) async throws -> Void
 ) async throws -> Int {
   var processedCount = 0
   func process(_ value: String, lineNumber: Int) async throws {
+    try Task.checkCancellation()
     guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     processedCount += 1
     try await body(JSONLInputLine(number: lineNumber, data: Data(value.utf8)))
@@ -234,6 +261,16 @@ func writeJSONLFailure(
     jobId: jobId,
     error: .init(line: line.number, message: message))
   try writer.write(response)
+}
+
+func writeJSONLFailure(
+  _ failure: JSONLJobFailure,
+  schema: String,
+  to writer: JSONLResponseWriter
+) throws {
+  let line = JSONLInputLine(number: failure.line, data: Data())
+  try writeJSONLFailure(
+    failure.error, line: line, jobId: failure.jobId, schema: schema, to: writer)
 }
 
 struct SampleFramesRequest {
@@ -439,7 +476,7 @@ func renderSampleFrames(
   request: SampleFramesRequest,
   quality: Double,
   force: Bool
-) async throws {
+) async throws -> [String] {
   let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
   RecordVisionInputLogger.recordSpec(recordSpecURL)
   guard spec.startPTS.timescale > 0, spec.duration.isFinite, spec.duration > 0 else {
@@ -476,7 +513,9 @@ func renderSampleFrames(
     requestsByTime[time] = OutputRequest(outputURL: outputURL, requestedInmatch: offset)
   }
   let times = requestsByTime.keys.sorted { CMTimeCompare($0, $1) < 0 }
+  var outputs: [String] = []
   try await extractor.extractApproximateFrames(at: times) { index, frame, actualTime in
+    try Task.checkCancellation()
     let time = times[index]
     guard let outputRequest = requestsByTime[time] else { return }
     let cropped = try VideoFrameSupport.cropped(frame, rect: request.source.rect)
@@ -489,8 +528,9 @@ func renderSampleFrames(
       Data(
         "unite-analysis-swift: sample frame requested match time \(canonicalSeconds(outputRequest.requestedInmatch))s, actual PTS \(canonicalSeconds(actualTime.seconds))s\n"
           .utf8))
-    print(outputRequest.outputURL.path)
+    outputs.append(outputRequest.outputURL.path)
   }
+  return outputs
 }
 
 func renderPreciseFrame(
@@ -500,7 +540,7 @@ func renderPreciseFrame(
   outputURL: URL,
   quality: Double,
   force: Bool
-) async throws {
+) async throws -> String {
   guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
     throw UniteAnalysisSwiftToolError.message(
       "Output collision: \(outputURL.path). Pass --force to overwrite.")
@@ -544,5 +584,5 @@ func renderPreciseFrame(
     Data(
       "unite-analysis-swift: precise frame requested PTS \(canonicalSeconds(requestedTime.seconds))s, decoded PTS \(canonicalSeconds(frame.presentationTime.seconds))s\n"
         .utf8))
-  print(outputURL.path)
+  return outputURL.path
 }

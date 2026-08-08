@@ -12,7 +12,7 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-private struct ContactSheetJobOutput: Encodable {
+struct ContactSheetJobOutput: Encodable {
   static let schemaURL =
     "https://kaito-tokyo.github.io/unite-analysis-swift/contact-sheet.output.schema.json"
 
@@ -29,7 +29,7 @@ private struct ContactSheetJobOutput: Encodable {
   }
 }
 
-struct ContactSheet: AsyncParsableCommand {
+struct ContactSheet: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "contact-sheet",
     abstract: "Render source-video contact sheets from JSONL jobs.",
@@ -65,44 +65,56 @@ struct ContactSheet: AsyncParsableCommand {
   @Option(help: "JPEG quality from 0 through 1.") var quality: Double = 0.6
   @Flag(help: "Allow overwriting an existing output file.") var force = false
 
-  mutating func run() async throws {
+  func validate() throws {
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
-    let writer = try JSONLResponseWriter()
-    var jobIds = Set<String>()
-    let count = try await forEachJSONLInputLine(jobs) { line in
-      let recoveredJobId = jsonlJobID(in: line.data)
-      do {
-        if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
-          throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+  }
+
+}
+
+extension ContactSheet {
+  enum OutputRecord {
+    case success(ContactSheetJobOutput)
+    case failure(JSONLJobFailure)
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      var jobIds = Set<String>()
+      let count = try await forEachJSONLInputLine(command.jobs) { line in
+        let recoveredJobId = jsonlJobID(in: line.data)
+        do {
+          if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
+            throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
+          }
+          let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: line.data)
+          guard let jobId = definition.jobId,
+            !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          else {
+            throw UniteAnalysisSwiftToolError.message(
+              "Each contact-sheet job requires a non-empty jobId")
+          }
+          guard let output = definition.output, !output.isEmpty else {
+            throw UniteAnalysisSwiftToolError.message("Each contact-sheet job requires output")
+          }
+          let outputURL = resolvePath(output)
+          try await ContactSheetGenerator.run(
+            definitionData: try JSONEncoder().encode(definition),
+            recordSpecURL: resolveRecordSpec(command.recordSpec),
+            outputURL: outputURL,
+            quality: command.quality,
+            force: command.force
+          )
+          continuation.yield(
+            .success(ContactSheetJobOutput(jobId: jobId, result: .init(output: outputURL.path))))
+        } catch {
+          continuation.yield(
+            .failure(.init(line: line.number, jobId: recoveredJobId, error: error)))
         }
-        let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: line.data)
-        guard let jobId = definition.jobId,
-          !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-          throw UniteAnalysisSwiftToolError.message(
-            "Each contact-sheet job requires a non-empty jobId")
-        }
-        guard let output = definition.output, !output.isEmpty else {
-          throw UniteAnalysisSwiftToolError.message("Each contact-sheet job requires output")
-        }
-        let outputURL = resolvePath(output)
-        try await ContactSheetGenerator.run(
-          definitionData: try JSONEncoder().encode(definition),
-          recordSpecURL: resolveRecordSpec(recordSpec),
-          outputURL: outputURL,
-          quality: quality,
-          force: force
-        )
-        try writer.write(
-          ContactSheetJobOutput(jobId: jobId, result: .init(output: outputURL.path)))
-      } catch {
-        try writeJSONLFailure(
-          error, line: line, jobId: recoveredJobId, schema: ContactSheetJobOutput.schemaURL,
-          to: writer)
       }
+      guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
     }
-    guard count > 0 else { throw ValidationError("jobs.jsonl contains no jobs") }
   }
 }

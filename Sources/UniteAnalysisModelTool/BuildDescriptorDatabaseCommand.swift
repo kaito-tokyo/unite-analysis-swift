@@ -194,7 +194,32 @@ package struct BuildDescriptorDatabase: ParsableCommand {
 
   package init() {}
 
-  package mutating func run() throws {
+}
+
+extension BuildDescriptorDatabase {
+  package enum OutputRecord: Sendable {
+    case database(itemCount: Int, descriptorCount: UInt64, output: String)
+    case compressed(output: String)
+  }
+
+  package func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    let (stream, continuation) = AsyncThrowingStream<OutputRecord, Error>.makeStream()
+    let task = Task {
+      do {
+        try Task.checkCancellation()
+        for record in try records() {
+          continuation.yield(record)
+        }
+        continuation.finish()
+      } catch {
+        continuation.finish(throwing: error)
+      }
+    }
+    continuation.onTermination = { _ in task.cancel() }
+    return stream
+  }
+
+  private func records() throws -> [OutputRecord] {
     let outputURL = resolveModelPath(output)
     let xzOutputURL = xzOutput.map(resolveModelPath)
     try validateDescriptorOutputPaths(output: outputURL, xzOutput: xzOutputURL)
@@ -285,11 +310,15 @@ package struct BuildDescriptorDatabase: ParsableCommand {
     try FileManager.default.createDirectory(
       at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     try database.write(to: outputURL, options: .atomic)
-    print("\(entries.count) items, \(descriptorCount) descriptors -> \(outputURL.path)")
+    var records: [OutputRecord] = [
+      .database(
+        itemCount: entries.count, descriptorCount: descriptorCount, output: outputURL.path)
+    ]
     if let xzOutputURL {
       try compressXZ(input: outputURL, output: xzOutputURL)
-      print("xz -9e -> \(xzOutputURL.path)")
+      records.append(.compressed(output: xzOutputURL.path))
     }
+    return records
   }
 }
 

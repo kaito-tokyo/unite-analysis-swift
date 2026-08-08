@@ -8,7 +8,6 @@ import Foundation
 import IconMatcherNative
 import RecordVisionSupport
 import Testing
-
 import UniteAnalysisSwiftCommands
 
 @Test func openCV5AkazeIsAvailable() {

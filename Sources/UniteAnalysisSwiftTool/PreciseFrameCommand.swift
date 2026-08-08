@@ -12,7 +12,7 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-struct PreciseFrame: AsyncParsableCommand {
+struct PreciseFrame: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "precise-frame",
     abstract: "Write exactly one AVAssetReader-decoded explicit-source screenshot.",
@@ -48,20 +48,35 @@ struct PreciseFrame: AsyncParsableCommand {
   @Option(help: "JPEG quality from 0 through 1.") var quality: Double = 0.6
   @Flag(help: "Overwrite the output if it already exists.") var force = false
 
-  mutating func run() async throws {
+  func validate() throws {
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
     guard matchTimestamp.isFinite else {
       throw ValidationError("--match-timestamp must be finite")
     }
-    try await renderPreciseFrame(
-      recordSpecURL: resolveRecordSpec(recordSpec),
-      scene: .matchRelative(matchTimestamp),
-      source: FrameSource(x: x, y: y, width: width, height: height),
-      outputURL: resolvePath(output),
-      quality: quality,
-      force: force
-    )
   }
+
+}
+
+extension PreciseFrame {
+  struct OutputRecord: Sendable {
+    let output: String
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let output = try await renderPreciseFrame(
+        recordSpecURL: resolveRecordSpec(command.recordSpec),
+        scene: .matchRelative(command.matchTimestamp),
+        source: FrameSource(
+          x: command.x, y: command.y, width: command.width, height: command.height),
+        outputURL: resolvePath(command.output),
+        quality: command.quality,
+        force: command.force)
+      continuation.yield(.init(output: output))
+    }
+  }
+
 }

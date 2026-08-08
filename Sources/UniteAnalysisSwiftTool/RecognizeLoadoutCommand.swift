@@ -61,7 +61,12 @@ private struct DecodedLoadoutFrame {
 }
 
 private func defaultDescriptorDatabaseURL() -> URL {
-  UserConfigurationStore.defaultFileURL.deletingLastPathComponent()
+  if let path = ProcessInfo.processInfo.environment["UNITE_ANALYSIS_DESCRIPTOR_DATABASE"],
+    !path.isEmpty
+  {
+    return URL(fileURLWithPath: path)
+  }
+  return (Bundle.main.resourceURL ?? Bundle.main.bundleURL)
     .appendingPathComponent("descriptors.pb")
 }
 
@@ -197,7 +202,7 @@ private func writeLoadout(
   outputDirectory: URL,
   output: String?,
   force: Bool
-) throws {
+) throws -> String {
   let outputURL =
     output.map(resolvePath)
     ?? outputDirectory.appendingPathComponent(defaultName)
@@ -212,10 +217,10 @@ private func writeLoadout(
   var data = try encoder.encode(document)
   data.append(0x0A)
   try data.write(to: outputURL, options: .atomic)
-  print(outputURL.path)
+  return outputURL.path
 }
 
-struct RecognizeDraftLoadout: AsyncParsableCommand {
+struct RecognizeDraftLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "recognize-draft-loadout",
     abstract: "Recognize draft final-preparation and versus-screen item loadouts.",
@@ -235,33 +240,47 @@ struct RecognizeDraftLoadout: AsyncParsableCommand {
   var finalPreparationTime: Double
   @Option(name: .customLong("vs-time"), help: "Versus-screen time relative to match start.")
   var versusTime: Double
-  @Option(help: "Combined descriptor database; defaults to Application Support/descriptors.pb.")
+  @Option(help: "Combined descriptor database; defaults to the app bundle resource.")
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
   @Flag(help: "Overwrite an existing output JSON file.") var force = false
 
-  mutating func run() async throws {
-    let inputs = try await loadoutInputs(
-      recordSpec: recordSpec, input: input, matchTimes: [finalPreparationTime, versusTime])
-    let matcher = try loadIconMatcher(
-      from: descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
-    let result = try LoadoutRecognizer.recognizeDraft(
-      finalPreparation: inputs.frames[0].image, versus: inputs.frames[1].image, matcher: matcher)
-    try writeLoadout(
-      LoadoutOutputDocument(
-        format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
-        finalPrepTime: finalPreparationTime, versusTime: versusTime, prepTime: nil,
-        finalPrepPresentationTime: inputs.frames[0].presentationTime,
-        versusPresentationTime: inputs.frames[1].presentationTime, prepPresentationTime: nil,
-        timeBasis: recordSpec == nil ? "recording-timeline" : "match-relative",
-        recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
-      defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
-      force: force)
-  }
 }
 
-struct RecognizeBlindLoadout: AsyncParsableCommand {
+extension RecognizeDraftLoadout {
+  struct OutputRecord: Sendable { let output: String }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let inputs = try await loadoutInputs(
+        recordSpec: command.recordSpec, input: command.input,
+        matchTimes: [command.finalPreparationTime, command.versusTime])
+      let matcher = try loadIconMatcher(
+        from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
+      let result = try LoadoutRecognizer.recognizeDraft(
+        finalPreparation: inputs.frames[0].image, versus: inputs.frames[1].image,
+        matcher: matcher)
+      let output = try writeLoadout(
+        LoadoutOutputDocument(
+          format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
+          finalPrepTime: command.finalPreparationTime, versusTime: command.versusTime,
+          prepTime: nil,
+          finalPrepPresentationTime: inputs.frames[0].presentationTime,
+          versusPresentationTime: inputs.frames[1].presentationTime,
+          prepPresentationTime: nil,
+          timeBasis: command.recordSpec == nil ? "recording-timeline" : "match-relative",
+          recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
+        defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
+        output: command.output, force: command.force)
+      continuation.yield(.init(output: output))
+    }
+  }
+
+}
+
+struct RecognizeBlindLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "recognize-blind-loadout",
     abstract: "Recognize allied loadouts from a blind-selection preparation screen.",
@@ -276,29 +295,38 @@ struct RecognizeBlindLoadout: AsyncParsableCommand {
   @Option(help: "v1 .ldtxrecord path for recording-relative times; exclusive with --record-spec.")
   var input: String?
   @Option(help: "Stable blind-selection screen time relative to match start.") var prepTime: Double
-  @Option(help: "Combined descriptor database; defaults to Application Support/descriptors.pb.")
+  @Option(help: "Combined descriptor database; defaults to the app bundle resource.")
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
   @Flag(help: "Overwrite an existing output JSON file.") var force = false
 
-  mutating func run() async throws {
-    let inputs = try await loadoutInputs(
-      recordSpec: recordSpec, input: input, matchTimes: [prepTime])
-    let matcher = try loadIconMatcher(
-      from: descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
-    let result = try LoadoutRecognizer.recognizeBlind(
-      preparation: inputs.frames[0].image, matcher: matcher)
-    try writeLoadout(
-      LoadoutOutputDocument(
-        format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
-        finalPrepTime: nil, versusTime: nil, prepTime: prepTime,
-        finalPrepPresentationTime: nil, versusPresentationTime: nil,
-        prepPresentationTime: inputs.frames[0].presentationTime,
-        timeBasis: recordSpec == nil ? "recording-timeline" : "match-relative",
-        recognizer: .init(matcher: matcher),
-        allies: result.allies, enemies: result.enemies),
-      defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory, output: output,
-      force: force)
+}
+
+extension RecognizeBlindLoadout {
+  struct OutputRecord: Sendable { let output: String }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      let inputs = try await loadoutInputs(
+        recordSpec: command.recordSpec, input: command.input, matchTimes: [command.prepTime])
+      let matcher = try loadIconMatcher(
+        from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
+      let result = try LoadoutRecognizer.recognizeBlind(
+        preparation: inputs.frames[0].image, matcher: matcher)
+      let output = try writeLoadout(
+        LoadoutOutputDocument(
+          format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
+          finalPrepTime: nil, versusTime: nil, prepTime: command.prepTime,
+          finalPrepPresentationTime: nil, versusPresentationTime: nil,
+          prepPresentationTime: inputs.frames[0].presentationTime,
+          timeBasis: command.recordSpec == nil ? "recording-timeline" : "match-relative",
+          recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
+        defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
+        output: command.output, force: command.force)
+      continuation.yield(.init(output: output))
+    }
   }
+
 }

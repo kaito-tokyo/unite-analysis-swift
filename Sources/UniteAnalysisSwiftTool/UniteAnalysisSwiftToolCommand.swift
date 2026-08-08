@@ -12,10 +12,10 @@ import RecordVisionSupport
 import ResultScannerSupport
 import UniteAnalysisConfiguration
 
-package struct UniteAnalysisSwiftCommand: AsyncParsableCommand {
+package struct UniteAnalysisSwiftCommand: ParsableCommand {
   package static let configuration = CommandConfiguration(
     commandName: "unite-analysis-swift",
-    abstract: "Extract and analyze Pokémon UNITE recording and still-image data.",
+    abstract: "Extract and analyze ポケモンユナイト recording and still-image data.",
     discussion: """
       Run record-based commands with the .ldtxrecord root as the current directory; this is the caller's responsibility and is not checked separately. Record-based commands require --record-spec for one match's record-spec.json. That file is the physical match-to-recording mapping used to locate the
       enclosing .ldtxrecord and its main video. JSON frame values are seconds relative to match
@@ -39,7 +39,7 @@ package struct UniteAnalysisSwiftCommand: AsyncParsableCommand {
       DetectChromaEvents.self, AudioPeaks.self, ExtractClip.self, OCRCommand.self,
       ScanResultCommand.self,
       RecognizeDraftLoadout.self, RecognizeBlindLoadout.self,
-      EvaluateDrawText.self, Schema.self, Config.self,
+      EvaluateDrawText.self, Schema.self, Config.self, MCPCommand.self,
     ]
   )
 

@@ -24,15 +24,17 @@ struct Schema: ParsableCommand {
   @Argument(help: "Basename from a supported $schema URL.")
   var basename: String
 
-  mutating func run() throws {
-    guard let data = EmbeddedSchemas.data(basename: basename) else {
-      throw ValidationError(
-        "Unknown schema basename '\(basename)'. Expected one of: "
-          + EmbeddedSchemas.basenames.joined(separator: ", "))
-    }
-    FileHandle.standardOutput.write(data)
-    if data.last != 0x0A {
-      FileHandle.standardOutput.write(Data("\n".utf8))
+  struct OutputRecord: @unchecked Sendable { let data: Data }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      guard let data = EmbeddedSchemas.data(basename: command.basename) else {
+        throw ValidationError(
+          "Unknown schema basename '\(command.basename)'. Expected one of: "
+            + EmbeddedSchemas.basenames.joined(separator: ", "))
+      }
+      continuation.yield(.init(data: data))
     }
   }
 }
@@ -138,7 +140,7 @@ package enum EmbeddedSchemas {
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json",
-      "title": "Pokémon UNITE recognized loadout",
+      "title": "ポケモンユナイト recognized loadout",
       "type": "object",
       "required": ["$schema", "format", "match_format", "video", "time_basis", "recognizer", "allies", "enemies"],
       "properties": {
@@ -219,7 +221,7 @@ package enum EmbeddedSchemas {
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
-      "title": "Pokémon UNITE match publication state",
+      "title": "ポケモンユナイト match publication state",
       "type": "object",
       "required": [
         "$schema",

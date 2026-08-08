@@ -5,7 +5,7 @@
 import ArgumentParser
 import Foundation
 
-struct SampleFrames: AsyncParsableCommand {
+struct SampleFrames: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "sample-frames",
     abstract: "Write one FFmpeg-shaped fixed-rate JPEG sequence.",
@@ -49,20 +49,39 @@ struct SampleFrames: AsyncParsableCommand {
   @Option(help: "JPEG quality from 0 through 1.") var quality = 0.95
   @Flag(help: "Overwrite every generated output path.") var force = false
 
-  mutating func run() async throws {
+  func validate() throws {
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
-    try await renderSampleFrames(
-      recordSpecURL: resolveRecordSpec(recordSpec),
-      request: SampleFramesRequest(
-        source: FrameSource(
-          x: cropX, y: cropY, width: cropWidth, height: cropHeight),
-        fps: fps,
-        scaleX: scaleX,
-        scaleY: scaleY,
-        outputPattern: output),
-      quality: quality,
-      force: force)
   }
+
+}
+
+extension SampleFrames {
+  struct OutputRecord: Sendable {
+    let output: String
+  }
+
+  func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
+    commandOutputStream { continuation in
+      let command = self
+      for output in try await renderSampleFrames(
+        recordSpecURL: resolveRecordSpec(command.recordSpec),
+        request: SampleFramesRequest(
+          source: FrameSource(
+            x: command.cropX, y: command.cropY, width: command.cropWidth,
+            height: command.cropHeight),
+          fps: command.fps,
+          scaleX: command.scaleX,
+          scaleY: command.scaleY,
+          outputPattern: command.output),
+        quality: command.quality,
+        force: command.force)
+      {
+        try Task.checkCancellation()
+        continuation.yield(.init(output: output))
+      }
+    }
+  }
+
 }
