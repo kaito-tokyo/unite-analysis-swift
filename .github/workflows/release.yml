@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PKG_PREDICATE_TYPE: https://kaito.tokyo/attestations/apple-notarized-installer-package/v1
-  UNSIGNED_ARCHIVE_NAME: unite-analysis-swift-unsigned-macos-arm64-${{ github.sha }}.tar.gz
+  PKG_PREDICATE_TYPE: https://in-toto.io/attestation/link/v0.3
+  UNSIGNED_APP_NAME: Kaito-Tokyo Unite Analysis.app
 
 jobs:
   validate-release:
@@ -133,6 +133,7 @@ jobs:
       MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
       MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
       MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+      UNSIGNED_ARM64_ARTIFACT_NAME: unite-analysis-swift-unsigned-macOS-arm64-${{ needs.validate-release.outputs.swift_run_id }}.tar.gz
 
     permissions:
       actions: read
@@ -149,7 +150,7 @@ jobs:
         id: download-release-build
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ env.UNSIGNED_ARCHIVE_NAME }}
+          name: ${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}
           path: ${{ runner.temp }}/release-build-download
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -163,7 +164,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $signerWorkflow = "$env:GITHUB_REPOSITORY/.github/workflows/swift.yml"
-          $archivePath = Join-Path $env:DOWNLOAD_DIRECTORY $env:UNSIGNED_ARCHIVE_NAME
+          $archivePath = Join-Path $env:DOWNLOAD_DIRECTORY $env:UNSIGNED_ARM64_ARTIFACT_NAME
           if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
               throw 'Release products archive is missing.'
           }
@@ -181,14 +182,16 @@ jobs:
         id: release-build
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
         env:
-          ARCHIVE_PATH: ${{ steps.download-release-build.outputs.download-path }}/${{ env.UNSIGNED_ARCHIVE_NAME }}
+          ARCHIVE_PATH: ${{ steps.download-release-build.outputs.download-path }}/${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}
         run: |
           $stagingDirectory = Join-Path $env:RUNNER_TEMP 'release-build'
           New-Item -ItemType Directory -Path $stagingDirectory | Out-Null
           tar -xzf $env:ARCHIVE_PATH -C $stagingDirectory
 
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "runtime_binary_path=$(Join-Path $stagingDirectory 'unite-analysis-swift')" -Encoding utf8
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "model_tool_binary_path=$(Join-Path $stagingDirectory 'unite-analysis-model-tool')" -Encoding utf8
+          $appPath = Join-Path $stagingDirectory $env:UNSIGNED_APP_NAME
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "app_path=$appPath" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "runtime_binary_path=$(Join-Path $appPath 'Contents/MacOS/unite-analysis-swift')" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "model_tool_binary_path=$(Join-Path $appPath 'Contents/MacOS/unite-analysis-model-tool')" -Encoding utf8
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "staging_directory=$stagingDirectory" -Encoding utf8
 
       - name: Validate release products
@@ -197,14 +200,20 @@ jobs:
         env:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
-          DESCRIPTORS_PATH: ${{ steps.release-build.outputs.staging_directory }}/descriptors.pb
-          NOTICE_PATH: ${{ steps.release-build.outputs.staging_directory }}/NOTICE
+          APP_PATH: ${{ steps.release-build.outputs.app_path }}
+          DESCRIPTORS_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/descriptors.pb
+          LICENSE_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/LICENSE
+          LICENSES_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/LICENSES
+          NOTICE_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/NOTICE
           SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
         run: |
-          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH, $env:NOTICE_PATH)) {
+          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH, $env:LICENSE_PATH, $env:NOTICE_PATH, (Join-Path $env:APP_PATH 'Contents/Info.plist'))) {
               if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
                   throw "Release product $productPath is missing."
               }
+          }
+          if (-not (Test-Path -LiteralPath $env:LICENSES_PATH -PathType Container)) {
+              throw "Release product $env:LICENSES_PATH is missing."
           }
 
           chmod +x $env:RUNTIME_BINARY_PATH $env:MODEL_TOOL_BINARY_PATH
@@ -217,11 +226,9 @@ jobs:
           if ($modelToolVersion -ne $expectedVersion) {
               throw "Model tool version $modelToolVersion does not match tag version $expectedVersion."
           }
-          $apmPath = Join-Path $env:SOURCE_DIRECTORY 'apm.yml'
-          $apmVersion = (ruby -ryaml -e 'version = YAML.safe_load(File.read(ARGV.fetch(0)))["version"]; abort "Missing APM package version." unless version.is_a?(String); puts version' $apmPath).Trim()
-          $appVersion = (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:SOURCE_DIRECTORY 'Packaging/App/Info.plist')).Trim()
-          if ($apmVersion -ne $expectedVersion -or $appVersion -ne $expectedVersion) {
-              throw "APM package ($apmVersion), app ($appVersion), and tag ($expectedVersion) versions must match."
+          $appVersion = (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:APP_PATH 'Contents/Info.plist')).Trim()
+          if ($appVersion -ne $expectedVersion) {
+              throw "App version $appVersion does not match tag version $expectedVersion."
           }
 
           $descriptorsDigest = (Get-FileHash -LiteralPath $env:DESCRIPTORS_PATH -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -260,24 +267,15 @@ jobs:
             printf 'model_tool_signed_sha256=%s\n' "$(shasum -a 256 "$MODEL_TOOL_BINARY_PATH" | awk '{print $1}')"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Assemble and sign app bundle
+      - name: Sign app bundle
         id: app
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
-          RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
-          MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
+          APP_PATH: ${{ steps.release-build.outputs.app_path }}
         run: |
-          app_path="$RUNNER_TEMP/Kaito-Tokyo Unite Analysis.app"
-          mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
-          ditto --norsrc "$SOURCE_DIRECTORY/Packaging/App/Info.plist" "$app_path/Contents/Info.plist"
-          ditto --norsrc "$RUNTIME_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-swift"
-          ditto --norsrc "$MODEL_TOOL_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-model-tool"
-          ditto --norsrc "$SOURCE_DIRECTORY/descriptors.pb" "$app_path/Contents/Resources/descriptors.pb"
-          ditto --norsrc "$SOURCE_DIRECTORY/NOTICE" "$app_path/Contents/Resources/NOTICE"
-          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$app_path"
-          codesign --verify --strict --verbose=2 "$app_path"
-          printf 'app_path=%s\n' "$app_path" >> "$GITHUB_OUTPUT"
+          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$APP_PATH"
+          codesign --verify --strict --verbose=2 "$APP_PATH"
+          printf 'app_path=%s\n' "$APP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Package and sign installer
         id: package
@@ -297,17 +295,17 @@ jobs:
           component_package="$RUNNER_TEMP/unite-analysis-swift-component.pkg"
           installer_package="$RUNNER_TEMP/$artifact_name.pkg"
 
-          mkdir -p "$component_root"
-          ditto --norsrc "$APP_PATH" "$component_root/Kaito-Tokyo Unite Analysis.app"
+          install -d "$component_root"
+          cp -R "$APP_PATH" "$component_root/"
           COPYFILE_DISABLE=1 pkgbuild \
             --root "$component_root" \
-            --component-plist "$SOURCE_DIRECTORY/Packaging/Installer/Components.plist" \
+            --component-plist "$SOURCE_DIRECTORY/pkg/Components.plist" \
             --identifier tokyo.kaito.unite-analysis-swift \
             --version "${GITHUB_REF_NAME#v}" \
             --install-location /Applications \
             "$component_package"
           productbuild \
-            --distribution "$SOURCE_DIRECTORY/Packaging/Installer/Distribution.xml" \
+            --distribution "$SOURCE_DIRECTORY/pkg/Distribution.xml" \
             --package-path "$RUNNER_TEMP" \
             --resources "$SOURCE_DIRECTORY" \
             --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
@@ -343,54 +341,67 @@ jobs:
           predicate-type: ${{ env.PKG_PREDICATE_TYPE }}
           predicate: |
             {
-              "input": {
-                "archive": {
-                  "name": "${{ env.UNSIGNED_ARCHIVE_NAME }}",
+              "name": "apple-notarized-installer-package",
+              "command": [],
+              "materials": [
+                {
+                  "name": "${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}",
                   "digest": {
                     "sha256": "${{ steps.release-attestation.outputs.archive_sha256 }}"
-                  },
-                  "predicate_type": "https://slsa.dev/provenance/v1"
+                  }
                 },
-                "products": {
-                  "signed_executables": {
+                {
+                  "name": "${{ github.repository }}",
+                  "uri": "git+${{ github.server_url }}/${{ github.repository }}@${{ github.sha }}",
+                  "digest": {
+                    "gitCommit": "${{ github.sha }}"
+                  }
+                }
+              ],
+              "byproducts": {
+                "signed_executables": [
+                  {
+                    "name": "unite-analysis-swift",
                     "digest": {
-                      "unite-analysis-swift.sha256": "${{ steps.sign.outputs.runtime_signed_sha256 }}",
-                      "unite-analysis-model-tool.sha256": "${{ steps.sign.outputs.model_tool_signed_sha256 }}"
+                      "sha256": "${{ steps.sign.outputs.runtime_signed_sha256 }}"
                     }
                   },
-                  "descriptor_database": {
+                  {
+                    "name": "unite-analysis-model-tool",
+                    "digest": {
+                      "sha256": "${{ steps.sign.outputs.model_tool_signed_sha256 }}"
+                    }
+                  }
+                ],
+                "descriptor_database": {
                     "name": "descriptors.pb",
                     "digest": {
                       "sha256": "${{ steps.release-products.outputs.descriptors_sha256 }}"
                     }
+                },
+                "operations": [
+                  {
+                    "name": "apple-codesign",
+                    "tool": "codesign"
+                  },
+                  {
+                    "name": "build-installer-package",
+                    "tool": "pkgbuild-and-productbuild"
+                  },
+                  {
+                    "name": "apple-notarization",
+                    "tool": "notarytool"
+                  },
+                  {
+                    "name": "staple-notarization-ticket",
+                    "tool": "stapler"
                   }
-                }
+                ]
               },
-              "operations": [
-                {
-                  "name": "assemble-app-bundle",
-                  "tool": "ditto"
-                },
-                {
-                  "name": "apple-codesign",
-                  "tool": "codesign",
-                  "identity": ${{ toJSON(vars.MACOS_SIGNING_APPLICATION_IDENTITY) }}
-                },
-                {
-                  "name": "build-installer-package",
-                  "tool": "pkgbuild-and-productbuild",
-                  "identity": ${{ toJSON(vars.MACOS_SIGNING_INSTALLER_IDENTITY) }}
-                },
-                {
-                  "name": "apple-notarization",
-                  "tool": "notarytool"
-                },
-                {
-                  "name": "staple-notarization-ticket",
-                  "tool": "stapler"
-                }
-              ],
-              "source_commit": "${{ github.sha }}"
+              "environment": {
+                "application_signing_identity": ${{ toJSON(vars.MACOS_SIGNING_APPLICATION_IDENTITY) }},
+                "installer_signing_identity": ${{ toJSON(vars.MACOS_SIGNING_INSTALLER_IDENTITY) }}
+              }
             }
 
       - name: Upload signed installer package

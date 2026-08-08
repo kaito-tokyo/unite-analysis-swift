@@ -40,7 +40,7 @@ SPDX-License-Identifier: Apache-2.0
 - Keep two distinct version values on `main`:
   - `apm.yml` and the native CLI `--version` must always contain the next, unreleased version. No Git tag for that version may exist yet.
   - `README.md` and `docs/metadata/latest-version.txt` must always contain the newest released version, for which a Git tag already exists.
-- Treat the post-release version update as one combined operation: update `docs/metadata/latest-version.txt` to the version of the newly published tag, without the leading `v`, and advance `apm.yml`, `Packaging/App/Info.plist`, and all native executable versions to the following release version.
+- Treat the post-release version update as one combined operation: update `docs/metadata/latest-version.txt` to the version of the newly published tag, without the leading `v`, and advance `apm.yml`, `Contents/Info.plist`, and all native executable versions to the following release version.
 - Do not advance `docs/metadata/latest-version.txt` or the released-version references in `README.md` before the corresponding GitHub Release is available for download.
 - Because agents must not edit `README.md`, report any stale or inconsistent released-version reference there for a human maintainer to update.
 

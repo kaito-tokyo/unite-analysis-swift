@@ -9,7 +9,7 @@ SPDX-License-Identifier = "CC0-1.0"
 path = [
   "Package.resolved",
   "Package.swift",
-  "Packaging/App/Info.plist",
+  "Contents/Info.plist",
   "docs/*.json",
   "docs/metadata/*",
   "Sources/IconMatcherNative/Generated/*.pb.c",
