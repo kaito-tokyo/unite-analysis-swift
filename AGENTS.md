@@ -27,6 +27,7 @@ SPDX-License-Identifier: Apache-2.0
 ## Verification
 
 - Do not run `actionlint` in this repository.
+- Keep `bump.yml` as a deliberately shallow gate that only checks whether the expected version strings occur in the designated files. Leave structural and semantic version divergence to agentic review instead of making this workflow stricter.
 - Run `swift format lint --recursive --strict Package.swift Sources Tests` after changing Swift files or formatting configuration. Vendor submodules contain upstream Swift examples outside this repository's formatting policy.
 - Verify that `Package.resolved` and `docs/*.json` equal their `jq --indent 2` output after changing JSON files.
 - Run `swift test` after changing Swift implementation or tests.
@@ -35,6 +36,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Release follow-up
 
+- Agents must not publish GitHub Releases. Only human maintainers may publish a draft release.
 - Release tags must be signed annotated tags.
 - The annotated tag message must exactly match the tag name. For example, tag `v0.1.4` must have the message `v0.1.4` with no additional text.
 - After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
