@@ -4,7 +4,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Main push
+name: Push (main)
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/check-ci.yml
 
-  swift-release:
+  swift-ci:
     permissions:
       artifact-metadata: write
       attestations: write
