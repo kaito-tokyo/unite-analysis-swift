@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
       <os-version min="26.0"/>
     </allowed-os-versions>
   </volume-check>
-  <conclusion file="Conclusion.html" mime-type="text/html"/>
+  <license file="LICENSE" mime-type="text/plain"/>
   <choices-outline>
     <line choice="default"/>
   </choices-outline>

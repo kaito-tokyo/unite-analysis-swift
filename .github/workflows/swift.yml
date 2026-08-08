@@ -120,9 +120,10 @@ jobs:
             descriptors.pb \
             -C "$GITHUB_WORKSPACE" \
             apm.yml \
+            LICENSE \
             Packaging/App/Info.plist \
-            Packaging/Installer/Distribution.xml \
-            Packaging/Installer/Resources/Conclusion.html
+            Packaging/Installer/Components.plist \
+            Packaging/Installer/Distribution.xml
 
       - name: Attest release products
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2

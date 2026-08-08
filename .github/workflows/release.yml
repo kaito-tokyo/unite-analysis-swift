@@ -260,14 +260,15 @@ jobs:
           ditto --norsrc "$APP_PATH" "$component_root/unite-analysis-swift.app"
           COPYFILE_DISABLE=1 pkgbuild \
             --root "$component_root" \
+            --component-plist "$SOURCE_DIRECTORY/Packaging/Installer/Components.plist" \
             --identifier tokyo.kaito.unite-analysis-swift \
             --version "${GITHUB_REF_NAME#v}" \
-            --install-location Applications \
+            --install-location /Applications \
             "$component_package"
           productbuild \
             --distribution "$SOURCE_DIRECTORY/Packaging/Installer/Distribution.xml" \
             --package-path "$RUNNER_TEMP" \
-            --resources "$SOURCE_DIRECTORY/Packaging/Installer/Resources" \
+            --resources "$SOURCE_DIRECTORY" \
             --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
             "$installer_package"
           pkgutil --check-signature "$installer_package"
