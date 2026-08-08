@@ -16,7 +16,7 @@ Pokémon Unite match recordings created by LDTX.
 ## Installation
 
 1. Install the PKG from the latest release.
-2. Ask your agent: Install the APM package from `kaito-tokyo/unite-analysis-swift#v0.1.4` globally.
+2. Ask your agent: Install the APM package from `kaito-tokyo/unite-analysis-swift#v0.1.3` globally.
 
 ## Skills
 
