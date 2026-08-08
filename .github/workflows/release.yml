@@ -159,9 +159,10 @@ jobs:
           RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
           MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
           DESCRIPTORS_PATH: ${{ steps.release-build.outputs.staging_directory }}/descriptors.pb
+          NOTICE_PATH: ${{ steps.release-build.outputs.staging_directory }}/NOTICE
           SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
         run: |
-          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH)) {
+          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH, $env:NOTICE_PATH)) {
               if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
                   throw "Release product $productPath is missing."
               }
@@ -234,6 +235,7 @@ jobs:
           ditto --norsrc "$RUNTIME_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-swift"
           ditto --norsrc "$MODEL_TOOL_BINARY_PATH" "$app_path/Contents/MacOS/unite-analysis-model-tool"
           ditto --norsrc "$SOURCE_DIRECTORY/descriptors.pb" "$app_path/Contents/Resources/descriptors.pb"
+          ditto --norsrc "$SOURCE_DIRECTORY/NOTICE" "$app_path/Contents/Resources/NOTICE"
           codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$app_path"
           codesign --verify --strict --verbose=2 "$app_path"
           printf 'app_path=%s\n' "$app_path" >> "$GITHUB_OUTPUT"

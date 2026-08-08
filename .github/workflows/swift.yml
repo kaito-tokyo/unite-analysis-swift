@@ -121,6 +121,7 @@ jobs:
             -C "$GITHUB_WORKSPACE" \
             apm.yml \
             LICENSE \
+            NOTICE \
             Packaging/App/Info.plist \
             Packaging/Installer/Components.plist \
             Packaging/Installer/Distribution.xml

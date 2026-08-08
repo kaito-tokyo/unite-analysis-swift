@@ -54,7 +54,7 @@ struct BatchFrame: ParsableCommand {
 
       DIAGNOSTICS. The resolved record-spec.json and main video, unfinished-recording warnings, and each requested and actual source PTS are written to stderr. stdout contains JSONL responses only.
 
-      SCHEMAS. Print the per-line input schema with `unite-analysis swift schema batch-frame.schema.json` and the response schema with `unite-analysis swift schema batch-frame.output.schema.json`.
+      SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema batch-frame.schema.json` and the response schema with `unite-analysis-swift schema batch-frame.output.schema.json`.
       """.reflowedHelp()
   )
 
