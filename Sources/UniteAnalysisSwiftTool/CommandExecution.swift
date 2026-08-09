@@ -134,7 +134,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
       var data = try encoder.encode(record)
       data.append(0x0A)
       if let output = command.output {
-        try data.write(to: resolvePath(output), options: .atomic)
+        try writeOutputData(data, to: resolvePath(output), force: command.force)
       } else {
         try FileHandle.standardOutput.write(contentsOf: data)
       }
