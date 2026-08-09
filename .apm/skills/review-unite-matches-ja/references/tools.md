@@ -27,10 +27,10 @@
 ## 場面の前後やオブジェクト戦全体を共有する
 
 - **症状**: 接敵前の配置、離脱機会、味方の追撃、戦闘後の変換が欠けている。または静止画列ではユーザーに動きを伝えられない。
-- **使うツール**: `extract-clip`。映像と音声を含む連続したMP4で局所シーンを提示する。静止画で関連するプレイシーケンスを伝えられないときは、必ず動画を提示する。
+- **使うツール**: `extract-clip`。連続した映像と、ソースに音声トラックがある場合はその音声をMP4で提示する。静止画で関連するプレイシーケンスを伝えられないときは、必ず動画を提示する。
 - **再現例**: `unite-analysis-swift extract-clip --record-spec _PokemonUniteMatches/match-01/record-spec.json --start 260 --end 275 --output _PokemonUniteAnalysis/matches/match-01/clips/objective-fight.mp4`。
-- **解釈と提示**: 試みの開始、敵と味方の反応、出力までを含む範囲にし、チャットでMP4と見るべき点を共有する。
-- **限界**: パススルーは指定開始時刻に新しいキーフレームを作らない。フレーム単位の独立デコードが必要な証拠に使わず、詳細な動作順序も動画の印象だけで断定しない。
+- **解釈と提示**: 試みの開始、敵と味方の反応、出力までを含む範囲にする。MCPが返した絶対パスを、チャットクライアントがサポートするローカルメディア添付として提示し、表示できたことを確認してから見るべき点を共有する。ソースに音声トラックがない場合は、音声は未取得ではなく存在しないと報告する。
+- **限界**: チャットがローカルメディア添付をサポートしない場合は、MP4を提示済みとしない。提示不能と報告し、静止画から同じシーケンスを推測しない。パススルーは指定開始時刻に新しいキーフレームを作らない。フレーム単位の独立デコードが必要な証拠に使わず、詳細な動作順序も動画の印象だけで断定しない。
 - **次の調査**: 短時間の順序は`frame-burst`、数値や個体識別は`precise-frame`で補強する。
 
 ## 縮小されたUIや個体を原寸で確かめる
@@ -38,8 +38,8 @@
 - **症状**: コンタクトシートでHUD、タイマー、クールダウン、プレイヤー名、命中表示を読めない。
 - **使うツール**: `precise-frame`。指定時刻以降の最初のデコード済みフレームを、明示したソース矩形の原寸で得る。
 - **再現例**: `unite-analysis-swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 265.4 --x 0 --y 0 --width 1632 --height 918 --output _PokemonUniteAnalysis/matches/match-01/frames/265.4.jpg`。
-- **解釈と提示**: stderrの要求PTSと実デコードPTSを確認し、主張に必要なフルサイズ画像をチャットやレポートで提示する。
-- **限界**: 1枚で動作順序や因果関係を確定しない。時刻が未知のまま総当たりに使わない。
+- **解釈と提示**: MCPが返す出力パスのフルサイズ画像を確認し、主張に必要な画像をチャットやレポートで提示する。実行経路が要求PTSと実デコードPTSを返す場合だけ、その差も確認する。
+- **限界**: MCPの`precise-frame`結果は通常、PTS診断を含まず出力パスだけを返す。その場合は要求時刻とデコード時刻が一致したと報告しない。1枚で動作順序や因果関係を確定せず、時刻が未知のまま総当たりに使わない。
 - **次の調査**: 前後の順序は`frame-burst`、シーン全体は`extract-clip`で確かめる。
 
 ## リザルトまたはロードアウトを復元する
@@ -47,7 +47,7 @@
 - **症状**: 結果行、バトルデータ、参加者、持ち物、バトルアイテム、宣言ルートが欠けている。
 - **使うツール**: 結果画面は`scan-result`、draftの最終準備画面とVS画面は`recognize-draft-loadout`、blind選択画面は`recognize-blind-loadout`を使う。
 - **再現例**: 先に対象画面をフルサイズで抽出し、`unite-analysis-swift scan-result result-summary.jpg --type summary --ocr-options ocr-options.json --output _PokemonUniteAnalysis/matches/match-01/result-summary.json`を実行する。ロードアウトは必ず各コマンドの`--help`から現在の必須画像と引数を確認する。
-- **解釈と提示**: 出力JSONのconfidence、warnings、raw OCRを保持し、低confidenceの名前やアイコンは入力画像で再確認する。
+- **解釈と提示**: `scan-result`では出力JSONのconfidence、warnings、raw OCRを保持し、低confidenceの名前は入力画像で再確認する。ロードアウト認識では出力JSONの`score`、`candidates`、ルート測定値を保持し、選択候補とデコード済み入力フレームを対応させて再確認する。
 - **限界**: 縮小セル、余白を含む画像、異なる画面種別に`scan-result`を使わない。認識結果から録画時刻や操作プレイヤーを推測しない。
 - **次の調査**: 欠けた画面を`contact-sheet`で探し、`precise-frame`で抽出し直す。
 
