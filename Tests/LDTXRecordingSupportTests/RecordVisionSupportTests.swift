@@ -460,6 +460,27 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   }
 }
 
+@Test func contactSheetRejectsFirstOutOfRangeSourceTimeBeforeDecode() {
+  do {
+    try ContactSheetGenerator.validateSourceTimes(
+      start: 12.5, offsets: [-1, 0, 9, 10], videoDuration: 21)
+    Issue.record("Expected the first out-of-range source time to be rejected")
+  } catch {
+    let message = String(describing: error)
+    #expect(
+      message
+        == "Requested contact-sheet source time 21.500s for matchTimestamps[2] = 9.000s is outside source-video range [0.000, 21.000)s"
+    )
+    #expect(!message.contains("sandbox"))
+    #expect(!message.contains("decode"))
+  }
+}
+
+@Test func contactSheetAcceptsSourceTimesInsideHalfOpenDuration() throws {
+  try ContactSheetGenerator.validateSourceTimes(
+    start: 12.5, offsets: [-12.5, 0, 8.499], videoDuration: 21)
+}
+
 @Test func contactSheetRejectsLegacyFramesField() {
   let data = Data(
     """

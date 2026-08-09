@@ -309,6 +309,8 @@ public enum ContactSheetGenerator {
       duration: videoDuration.seconds
     )
     let start = CMTime(value: recordSpec.startPTS.value, timescale: recordSpec.startPTS.timescale)
+    try validateSourceTimes(
+      start: start.seconds, offsets: frameOffsets, videoDuration: videoDuration.seconds)
     let sourceTimes = frameOffsets.map {
       CMTimeAdd(start, CMTime(seconds: $0, preferredTimescale: recordSpec.startPTS.timescale))
     }
@@ -400,6 +402,26 @@ public enum ContactSheetGenerator {
     guard duration.isFinite, duration >= 0 else {
       throw ContactSheetGeneratorError.message(
         "record-spec.json duration must be a finite non-negative value")
+    }
+  }
+
+  package static func validateSourceTimes(
+    start: Double, offsets: [Double], videoDuration: Double
+  ) throws {
+    guard start.isFinite, videoDuration.isFinite, videoDuration > 0 else {
+      throw ContactSheetGeneratorError.message(
+        "Could not determine a positive source-video duration")
+    }
+    for (index, offset) in offsets.enumerated() {
+      let sourceTime = start + offset
+      guard sourceTime.isFinite, sourceTime >= 0, sourceTime < videoDuration else {
+        let format: (Double) -> String = {
+          String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), $0)
+        }
+        throw ContactSheetGeneratorError.message(
+          "Requested contact-sheet source time \(format(sourceTime))s for matchTimestamps[\(index)] = \(format(offset))s is outside source-video range [0.000, \(format(videoDuration)))s"
+        )
+      }
     }
   }
 
