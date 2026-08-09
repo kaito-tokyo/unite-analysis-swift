@@ -71,11 +71,13 @@
       "properties": {
         "requestedInmatch": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Validated JPEG sequence-grid time derived as (filename index - 1) / fps."
         },
         "actualInmatch": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "The same validated sequence-grid time as requestedInmatch, not a decoder-reported timestamp."
         },
         "score": {
           "type": "integer",

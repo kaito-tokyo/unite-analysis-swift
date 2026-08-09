@@ -11,13 +11,13 @@ struct DetectChromaEvents: ParsableCommand {
     commandName: "detect-chroma-events",
     abstract: "Measure temporal Cb and Cr differences in a JPEG sequence.",
     discussion: """
-      INPUT. --input-sample-dir is required and must contain at least two JPEG files. Files whose extension is .jpg or .jpeg, case-insensitively, are processed in filename dictionary order. Use zero-padded sequence numbers such as frame-000001.jpg so dictionary order is also chronological order. Hidden files and other formats are ignored. Relative paths use the current working directory.
+      INPUT. --input-sample-dir is required and must contain at least two JPEG files. Files whose extension is .jpg or .jpeg, case-insensitively, are processed in filename dictionary order. Every filename must end in a consistently zero-padded, contiguous, 1-based sequence number such as frame-000001.jpg. The command rejects the first missing, repeated, malformed, or out-of-order index. Hidden files and other formats are ignored. Relative paths use the current working directory.
 
       COMPLETE EXAMPLE.
 
       unite-analysis-swift detect-chroma-events --input-sample-dir sampled/top-event-banner --fps 2 --output top-event-banner.chroma-events.json
 
-      TIMING. --fps must match the value used to create the sequence. File index 0 represents match-relative time 0; subsequent files represent index / fps. Because the JPEG sequence contains no decoder timestamp metadata, requestedInmatch and actualInmatch are both set to this sequence-grid time.
+      TIMING. --fps must match the value used to create the sequence. Filename index 1 represents match-relative time 0; later files represent (filename index - 1) / fps. Because the JPEG sequence contains no decoder timestamp metadata, requestedInmatch and actualInmatch are both set to this validated sequence-grid time; actualInmatch is not a decoder-reported timestamp.
 
       DETECTION. Every JPEG must have identical dimensions. Consecutive images are compared in the Cb and Cr planes at their stored resolution. Each absolute-difference plane receives an independent Otsu threshold. score is max(cbThreshold, crThreshold), allowing a change in either chroma plane to remain visible. Pixel-count fields are diagnostics.
 
@@ -55,10 +55,10 @@ struct DetectChromaEvents: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Required directory containing a zero-padded JPEG sequence in dictionary order.")
+  @Option(help: "Required directory containing a contiguous, 1-based, zero-padded JPEG sequence.")
   var inputSampleDir: String
 
-  @Option(help: "Positive sequence rate used to assign index / fps times.")
+  @Option(help: "Positive rate used to assign (filename index - 1) / fps times.")
   var fps: Double
 
   @Option(help: "Required JSON output path.")

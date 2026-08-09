@@ -150,11 +150,41 @@ public enum ChromaEventDetector {
     else {
       throw ChromaEventError.message("JPEG input directory was not found: \(directoryURL.path)")
     }
-    return try FileManager.default.contentsOfDirectory(
+    let urls = try FileManager.default.contentsOfDirectory(
       at: directoryURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
     )
     .filter { ["jpg", "jpeg"].contains($0.pathExtension.lowercased()) }
     .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    _ = try sequenceIndices(for: urls)
+    return urls
+  }
+
+  package static func sequenceIndices(for imageURLs: [URL]) throws -> [Int] {
+    var indices: [Int] = []
+    var digitWidth: Int?
+    for imageURL in imageURLs {
+      let stem = imageURL.deletingPathExtension().lastPathComponent
+      let digits = String(stem.reversed().prefix(while: { $0.isNumber }).reversed())
+      guard digits.count >= 2, digits.first == "0", let index = Int(digits) else {
+        throw ChromaEventError.message(
+          "JPEG filename must end in a zero-padded sequence index: \(imageURL.lastPathComponent)"
+        )
+      }
+      if let digitWidth, digits.count != digitWidth {
+        throw ChromaEventError.message(
+          "JPEG sequence index width changed at \(imageURL.lastPathComponent): expected \(digitWidth) digits, found \(digits.count)"
+        )
+      }
+      digitWidth = digits.count
+      let expected = indices.count + 1
+      guard index == expected else {
+        throw ChromaEventError.message(
+          "JPEG sequence is not contiguous at \(imageURL.lastPathComponent): expected index \(expected), found \(index)"
+        )
+      }
+      indices.append(index)
+    }
+    return indices
   }
 
   public static func run(
@@ -176,17 +206,18 @@ public enum ChromaEventDetector {
         "JPEG input directory must contain at least two .jpg or .jpeg files: \(inputSampleDirectoryURL.path)"
       )
     }
+    let sequenceIndices = try sequenceIndices(for: imageURLs)
     var sampledWidth = 0
     var sampledHeight = 0
     var previous: ChromaPlane?
     var samples: [ChromaEventSample] = []
-    for (index, imageURL) in imageURLs.enumerated() {
+    for (offset, imageURL) in imageURLs.enumerated() {
       guard let source = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
         let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
       else {
         throw ChromaEventError.message("Could not decode JPEG: \(imageURL.path)")
       }
-      if index == 0 {
+      if offset == 0 {
         sampledWidth = image.width
         sampledHeight = image.height
       } else if image.width != sampledWidth || image.height != sampledHeight {
@@ -202,7 +233,7 @@ public enum ChromaEventDetector {
       )
       if let previous {
         let analysis = analyze(previous: previous, current: plane)
-        let inmatch = Double(index) / fps
+        let inmatch = Double(sequenceIndices[offset] - 1) / fps
         samples.append(
           ChromaEventSample(
             requestedInmatch: inmatch,

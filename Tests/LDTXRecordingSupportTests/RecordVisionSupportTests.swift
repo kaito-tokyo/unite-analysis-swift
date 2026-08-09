@@ -536,6 +536,31 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   #expect(result.changedPixelCount == 2)
 }
 
+@Test func chromaEventRejectsTheFirstMissingSequenceIndex() {
+  let urls = ["frame-000001.jpg", "frame-000003.jpg"].map {
+    URL(fileURLWithPath: "/tmp/\($0)")
+  }
+
+  #expect(throws: ChromaEventError.self) {
+    try ChromaEventDetector.sequenceIndices(for: urls)
+  }
+  do {
+    _ = try ChromaEventDetector.sequenceIndices(for: urls)
+  } catch {
+    #expect(
+      String(describing: error)
+        == "JPEG sequence is not contiguous at frame-000003.jpg: expected index 2, found 3")
+  }
+}
+
+@Test func chromaEventRejectsNonPaddedSequenceIndices() {
+  let urls = [URL(fileURLWithPath: "/tmp/frame-1.jpg")]
+
+  #expect(throws: ChromaEventError.self) {
+    try ChromaEventDetector.sequenceIndices(for: urls)
+  }
+}
+
 @Test func chromaEventCandidatesExpandAroundSelectedSamples() throws {
   let samples = [
     ChromaEventSample(
