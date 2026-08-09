@@ -27,7 +27,7 @@ struct AudioPeaks: ParsableCommand {
 
       RANGE. The full record-spec match is always analyzed. There are no start or duration options. The detector reads 200ms before match start to preserve FIR history and 20ms after match end for local-maximum detection, but reports only peaks inside the match.
 
-      DETECTOR. Audio is converted into 10ms integer power blocks and processed with a fixed 50ms-versus-200ms FIR. --gain is a positive finite linear gain applied before Int16 power calculation; there is no automatic gain control. Detector windows, threshold, and peak separation are intentionally not configurable.
+      DETECTOR. Audio is converted into a contiguous 10ms integer power grid and processed with a fixed 50ms-versus-200ms FIR. If decoded audio skips one or more grid blocks, the missing blocks receive zero energy at their derived timestamps so the FIR windows retain their fixed durations. --gain is a positive finite linear gain applied before Int16 power calculation; there is no automatic gain control. Detector windows, threshold, and peak separation are intentionally not configurable.
 
       CANDIDATES. Each detected peak is expanded by 0.5 seconds in both directions. Overlapping expanded ranges are united and clipped to the match. Peaks and merged ranges are only seek candidates for later source-video or contact-sheet analysis; they are never classified as KO, ping, announcement, or another event.
 

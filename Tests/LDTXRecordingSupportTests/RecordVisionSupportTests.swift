@@ -601,6 +601,31 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   #expect(AudioPeakDetector.peakDilation == 0.5)
 }
 
+@Test func audioPeakDetectorZeroFillsMissingGridBlocks() {
+  var energies: [Int64] = [40]
+  var times = [0.105]
+
+  AudioPeakDetector.appendZeroFilledGap(
+    after: 10, before: 14, blockEnergies: &energies, blockPTS: &times)
+
+  #expect(energies == [40, 0, 0, 0])
+  #expect(times.count == 4)
+  #expect(abs(times[1] - 0.115) < 0.000_000_1)
+  #expect(abs(times[2] - 0.125) < 0.000_000_1)
+  #expect(abs(times[3] - 0.135) < 0.000_000_1)
+}
+
+@Test func audioPeakDetectorDoesNotInsertAdjacentGridBlocks() {
+  var energies: [Int64] = [40]
+  var times = [0.105]
+
+  AudioPeakDetector.appendZeroFilledGap(
+    after: 10, before: 11, blockEnergies: &energies, blockPTS: &times)
+
+  #expect(energies == [40])
+  #expect(times == [0.105])
+}
+
 @Test func audioPeakResultEncodesOutputSchemaURL() throws {
   let result = AudioPeakDetectionResult(
     matchId: "recording", inmatchStart: 0, duration: 600, gain: 1, dilation: 0.5,

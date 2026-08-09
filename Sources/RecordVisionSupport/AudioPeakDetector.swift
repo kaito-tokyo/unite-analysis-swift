@@ -400,6 +400,12 @@ private struct PCMBlockAccumulator {
       let blockIndex = Int64(floor(samplePTS / AudioPeakDetector.blockDuration))
       if let currentBlockIndex, blockIndex != currentBlockIndex {
         finishCurrentBlock()
+        AudioPeakDetector.appendZeroFilledGap(
+          after: currentBlockIndex,
+          before: blockIndex,
+          blockEnergies: &blockEnergies,
+          blockPTS: &blockPTS
+        )
       }
       if currentBlockIndex == nil {
         currentBlockIndex = blockIndex
@@ -429,5 +435,20 @@ private struct PCMBlockAccumulator {
     currentEnergy = 0
     currentSampleCount = 0
     self.currentBlockIndex = nil
+  }
+}
+
+extension AudioPeakDetector {
+  package static func appendZeroFilledGap(
+    after previousBlockIndex: Int64,
+    before nextBlockIndex: Int64,
+    blockEnergies: inout [Int64],
+    blockPTS: inout [Double]
+  ) {
+    guard nextBlockIndex > previousBlockIndex + 1 else { return }
+    for blockIndex in (previousBlockIndex + 1)..<nextBlockIndex {
+      blockEnergies.append(0)
+      blockPTS.append((Double(blockIndex) + 0.5) * blockDuration)
+    }
   }
 }
