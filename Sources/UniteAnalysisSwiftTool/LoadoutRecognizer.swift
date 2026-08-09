@@ -11,6 +11,11 @@ import IconMatcherNative
 package struct IconMatch: Codable, Sendable, Equatable {
   package var name: String
   package var score: Float
+
+  package init(name: String, score: Float) {
+    self.name = name
+    self.score = score
+  }
 }
 
 package func swiftString(from value: std.string) -> String {
@@ -124,13 +129,23 @@ extension unite_analysis.IconMatcher {
   }
 }
 
-struct RecognizedItem: Codable, Sendable, Equatable {
-  var name: String?
-  var score: Float?
-  var candidates: [IconMatch]
+package struct RecognizedItem: Codable, Sendable, Equatable {
+  package var name: String?
+  package var score: Float?
+  package var candidates: [IconMatch]
 
-  init(_ matches: [IconMatch]) {
-    name = matches.first?.name
+  package init(_ matches: [IconMatch]) {
+    let top = matches.first
+    let runnerUpScore = matches.dropFirst().first?.score ?? 0
+    name =
+      if let top,
+        top.score >= LoadoutRecognizer.minimumAcceptedVoteSum,
+        top.score >= LoadoutRecognizer.minimumTopToRunnerUpRatio * runnerUpScore
+      {
+        top.name
+      } else {
+        nil
+      }
     score = matches.first?.score
     candidates = matches
   }
@@ -163,6 +178,13 @@ struct LoadoutRecognition: Codable, Sendable, Equatable {
 }
 
 package enum LoadoutRecognizer {
+  /// One full-strength Lowe-ratio vote, or equivalent accumulated partial evidence.
+  package static let minimumAcceptedVoteSum: Float = 1
+  /// Requires the winner to own at least two thirds of the top-two accumulated evidence.
+  package static let minimumTopToRunnerUpRatio: Float = 2
+  /// Half the smallest circular separation between the three declared-route reference hues.
+  package static let maximumRouteHueDistance: Float = 24.5
+
   static func recognizeDraft(
     finalPreparation: CGImage,
     versus: CGImage,
@@ -245,7 +267,9 @@ package enum LoadoutRecognizer {
     let sorted = hues.sorted()
     let median = sorted[sorted.count / 2]
     let references: [(String, Float)] = [("top", 20), ("central", 100), ("bottom", 151)]
-    let name = references.min { hueDistance(median, $0.1) < hueDistance(median, $1.1) }!.0
+    let nearest = references.min { hueDistance(median, $0.1) < hueDistance(median, $1.1) }!
+    let name =
+      hueDistance(median, nearest.1) <= maximumRouteHueDistance ? nearest.0 : nil
     return DeclaredRoute(name: name, medianHue: median, chromaticFraction: fraction)
   }
 

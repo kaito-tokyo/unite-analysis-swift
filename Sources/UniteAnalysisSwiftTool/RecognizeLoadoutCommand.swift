@@ -228,6 +228,8 @@ struct RecognizeDraftLoadout: ParsableCommand {
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       Select draft mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, times are relative to match start. With --input for a v1 .ldtxrecord, times use the recording timeline. Use the last stable final-preparation frame, not an intermediate edited loadout. The versus frame supplies enemy battle items; enemy held items are never inferred.
+
+      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score; candidates and the top score remain available when recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
   @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
@@ -288,6 +290,8 @@ struct RecognizeBlindLoadout: ParsableCommand {
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       Select blind mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, --prep-time is relative to match start. With --input for a v1 .ldtxrecord, it uses the recording timeline. The time must identify the stable five-card selection screen. Enemy loadouts are absent because this screen does not expose them.
+
+      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score; candidates and the top score remain available when recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
   @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
