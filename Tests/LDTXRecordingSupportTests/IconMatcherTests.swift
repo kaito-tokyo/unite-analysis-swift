@@ -156,7 +156,21 @@ import UniteAnalysisSwiftCommands
   let image = try BGRImage(width: 40, height: 40, bytesPerRow: 120, bytes: pixels)
 
   #expect(matcher.isValid())
-  #expect(matcher.matchHeldItem(in: image).isEmpty)
+  #expect(try matcher.matchHeldItem(in: image).isEmpty)
+}
+
+@Test func invalidNativeMatchInputSurfacesAnError() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("pb")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try descriptorDatabaseFixture().write(to: url)
+  let matcher = unite_analysis.IconMatcher(std.string(url.path))
+
+  let result = matcher.matchHeldBGR(nil, 0, 0, 0, 0, 0.40, 3, 0.90)
+
+  #expect(result.count() == 0)
+  #expect(swiftString(from: matcher.errorMessage()) == "invalid held-item match input")
 }
 
 @Test func invalidBGRImageIsRejected() {

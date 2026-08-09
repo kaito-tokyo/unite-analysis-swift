@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import ArgumentParser
 import CoreGraphics
 import CxxStdlib
 import Foundation
@@ -77,39 +78,43 @@ package struct BGRImage: Sendable {
 }
 
 extension unite_analysis.IconMatcher {
-  package func matchHeldItem(in image: BGRImage) -> [IconMatch] {
-    image.bytes.withUnsafeBufferPointer { buffer in
-      iconMatches(
-        matchHeldBGR(
-          buffer.baseAddress,
-          buffer.count,
-          UInt32(image.width),
-          UInt32(image.height),
-          image.bytesPerRow,
-          0.40,
-          3,
-          0.90
-        ))
+  package func matchHeldItem(in image: BGRImage) throws -> [IconMatch] {
+    let results = image.bytes.withUnsafeBufferPointer { buffer in
+      matchHeldBGR(
+        buffer.baseAddress,
+        buffer.count,
+        UInt32(image.width),
+        UInt32(image.height),
+        image.bytesPerRow,
+        0.40,
+        3,
+        0.90
+      )
     }
+    return try iconMatches(results)
   }
 
-  func matchBattleItem(in image: BGRImage) -> [IconMatch] {
-    image.bytes.withUnsafeBufferPointer { buffer in
-      iconMatches(
-        matchBattleBGR(
-          buffer.baseAddress,
-          buffer.count,
-          UInt32(image.width),
-          UInt32(image.height),
-          image.bytesPerRow,
-          3,
-          0.80
-        ))
+  func matchBattleItem(in image: BGRImage) throws -> [IconMatch] {
+    let results = image.bytes.withUnsafeBufferPointer { buffer in
+      matchBattleBGR(
+        buffer.baseAddress,
+        buffer.count,
+        UInt32(image.width),
+        UInt32(image.height),
+        image.bytesPerRow,
+        3,
+        0.80
+      )
     }
+    return try iconMatches(results)
   }
 
-  private func iconMatches(_ results: unite_analysis.IconMatchResults) -> [IconMatch] {
-    (0..<results.count()).map { index in
+  private func iconMatches(_ results: unite_analysis.IconMatchResults) throws -> [IconMatch] {
+    let message = swiftString(from: errorMessage())
+    guard message.isEmpty else {
+      throw ValidationError(message)
+    }
+    return (0..<results.count()).map { index in
       let name = results.name(index)
       return IconMatch(
         name: swiftString(from: name),
@@ -173,7 +178,7 @@ package enum LoadoutRecognizer {
     let allies = try heldX.indices.map { player in
       let heldItems = try heldDX.map { offset in
         RecognizedItem(
-          matcher.matchHeldItem(
+          try matcher.matchHeldItem(
             in: try preparation.crop(centerX: heldX[player] + offset, centerY: 514, side: 40)))
       }
       let battle = try preparation.crop(centerX: battleX[player], centerY: 516, side: 48)
@@ -182,7 +187,7 @@ package enum LoadoutRecognizer {
       return RecognizedAllyLoadout(
         slot: player + 1,
         heldItems: heldItems,
-        battleItem: RecognizedItem(matcher.matchBattleItem(in: battle)),
+        battleItem: RecognizedItem(try matcher.matchBattleItem(in: battle)),
         declaredRoute: classifyRoute(route)
       )
     }
@@ -190,7 +195,7 @@ package enum LoadoutRecognizer {
       let battle = try versus.crop(centerX: versusX[player], centerY: 729, side: 48)
       return RecognizedEnemyLoadout(
         slot: player + 1,
-        battleItem: RecognizedItem(matcher.matchBattleItem(in: battle)))
+        battleItem: RecognizedItem(try matcher.matchBattleItem(in: battle)))
     }
     return LoadoutRecognition(
       format: "pokemon-unite-draft-loadout-2",
@@ -212,7 +217,7 @@ package enum LoadoutRecognizer {
     let allies = try heldX.indices.map { player in
       let heldItems = try heldDX.map { offset in
         RecognizedItem(
-          matcher.matchHeldItem(
+          try matcher.matchHeldItem(
             in: try image.crop(centerX: heldX[player] + offset, centerY: 756, side: 40)))
       }
       let battle = try image.crop(centerX: battleX[player], centerY: 818, side: 48)
@@ -220,7 +225,7 @@ package enum LoadoutRecognizer {
       return RecognizedAllyLoadout(
         slot: player + 1,
         heldItems: heldItems,
-        battleItem: RecognizedItem(matcher.matchBattleItem(in: battle)),
+        battleItem: RecognizedItem(try matcher.matchBattleItem(in: battle)),
         declaredRoute: classifyRoute(route)
       )
     }
