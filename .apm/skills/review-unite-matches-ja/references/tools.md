@@ -20,8 +20,8 @@
 - **症状**: 誰が技を使い誰に当たったか、攻撃が回避・中断されたか、重なる動作のどれが先かを通常の静止画では確定できない。
 - **使うツール**: `frame-burst`。指定時刻以降のソースフレームを連続デコードし、近似シークによる順序の欠落を避ける。
 - **再現例**: [frame-burst.md](frame-burst.md)に従って`frame-burst-jobs.jsonl`を作り、`unite-analysis-swift frame-burst --record-spec _PokemonUniteMatches/match-01/record-spec.json _PokemonUniteAnalysis/matches/match-01/frame-burst-jobs.jsonl`を実行する。出力は`_PokemonUniteAnalysis/matches/match-01/frame-bursts/`以下に保存する。
-- **解釈と提示**: 左から右、上から下へ読み、使用者、発生、接触、リアクションの順を追う。必要なセルは原寸静止画で再確認する。
-- **限界**: 候補時刻の発見や、数秒以上の配置・追撃・変換の説明に使わない。表示の間引きはデコード範囲を広げない。
+- **解釈と提示**: 左から右、上から下へ読み、使用者、発生、接触、リアクションの順を追う。セルの細部を再確認するときは、同じ`matchTimestamp`、`frameCount`、`decimate`を保ったまま、対象を含む狭い`source`と大きな`cellWidth`で別の`frame-burst`を生成する。同じデコード済みフレーム列の対応するセルを拡大して確かめる。
+- **限界**: MCP結果と連写画像はセルごとのPTSを示さない。選択セルの時刻を推定して`precise-frame`で抽出し直さない。候補時刻の発見や、数秒以上の配置・追撃・変換の説明に使わず、表示の間引きがデコード範囲を広げると解釈しない。
 - **次の調査**: 対話でシーケンス全体を共有する必要があれば`extract-clip`、HUDの細部は`precise-frame`を使う。
 
 ## 場面の前後やオブジェクト戦全体を共有する
@@ -37,7 +37,7 @@
 
 - **症状**: コンタクトシートでHUD、タイマー、クールダウン、プレイヤー名、命中表示を読めない。
 - **使うツール**: `precise-frame`。指定時刻以降の最初のデコード済みフレームを、明示したソース矩形の原寸で得る。
-- **再現例**: `unite-analysis-swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 265.4 --x 0 --y 0 --width 1632 --height 918 --output _PokemonUniteAnalysis/matches/match-01/frames/265.4.jpg`。
+- **再現例**: 対象録画の`record-spec.json`にある`game-screen`コンポーネントから`x`、`y`、`width`、`height`を読み、`unite-analysis-swift precise-frame --record-spec _PokemonUniteMatches/match-01/record-spec.json --match-timestamp 265.4 --x <game-screen-x> --y <game-screen-y> --width <game-screen-width> --height <game-screen-height> --output _PokemonUniteAnalysis/matches/match-01/frames/265.4.jpg`を実行する。山括弧内は必ず実測値で置き換える。
 - **解釈と提示**: MCPが返す出力パスのフルサイズ画像を確認し、主張に必要な画像をチャットやレポートで提示する。実行経路が要求PTSと実デコードPTSを返す場合だけ、その差も確認する。
 - **限界**: MCPの`precise-frame`結果は通常、PTS診断を含まず出力パスだけを返す。その場合は要求時刻とデコード時刻が一致したと報告しない。1枚で動作順序や因果関係を確定せず、時刻が未知のまま総当たりに使わない。
 - **次の調査**: 前後の順序は`frame-burst`、シーン全体は`extract-clip`で確かめる。
@@ -46,7 +46,7 @@
 
 - **症状**: 結果行、バトルデータ、参加者、持ち物、バトルアイテム、宣言ルートが欠けている。
 - **使うツール**: 結果画面は`scan-result`、draftの最終準備画面とVS画面は`recognize-draft-loadout`、blind選択画面は`recognize-blind-loadout`を使う。
-- **再現例**: 先に対象画面をフルサイズで抽出し、`unite-analysis-swift scan-result result-summary.jpg --type summary --ocr-options ocr-options.json --output _PokemonUniteAnalysis/matches/match-01/result-summary.json`を実行する。ロードアウトは必ず各コマンドの`--help`から現在の必須画像と引数を確認する。
+- **再現例**: 先に対象画面を`_PokemonUniteAnalysis/matches/match-01/frames/result-summary.jpg`へフルサイズで抽出し、`unite-analysis-swift scan-result _PokemonUniteAnalysis/matches/match-01/frames/result-summary.jpg --type summary --ocr-options ocr-options.json --output _PokemonUniteAnalysis/matches/match-01/result-summary.json`を実行する。ロードアウトは必ず各コマンドの`--help`から現在の必須画像と引数を確認する。
 - **解釈と提示**: `scan-result`では出力JSONのconfidence、warnings、raw OCRを保持し、低confidenceの名前は入力画像で再確認する。ロードアウト認識では出力JSONの`score`、`candidates`、ルート測定値を保持し、選択候補とデコード済み入力フレームを対応させて再確認する。
 - **限界**: 縮小セル、余白を含む画像、異なる画面種別に`scan-result`を使わない。認識結果から録画時刻や操作プレイヤーを推測しない。
 - **次の調査**: 欠けた画面を`contact-sheet`で探し、`precise-frame`で抽出し直す。
