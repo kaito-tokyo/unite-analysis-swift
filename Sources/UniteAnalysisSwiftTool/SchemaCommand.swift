@@ -365,11 +365,15 @@ package enum EmbeddedSchemas {
         },
         "cell": {
           "type": "object",
-          "required": ["alternatives"],
+          "required": ["alternatives", "inferred"],
           "properties": {
             "text": { "type": "string" },
             "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-            "alternatives": { "type": "array", "items": { "type": "string" } }
+            "alternatives": { "type": "array", "items": { "type": "string" } },
+            "inferred": {
+              "type": "boolean",
+              "description": "True only when the value was inferred rather than observed by OCR."
+            }
           }
         },
         "battleDataRow": {

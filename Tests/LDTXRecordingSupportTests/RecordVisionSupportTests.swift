@@ -33,6 +33,37 @@ import Testing
   #expect(object["$schema"] as? String == ScanResult.schemaURL)
 }
 
+@Test func missingSummaryScoreIsMarkedAsInferred() throws {
+  var cells = [
+    OCRCell(text: nil, confidence: nil, alternatives: []),
+    OCRCell(text: "3", confidence: 0.9, alternatives: ["3"]),
+    OCRCell(text: "7", confidence: 0.8, alternatives: ["7"]),
+    OCRCell(text: "82", confidence: 0.7, alternatives: ["82"]),
+  ]
+
+  supplementMissingScore(&cells)
+
+  #expect(cells[0].text == "0")
+  #expect(cells[0].confidence == nil)
+  #expect(cells[0].alternatives.isEmpty)
+  #expect(cells[0].inferred)
+  #expect(cells.dropFirst().allSatisfy { !$0.inferred })
+}
+
+@Test func incompleteSummaryRowDoesNotInferScore() {
+  var cells = [
+    OCRCell(text: nil, confidence: nil, alternatives: []),
+    OCRCell(text: "3", confidence: 0.9, alternatives: ["3"]),
+    OCRCell(text: nil, confidence: nil, alternatives: []),
+    OCRCell(text: "82", confidence: 0.7, alternatives: ["82"]),
+  ]
+
+  supplementMissingScore(&cells)
+
+  #expect(cells[0].text == nil)
+  #expect(!cells[0].inferred)
+}
+
 private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {
   let bundle = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)

@@ -58,7 +58,7 @@ struct ScanResultCommand: ParsableCommand {
 
       OCR. Battle-data uses fixed-cell OCR. Summary combines full-screen and row OCR. Language correction is disabled for numeric and proper-name fields.
 
-      ROWS. All recognized rows are returned. The highlighted cursor row is never treated as the operated player. A missing standalone score 0 is supplemented without confidence only when the other three values in the same row were recognized. Low-confidence player names must be verified from the image.
+      ROWS. All recognized rows are returned. The highlighted cursor row is never treated as the operated player. A missing standalone score 0 is supplemented only when the other three values in the same row were recognized. Every cell includes inferred: false for an observed or unavailable value and inferred: true for a supplemented value. An inferred value has no confidence and is never added to alternatives because Vision did not observe it. Low-confidence player names must be verified from the image.
 
       OUTPUT. The result records its schema URL, absolute input path, generation time, selected OCR options, screen type, detection score, recognized values, confidence, raw OCR text, and warnings. Unrelated OCR option entries are not copied into the result. It does not invent video timestamps or scan metadata. Pretty-printed JSON is written to stdout when --output is omitted; otherwise the specified file is written atomically. An existing output is rejected unless --force is supplied.
 
