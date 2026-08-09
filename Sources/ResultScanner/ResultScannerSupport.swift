@@ -49,9 +49,26 @@ public struct TextObservation: Codable, Sendable {
 }
 
 package struct OCRCell: Codable {
-  let text: String?
-  let confidence: Float?
-  let alternatives: [String]
+  package let text: String?
+  package let confidence: Float?
+  package let alternatives: [String]
+  package let inferred: Bool
+
+  package init(
+    text: String?, confidence: Float?, alternatives: [String], inferred: Bool = false
+  ) {
+    self.text = text
+    self.confidence = confidence
+    self.alternatives = alternatives
+    self.inferred = inferred
+  }
+}
+
+package func supplementMissingScore(_ numbers: inout [OCRCell]) {
+  guard numbers.count == 4 else { return }
+  if numbers[0].text == nil && numbers[1...3].allSatisfy({ $0.text != nil }) {
+    numbers[0] = OCRCell(text: "0", confidence: nil, alternatives: [], inferred: true)
+  }
 }
 
 package struct BattleDataRow: Codable {
@@ -641,9 +658,7 @@ func summaryRows(
       }
       // Vision occasionally suppresses an isolated score glyph of 0.
       // Infer it only when every other statistic in that row was read.
-      if numbers[0].text == nil && numbers[1...3].allSatisfy({ $0.text != nil }) {
-        numbers[0] = OCRCell(text: "0", confidence: nil, alternatives: ["0"])
-      }
+      supplementMissingScore(&numbers)
       rows.append(
         SummaryRow(
           side: side,

@@ -309,9 +309,8 @@ public enum ContactSheetGenerator {
       duration: videoDuration.seconds
     )
     let start = CMTime(value: recordSpec.startPTS.value, timescale: recordSpec.startPTS.timescale)
-    let sourceTimes = frameOffsets.map {
-      CMTimeAdd(start, CMTime(seconds: $0, preferredTimescale: recordSpec.startPTS.timescale))
-    }
+    let sourceTimes = try validatedSourceTimes(
+      start: start, offsets: frameOffsets, videoDuration: videoDuration)
     let generator = AVAssetImageGenerator(asset: asset)
     generator.apertureMode = .encodedPixels
     generator.appliesPreferredTrackTransform = false
@@ -401,6 +400,35 @@ public enum ContactSheetGenerator {
       throw ContactSheetGeneratorError.message(
         "record-spec.json duration must be a finite non-negative value")
     }
+  }
+
+  package static func validatedSourceTimes(
+    start: CMTime, offsets: [Double], videoDuration: CMTime
+  ) throws -> [CMTime] {
+    guard start.seconds.isFinite, videoDuration.seconds.isFinite,
+      CMTimeCompare(videoDuration, .zero) > 0
+    else {
+      throw ContactSheetGeneratorError.message(
+        "Could not determine a positive source-video duration")
+    }
+    var sourceTimes: [CMTime] = []
+    sourceTimes.reserveCapacity(offsets.count)
+    for (index, offset) in offsets.enumerated() {
+      let sourceTime = CMTimeAdd(
+        start, CMTime(seconds: offset, preferredTimescale: start.timescale))
+      guard sourceTime.seconds.isFinite, CMTimeCompare(sourceTime, .zero) >= 0,
+        CMTimeCompare(sourceTime, videoDuration) < 0
+      else {
+        let format: (Double) -> String = {
+          String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), $0)
+        }
+        throw ContactSheetGeneratorError.message(
+          "Requested contact-sheet source time \(format(sourceTime.seconds))s for matchTimestamps[\(index)] = \(format(offset))s is outside source-video range [0.000, \(format(videoDuration.seconds)))s"
+        )
+      }
+      sourceTimes.append(sourceTime)
+    }
+    return sourceTimes
   }
 
   private static func valid(_ rectangle: ContactSheetDefinition.Rectangle) -> Bool {

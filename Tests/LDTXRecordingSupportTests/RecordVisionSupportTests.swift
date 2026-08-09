@@ -33,6 +33,37 @@ import Testing
   #expect(object["$schema"] as? String == ScanResult.schemaURL)
 }
 
+@Test func missingSummaryScoreIsMarkedAsInferred() throws {
+  var cells = [
+    OCRCell(text: nil, confidence: nil, alternatives: []),
+    OCRCell(text: "3", confidence: 0.9, alternatives: ["3"]),
+    OCRCell(text: "7", confidence: 0.8, alternatives: ["7"]),
+    OCRCell(text: "82", confidence: 0.7, alternatives: ["82"]),
+  ]
+
+  supplementMissingScore(&cells)
+
+  #expect(cells[0].text == "0")
+  #expect(cells[0].confidence == nil)
+  #expect(cells[0].alternatives.isEmpty)
+  #expect(cells[0].inferred)
+  #expect(cells.dropFirst().allSatisfy { !$0.inferred })
+}
+
+@Test func incompleteSummaryRowDoesNotInferScore() {
+  var cells = [
+    OCRCell(text: nil, confidence: nil, alternatives: []),
+    OCRCell(text: "3", confidence: 0.9, alternatives: ["3"]),
+    OCRCell(text: nil, confidence: nil, alternatives: []),
+    OCRCell(text: "82", confidence: 0.7, alternatives: ["82"]),
+  ]
+
+  supplementMissingScore(&cells)
+
+  #expect(cells[0].text == nil)
+  #expect(!cells[0].inferred)
+}
+
 private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {
   let bundle = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -429,6 +460,41 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   }
 }
 
+@Test func contactSheetRejectsFirstOutOfRangeSourceTimeBeforeDecode() {
+  do {
+    _ = try ContactSheetGenerator.validatedSourceTimes(
+      start: CMTime(seconds: 12.5, preferredTimescale: 600), offsets: [-1, 0, 9, 10],
+      videoDuration: CMTime(seconds: 21, preferredTimescale: 600))
+    Issue.record("Expected the first out-of-range source time to be rejected")
+  } catch {
+    let message = String(describing: error)
+    #expect(
+      message
+        == "Requested contact-sheet source time 21.500s for matchTimestamps[2] = 9.000s is outside source-video range [0.000, 21.000)s"
+    )
+    #expect(!message.contains("sandbox"))
+    #expect(!message.contains("decode"))
+  }
+}
+
+@Test func contactSheetAcceptsSourceTimesInsideHalfOpenDuration() throws {
+  let sourceTimes = try ContactSheetGenerator.validatedSourceTimes(
+    start: CMTime(seconds: 12.5, preferredTimescale: 600), offsets: [-12.5, 0, 8.499],
+    videoDuration: CMTime(seconds: 21, preferredTimescale: 600))
+  #expect(sourceTimes.count == 3)
+}
+
+@Test func contactSheetRejectsSourceTimeRoundedUpToDuration() {
+  do {
+    _ = try ContactSheetGenerator.validatedSourceTimes(
+      start: CMTime(seconds: 21, preferredTimescale: 600), offsets: [-0.0001],
+      videoDuration: CMTime(seconds: 21, preferredTimescale: 600))
+    Issue.record("Expected a source time quantized to the duration to be rejected")
+  } catch {
+    #expect(String(describing: error).contains("outside source-video range"))
+  }
+}
+
 @Test func contactSheetRejectsLegacyFramesField() {
   let data = Data(
     """
@@ -505,6 +571,31 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   #expect(result.changedPixelCount == 2)
 }
 
+@Test func chromaEventRejectsTheFirstMissingSequenceIndex() {
+  let urls = ["frame-000001.jpg", "frame-000003.jpg"].map {
+    URL(fileURLWithPath: "/tmp/\($0)")
+  }
+
+  #expect(throws: ChromaEventError.self) {
+    try ChromaEventDetector.sequenceIndices(for: urls)
+  }
+  do {
+    _ = try ChromaEventDetector.sequenceIndices(for: urls)
+  } catch {
+    #expect(
+      String(describing: error)
+        == "JPEG sequence is not contiguous at frame-000003.jpg: expected index 2, found 3")
+  }
+}
+
+@Test func chromaEventRejectsNonPaddedSequenceIndices() {
+  let urls = [URL(fileURLWithPath: "/tmp/frame-1.jpg")]
+
+  #expect(throws: ChromaEventError.self) {
+    try ChromaEventDetector.sequenceIndices(for: urls)
+  }
+}
+
 @Test func chromaEventCandidatesExpandAroundSelectedSamples() throws {
   let samples = [
     ChromaEventSample(
@@ -568,6 +659,44 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   #expect(AudioPeakDetector.minimumNormalizedRise == 0.000_005)
   #expect(AudioPeakDetector.minimumPeakSeparation == 0.75)
   #expect(AudioPeakDetector.peakDilation == 0.5)
+}
+
+@Test func audioPeakDetectorZeroFillsMissingGridBlocks() {
+  var energies: [Int64] = [40]
+  var times = [0.105]
+
+  AudioPeakDetector.appendZeroFilledGap(
+    after: 10, before: 14, blockEnergies: &energies, blockPTS: &times)
+
+  #expect(energies == [40, 0, 0, 0])
+  #expect(times.count == 4)
+  #expect(abs(times[1] - 0.115) < 0.000_000_1)
+  #expect(abs(times[2] - 0.125) < 0.000_000_1)
+  #expect(abs(times[3] - 0.135) < 0.000_000_1)
+}
+
+@Test func audioPeakDetectorDoesNotInsertAdjacentGridBlocks() {
+  var energies: [Int64] = [40]
+  var times = [0.105]
+
+  AudioPeakDetector.appendZeroFilledGap(
+    after: 10, before: 11, blockEnergies: &energies, blockPTS: &times)
+
+  #expect(energies == [40])
+  #expect(times == [0.105])
+}
+
+@Test func audioPeakDetectorZeroFillsExpectedEdgeBlocks() {
+  var energies: [Int64] = []
+  var times: [Double] = []
+
+  AudioPeakDetector.appendZeroFilledBlocks(
+    from: 10, to: 13, blockEnergies: &energies, blockPTS: &times)
+
+  #expect(energies == [0, 0, 0])
+  #expect(times.count == 3)
+  #expect(abs(times[0] - 0.105) < 0.000_000_1)
+  #expect(abs(times[2] - 0.125) < 0.000_000_1)
 }
 
 @Test func audioPeakResultEncodesOutputSchemaURL() throws {

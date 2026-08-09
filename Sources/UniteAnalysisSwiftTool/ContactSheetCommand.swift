@@ -48,7 +48,7 @@ struct ContactSheet: ParsableCommand {
 
       TEXT PLACEMENT. drawText accepts either a literal text string or a script object. Colors accept #RRGGBB or #RRGGBBAA. Optional backgroundColor fits the text with 4px padding; borderColor adds a 1px border. Placements are composited in array order.
 
-      TIMING. matchTimestamps must contain finite, strictly increasing seconds relative to match start. Negative values select pre-match frames. Values above the match duration select post-match frames. Duplicate or reverse values are rejected before decoding.
+      TIMING. matchTimestamps must contain finite, strictly increasing seconds relative to match start. Negative values select pre-match frames. Values above the match duration select post-match frames. Duplicate or reverse values are rejected before decoding. After adding record-spec startPTS, every requested source time must be in the half-open source-video range [0, duration). The first out-of-range request is reported as a validation error before AVAssetImageGenerator decoding begins.
 
       SCRIPT LABELS. A drawText script return expression is evaluated by JSC once per cell. Available globals are FRAME, MATCH, RECORD, and VIDEO. Use FRAME.actualInmatch for the decoded timestamp. FRAME.index is zero-based.
 

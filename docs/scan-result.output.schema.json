@@ -115,7 +115,8 @@
     "cell": {
       "type": "object",
       "required": [
-        "alternatives"
+        "alternatives",
+        "inferred"
       ],
       "properties": {
         "text": {
@@ -131,6 +132,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "inferred": {
+          "type": "boolean",
+          "description": "True only when the value was inferred rather than observed by OCR."
         }
       }
     },

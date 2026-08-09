@@ -223,6 +223,49 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(result.chromaticFraction == 0)
 }
 
+@Test func unrelatedSaturatedRouteCropIsUnrecognized() throws {
+  let greenBGR = [UInt8](arrayLiteral: 0, 255, 0)
+  let pixels = Array(repeating: greenBGR, count: 36 * 28).flatMap { $0 }
+  let image = try BGRImage(width: 36, height: 28, bytesPerRow: 36 * 3, bytes: pixels)
+  let result = LoadoutRecognizer.classifyRoute(image)
+
+  #expect(result.name == nil)
+  #expect(result.medianHue == 60)
+  #expect(result.chromaticFraction == 1)
+  #expect(LoadoutRecognizer.maximumRouteHueDistance == 24.5)
+}
+
+@Test func recognizedItemAbstainsBelowOneVoteOfEvidence() {
+  let item = RecognizedItem([IconMatch(name: "first", score: 0.99)])
+
+  #expect(item.name == nil)
+  #expect(item.score == 0.99)
+  #expect(item.candidates.count == 1)
+  #expect(LoadoutRecognizer.minimumAcceptedVoteSum == 1)
+}
+
+@Test func recognizedItemAbstainsWithoutTwoToOneMargin() {
+  let item = RecognizedItem([
+    IconMatch(name: "first", score: 2),
+    IconMatch(name: "second", score: 1.01),
+  ])
+
+  #expect(item.name == nil)
+  #expect(item.score == 2)
+  #expect(item.candidates.count == 2)
+  #expect(LoadoutRecognizer.minimumTopToRunnerUpRatio == 2)
+}
+
+@Test func recognizedItemAcceptsGroundedEvidenceBoundaries() {
+  let item = RecognizedItem([
+    IconMatch(name: "first", score: 2),
+    IconMatch(name: "second", score: 1),
+  ])
+
+  #expect(item.name == "first")
+  #expect(item.score == 2)
+}
+
 @Test func normalizesDeclaredGameScreenComponent() throws {
   let context = try #require(
     CGContext(

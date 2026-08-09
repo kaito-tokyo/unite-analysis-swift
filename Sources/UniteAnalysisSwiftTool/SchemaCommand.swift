@@ -175,14 +175,26 @@ package enum EmbeddedSchemas {
         "candidate": {
           "type": "object",
           "required": ["name", "score"],
-          "properties": { "name": { "type": "string" }, "score": { "type": "number" } }
+          "properties": {
+            "name": { "type": "string" },
+            "score": {
+              "type": "number",
+              "description": "Unnormalized sum of surviving Lowe-ratio descriptor votes. Each vote is 1 - nearestDistance / secondNearestDistance; this orders candidates within one crop but is not a probability or a calibrated value comparable across crops or database revisions."
+            }
+          }
         },
         "recognizedItem": {
           "type": "object",
           "required": ["candidates"],
           "properties": {
-            "name": { "type": ["string", "null"] },
-            "score": { "type": ["number", "null"] },
+            "name": {
+              "type": ["string", "null"],
+              "description": "Top candidate name, or null when evidence is below one vote or the top score is less than twice the runner-up score."
+            },
+            "score": {
+              "type": ["number", "null"],
+              "description": "Top candidate unnormalized vote sum, retained even when name is null; null only when there are no candidates."
+            },
             "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } }
           }
         },
@@ -190,7 +202,10 @@ package enum EmbeddedSchemas {
           "type": "object",
           "required": ["method", "chromatic_fraction"],
           "properties": {
-            "name": { "type": ["string", "null"] },
+            "name": {
+              "type": ["string", "null"],
+              "description": "Declared route, or null for low chromatic coverage or a median hue farther than 24.5 OpenCV hue units from every route reference."
+            },
             "method": { "const": "hsv" },
             "median_hue": { "type": ["number", "null"] },
             "chromatic_fraction": { "type": "number" }
@@ -365,11 +380,15 @@ package enum EmbeddedSchemas {
         },
         "cell": {
           "type": "object",
-          "required": ["alternatives"],
+          "required": ["alternatives", "inferred"],
           "properties": {
             "text": { "type": "string" },
             "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-            "alternatives": { "type": "array", "items": { "type": "string" } }
+            "alternatives": { "type": "array", "items": { "type": "string" } },
+            "inferred": {
+              "type": "boolean",
+              "description": "True only when the value was inferred rather than observed by OCR."
+            }
           }
         },
         "battleDataRow": {
@@ -1348,11 +1367,13 @@ package enum EmbeddedSchemas {
           "properties": {
             "requestedInmatch": {
               "type": "number",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Validated JPEG sequence-grid time derived as (filename index - 1) / fps."
             },
             "actualInmatch": {
               "type": "number",
-              "minimum": 0
+              "minimum": 0,
+              "description": "The same validated sequence-grid time as requestedInmatch, not a decoder-reported timestamp."
             },
             "score": {
               "type": "integer",
