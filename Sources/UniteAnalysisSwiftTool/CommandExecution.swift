@@ -115,7 +115,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as OCRCommand:
-    let writer = try JSONLResponseWriter(output: command.output)
+    let writer = try JSONLResponseWriter(output: command.output, force: command.force)
     for try await record in command.outputRecords() {
       switch record {
       case .success(let output):
@@ -127,6 +127,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     try writer.finish()
 
   case let command as ScanResultCommand:
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

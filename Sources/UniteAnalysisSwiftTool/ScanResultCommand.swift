@@ -60,7 +60,7 @@ struct ScanResultCommand: ParsableCommand {
 
       ROWS. All recognized rows are returned. The highlighted cursor row is never treated as the operated player. A missing standalone score 0 is supplemented without confidence only when the other three values in the same row were recognized. Low-confidence player names must be verified from the image.
 
-      OUTPUT. The result records its schema URL, absolute input path, generation time, selected OCR options, screen type, detection score, recognized values, confidence, raw OCR text, and warnings. Unrelated OCR option entries are not copied into the result. It does not invent video timestamps or scan metadata. Pretty-printed JSON is written to stdout when --output is omitted; otherwise the specified file is atomically replaced.
+      OUTPUT. The result records its schema URL, absolute input path, generation time, selected OCR options, screen type, detection score, recognized values, confidence, raw OCR text, and warnings. Unrelated OCR option entries are not copied into the result. It does not invent video timestamps or scan metadata. Pretty-printed JSON is written to stdout when --output is omitted; otherwise the specified file is written atomically. An existing output is rejected unless --force is supplied.
 
       COMPLETE OUTPUT SHAPE.
 
@@ -88,9 +88,11 @@ struct ScanResultCommand: ParsableCommand {
   @Option(help: "Required path to ocr-options.json. Relative paths use the current directory.")
   var ocrOptions: String
 
-  @Option(help: "JSON path to replace atomically. Writes to stdout when omitted.")
+  @Option(help: "JSON output path. Writes to stdout when omitted.")
   var output: String?
 
+  @Flag(help: "Allow --output to replace an existing file atomically.")
+  var force = false
 }
 
 extension ScanResultCommand {

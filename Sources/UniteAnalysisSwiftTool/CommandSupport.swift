@@ -199,8 +199,9 @@ final class JSONLResponseWriter {
   private var finished = false
   private let encoder: JSONEncoder
 
-  init(output: String? = nil) throws {
+  init(output: String? = nil, force: Bool = false) throws {
     outputURL = output.map(resolvePath)
+    try validateOutputPath(outputURL, force: force)
     temporaryURL = outputURL.map { outputURL in
       outputURL.deletingLastPathComponent().appendingPathComponent(
         ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp")
@@ -243,6 +244,14 @@ final class JSONLResponseWriter {
       try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
     }
     finished = true
+  }
+}
+
+func validateOutputPath(_ outputURL: URL?, force: Bool) throws {
+  guard let outputURL else { return }
+  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Output already exists: \(outputURL.path). Pass --force to overwrite.")
   }
 }
 

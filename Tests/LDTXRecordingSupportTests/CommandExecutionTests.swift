@@ -56,3 +56,63 @@ import Testing
   let versionRecords = try #require(versionObject["records"] as? [[String: String]])
   #expect(versionRecords == [["text": UniteAnalysisSwiftCommand.configuration.version]])
 }
+
+@Test(arguments: ["ocr", "scan-result"])
+func writingCommandsParseForceFlag(commandName: String) throws {
+  let arguments =
+    commandName == "ocr"
+    ? [
+      "ocr", "jobs.jsonl", "--ocr-options", "ocr-options.json", "--output", "result.jsonl",
+      "--force",
+    ]
+    : [
+      "scan-result", "result.jpg", "--type", "summary", "--ocr-options", "ocr-options.json",
+      "--output", "result.json", "--force",
+    ]
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
+
+  if let command = parsed as? OCRCommand {
+    #expect(command.force)
+  } else {
+    #expect(try #require(parsed as? ScanResultCommand).force)
+  }
+}
+
+@Test func jsonlOutputRequiresForceBeforeReplacingExistingFile() throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("jsonl")
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try JSONLResponseWriter(output: output.path)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+
+  let writer = try JSONLResponseWriter(output: output.path, force: true)
+  try writer.write(["ok": true])
+  try writer.finish()
+  #expect(String(decoding: try Data(contentsOf: output), as: UTF8.self) == "{\"ok\":true}\n")
+}
+
+@Test(arguments: ["ocr", "scan-result"])
+func writingCommandsRejectExistingOutputBeforeProcessing(commandName: String) async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let arguments =
+    commandName == "ocr"
+    ? ["ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
+    : [
+      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "--output", output.path,
+    ]
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try await executeCLI(parsed)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
