@@ -462,8 +462,9 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
 
 @Test func contactSheetRejectsFirstOutOfRangeSourceTimeBeforeDecode() {
   do {
-    try ContactSheetGenerator.validateSourceTimes(
-      start: 12.5, offsets: [-1, 0, 9, 10], videoDuration: 21)
+    _ = try ContactSheetGenerator.validatedSourceTimes(
+      start: CMTime(seconds: 12.5, preferredTimescale: 600), offsets: [-1, 0, 9, 10],
+      videoDuration: CMTime(seconds: 21, preferredTimescale: 600))
     Issue.record("Expected the first out-of-range source time to be rejected")
   } catch {
     let message = String(describing: error)
@@ -477,8 +478,21 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
 }
 
 @Test func contactSheetAcceptsSourceTimesInsideHalfOpenDuration() throws {
-  try ContactSheetGenerator.validateSourceTimes(
-    start: 12.5, offsets: [-12.5, 0, 8.499], videoDuration: 21)
+  let sourceTimes = try ContactSheetGenerator.validatedSourceTimes(
+    start: CMTime(seconds: 12.5, preferredTimescale: 600), offsets: [-12.5, 0, 8.499],
+    videoDuration: CMTime(seconds: 21, preferredTimescale: 600))
+  #expect(sourceTimes.count == 3)
+}
+
+@Test func contactSheetRejectsSourceTimeRoundedUpToDuration() {
+  do {
+    _ = try ContactSheetGenerator.validatedSourceTimes(
+      start: CMTime(seconds: 21, preferredTimescale: 600), offsets: [-0.0001],
+      videoDuration: CMTime(seconds: 21, preferredTimescale: 600))
+    Issue.record("Expected a source time quantized to the duration to be rejected")
+  } catch {
+    #expect(String(describing: error).contains("outside source-video range"))
+  }
 }
 
 @Test func contactSheetRejectsLegacyFramesField() {
@@ -670,6 +684,19 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
 
   #expect(energies == [40])
   #expect(times == [0.105])
+}
+
+@Test func audioPeakDetectorZeroFillsExpectedEdgeBlocks() {
+  var energies: [Int64] = []
+  var times: [Double] = []
+
+  AudioPeakDetector.appendZeroFilledBlocks(
+    from: 10, to: 13, blockEnergies: &energies, blockPTS: &times)
+
+  #expect(energies == [0, 0, 0])
+  #expect(times.count == 3)
+  #expect(abs(times[0] - 0.105) < 0.000_000_1)
+  #expect(abs(times[2] - 0.125) < 0.000_000_1)
 }
 
 @Test func audioPeakResultEncodesOutputSchemaURL() throws {

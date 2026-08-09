@@ -194,7 +194,8 @@ public enum AudioPeakDetector {
         throw AudioPeakDetectorError.message("Decoded audio has no valid stream description")
       }
       if accumulator == nil {
-        accumulator = PCMBlockAccumulator(sampleRate: stream.mSampleRate, gain: gain)
+        accumulator = PCMBlockAccumulator(
+          sampleRate: stream.mSampleRate, gain: gain, readStart: readStart, readEnd: readEnd)
       }
       guard accumulator?.sampleRate == stream.mSampleRate else {
         throw AudioPeakDetectorError.message("Main-mix sample rate changed during decoding")
@@ -355,11 +356,16 @@ private struct PCMBlockAccumulator {
   private var currentEnergy: Int64 = 0
   private var currentSampleCount = 0
   private var currentBlockIndex: Int64?
+  private let firstExpectedBlockIndex: Int64
+  private let endExpectedBlockIndex: Int64
+  private var hasAppendedLeadingPadding = false
 
-  init(sampleRate: Double, gain: Double) {
+  init(sampleRate: Double, gain: Double, readStart: Double, readEnd: Double) {
     self.sampleRate = sampleRate
     self.samplesPerBlock = max(1, Int((sampleRate * AudioPeakDetector.blockDuration).rounded()))
     self.gain = gain
+    self.firstExpectedBlockIndex = Int64(floor(readStart / AudioPeakDetector.blockDuration))
+    self.endExpectedBlockIndex = Int64(ceil(readEnd / AudioPeakDetector.blockDuration))
   }
 
   mutating func append(sampleBuffer: CMSampleBuffer) throws {
@@ -398,6 +404,15 @@ private struct PCMBlockAccumulator {
     for frame in 0..<frameCount {
       let samplePTS = sampleBufferPTS + Double(frame) / sampleRate
       let blockIndex = Int64(floor(samplePTS / AudioPeakDetector.blockDuration))
+      if !hasAppendedLeadingPadding {
+        AudioPeakDetector.appendZeroFilledBlocks(
+          from: firstExpectedBlockIndex,
+          to: blockIndex,
+          blockEnergies: &blockEnergies,
+          blockPTS: &blockPTS
+        )
+        hasAppendedLeadingPadding = true
+      }
       if let currentBlockIndex, blockIndex != currentBlockIndex {
         finishCurrentBlock()
         AudioPeakDetector.appendZeroFilledGap(
@@ -422,7 +437,15 @@ private struct PCMBlockAccumulator {
   }
 
   mutating func finish() {
+    let lastDecodedBlockIndex = currentBlockIndex
     finishCurrentBlock()
+    guard let lastDecodedBlockIndex else { return }
+    AudioPeakDetector.appendZeroFilledBlocks(
+      from: lastDecodedBlockIndex + 1,
+      to: endExpectedBlockIndex,
+      blockEnergies: &blockEnergies,
+      blockPTS: &blockPTS
+    )
   }
 
   private mutating func finishCurrentBlock() {
@@ -439,16 +462,30 @@ private struct PCMBlockAccumulator {
 }
 
 extension AudioPeakDetector {
+  package static func appendZeroFilledBlocks(
+    from firstBlockIndex: Int64,
+    to endBlockIndex: Int64,
+    blockEnergies: inout [Int64],
+    blockPTS: inout [Double]
+  ) {
+    guard firstBlockIndex < endBlockIndex else { return }
+    for blockIndex in firstBlockIndex..<endBlockIndex {
+      blockEnergies.append(0)
+      blockPTS.append((Double(blockIndex) + 0.5) * blockDuration)
+    }
+  }
+
   package static func appendZeroFilledGap(
     after previousBlockIndex: Int64,
     before nextBlockIndex: Int64,
     blockEnergies: inout [Int64],
     blockPTS: inout [Double]
   ) {
-    guard nextBlockIndex > previousBlockIndex + 1 else { return }
-    for blockIndex in (previousBlockIndex + 1)..<nextBlockIndex {
-      blockEnergies.append(0)
-      blockPTS.append((Double(blockIndex) + 0.5) * blockDuration)
-    }
+    appendZeroFilledBlocks(
+      from: previousBlockIndex + 1,
+      to: nextBlockIndex,
+      blockEnergies: &blockEnergies,
+      blockPTS: &blockPTS
+    )
   }
 }
