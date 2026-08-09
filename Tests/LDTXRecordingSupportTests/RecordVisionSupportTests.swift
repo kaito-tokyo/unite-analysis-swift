@@ -417,6 +417,18 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   }
 }
 
+@Test(arguments: [-1.0, .nan, .infinity, -.infinity])
+func contactSheetRejectsInvalidRecordDuration(duration: Double) {
+  do {
+    try ContactSheetGenerator.validate(duration: duration)
+    Issue.record("Expected invalid record duration to be rejected")
+  } catch {
+    #expect(
+      String(describing: error)
+        == "record-spec.json duration must be a finite non-negative value")
+  }
+}
+
 @Test func contactSheetRejectsLegacyFramesField() {
   let data = Data(
     """

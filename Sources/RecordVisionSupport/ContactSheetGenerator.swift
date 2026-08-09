@@ -235,6 +235,7 @@ public enum ContactSheetGenerator {
     guard recordSpec.startPTS.timescale > 0 else {
       throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
     }
+    try validate(duration: recordSpec.duration)
     guard definition.cell.width > 0, definition.cell.height > 0, definition.columns > 0,
       !definition.placements.isEmpty, !definition.matchTimestamps.isEmpty
     else {
@@ -393,6 +394,13 @@ public enum ContactSheetGenerator {
       offsets.append(frame)
     }
     return offsets
+  }
+
+  package static func validate(duration: Double) throws {
+    guard duration.isFinite, duration >= 0 else {
+      throw ContactSheetGeneratorError.message(
+        "record-spec.json duration must be a finite non-negative value")
+    }
   }
 
   private static func valid(_ rectangle: ContactSheetDefinition.Rectangle) -> Bool {
