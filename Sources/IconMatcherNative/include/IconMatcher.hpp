@@ -12,7 +12,7 @@
 
 namespace unite_analysis {
 
-[[nodiscard]] bool isAkazeAvailable();
+[[nodiscard]] bool isAkazeAvailable() noexcept;
 
 enum class ItemCategory : std::uint8_t {
   unspecified = 0,
@@ -44,7 +44,7 @@ class IconDescriptors final {
       std::uint32_t imageHeight,
       std::uint32_t descriptorSize,
       float threshold,
-      float paddingFraction);
+      float paddingFraction) noexcept;
 
   [[nodiscard]] bool isValid() const noexcept;
   [[nodiscard]] std::string errorMessage() const;
@@ -60,7 +60,7 @@ class IconDescriptors final {
 
 class IconMatcher final {
  public:
-  explicit IconMatcher(const std::string &path);
+  explicit IconMatcher(const std::string &path) noexcept;
 
   [[nodiscard]] bool isValid() const noexcept;
   [[nodiscard]] std::string errorMessage() const;
@@ -83,7 +83,7 @@ class IconMatcher final {
       std::size_t bytesPerRow,
       float radiusFraction = 0.40F,
       std::size_t limit = 3,
-      float ratio = 0.90F) const;
+      float ratio = 0.90F) const noexcept;
   [[nodiscard]] IconMatchResults matchBattleBGR(
       const std::uint8_t *bytes,
       std::size_t byteCount,
@@ -91,7 +91,7 @@ class IconMatcher final {
       std::uint32_t height,
       std::size_t bytesPerRow,
       std::size_t limit = 3,
-      float ratio = 0.80F) const;
+      float ratio = 0.80F) const noexcept;
 
  private:
   class Implementation;

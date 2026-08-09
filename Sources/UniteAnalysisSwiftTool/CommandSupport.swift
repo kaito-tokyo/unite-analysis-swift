@@ -195,12 +195,15 @@ struct JSONLJobError: Encodable {
 final class JSONLResponseWriter {
   private let outputURL: URL?
   private let temporaryURL: URL?
+  private let force: Bool
   private var outputHandle: FileHandle?
   private var finished = false
   private let encoder: JSONEncoder
 
-  init(output: String? = nil) throws {
+  init(output: String? = nil, force: Bool = false) throws {
     outputURL = output.map(resolvePath)
+    self.force = force
+    try validateOutputPath(outputURL, force: force)
     temporaryURL = outputURL.map { outputURL in
       outputURL.deletingLastPathComponent().appendingPathComponent(
         ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp")
@@ -237,12 +240,46 @@ final class JSONLResponseWriter {
     guard let outputURL, let temporaryURL else { return }
     try outputHandle?.close()
     outputHandle = nil
+    try installTemporaryOutput(temporaryURL, at: outputURL, force: force)
+    finished = true
+  }
+}
+
+func validateOutputPath(_ outputURL: URL?, force: Bool) throws {
+  guard let outputURL else { return }
+  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Output already exists: \(outputURL.path). Pass --force to overwrite.")
+  }
+}
+
+func writeOutputData(_ data: Data, to outputURL: URL, force: Bool) throws {
+  try validateOutputPath(outputURL, force: force)
+  let temporaryURL = outputURL.deletingLastPathComponent().appendingPathComponent(
+    ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp")
+  defer { try? FileManager.default.removeItem(at: temporaryURL) }
+  try data.write(to: temporaryURL)
+  try installTemporaryOutput(temporaryURL, at: outputURL, force: force)
+}
+
+private func installTemporaryOutput(_ temporaryURL: URL, at outputURL: URL, force: Bool) throws {
+  if force {
     if FileManager.default.fileExists(atPath: outputURL.path) {
       _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
     } else {
       try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
     }
-    finished = true
+    return
+  }
+  do {
+    try FileManager.default.linkItem(at: temporaryURL, to: outputURL)
+    try FileManager.default.removeItem(at: temporaryURL)
+  } catch {
+    if FileManager.default.fileExists(atPath: outputURL.path) {
+      throw UniteAnalysisSwiftToolError.message(
+        "Output already exists: \(outputURL.path). Pass --force to overwrite.")
+    }
+    throw error
   }
 }
 

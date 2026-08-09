@@ -156,13 +156,52 @@ import UniteAnalysisSwiftCommands
   let image = try BGRImage(width: 40, height: 40, bytesPerRow: 120, bytes: pixels)
 
   #expect(matcher.isValid())
-  #expect(matcher.matchHeldItem(in: image).isEmpty)
+  #expect(try matcher.matchHeldItem(in: image).isEmpty)
+}
+
+@Test func invalidNativeMatchInputSurfacesAnError() throws {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("pb")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try descriptorDatabaseFixture().write(to: url)
+  let matcher = unite_analysis.IconMatcher(std.string(url.path))
+
+  let result = matcher.matchHeldBGR(nil, 0, 0, 0, 0, 0.40, 3, 0.90)
+
+  #expect(result.count() == 0)
+  #expect(swiftString(from: matcher.errorMessage()) == "invalid held-item match input")
 }
 
 @Test func invalidBGRImageIsRejected() {
   #expect(throws: LoadoutRecognitionError.invalidImage) {
     try BGRImage(width: 2, height: 2, bytesPerRow: 6, bytes: [0, 1, 2])
   }
+}
+
+@Test func cgImageConversionRendersIntoBGRStorage() throws {
+  let sourceBytes: [UInt8] = [12, 34, 56, 255, 78, 90, 123, 255]
+  let provider = try #require(CGDataProvider(data: Data(sourceBytes) as CFData))
+  let image = try #require(
+    CGImage(
+      width: 2,
+      height: 1,
+      bitsPerComponent: 8,
+      bitsPerPixel: 32,
+      bytesPerRow: 8,
+      space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+      provider: provider,
+      decode: nil,
+      shouldInterpolate: false,
+      intent: .defaultIntent))
+
+  let converted = try BGRImage(image)
+
+  #expect(converted.width == 2)
+  #expect(converted.height == 1)
+  #expect(converted.bytesPerRow == 6)
+  #expect(converted.bytes == [56, 34, 12, 123, 90, 78])
 }
 
 @Test(arguments: [

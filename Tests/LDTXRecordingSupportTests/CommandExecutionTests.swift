@@ -56,3 +56,138 @@ import Testing
   let versionRecords = try #require(versionObject["records"] as? [[String: String]])
   #expect(versionRecords == [["text": UniteAnalysisSwiftCommand.configuration.version]])
 }
+
+@Test(arguments: ["ocr", "scan-result"])
+func writingCommandsParseForceFlag(commandName: String) throws {
+  let arguments =
+    commandName == "ocr"
+    ? [
+      "ocr", "jobs.jsonl", "--ocr-options", "ocr-options.json", "--output", "result.jsonl",
+      "--force",
+    ]
+    : [
+      "scan-result", "result.jpg", "--type", "summary", "--ocr-options", "ocr-options.json",
+      "--output", "result.json", "--force",
+    ]
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
+
+  if let command = parsed as? OCRCommand {
+    #expect(command.force)
+  } else {
+    #expect(try #require(parsed as? ScanResultCommand).force)
+  }
+}
+
+@Test func jsonlOutputRequiresForceBeforeReplacingExistingFile() throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("jsonl")
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try JSONLResponseWriter(output: output.path)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+
+  let writer = try JSONLResponseWriter(output: output.path, force: true)
+  try writer.write(["ok": true])
+  try writer.finish()
+  #expect(String(decoding: try Data(contentsOf: output), as: UTF8.self) == "{\"ok\":true}\n")
+}
+
+@Test func jsonlOutputRejectsDestinationCreatedAfterProcessingStarts() throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+    .appendingPathExtension("jsonl")
+  defer { try? FileManager.default.removeItem(at: output) }
+  let writer = try JSONLResponseWriter(output: output.path)
+  try writer.write(["ok": true])
+  try Data("raced\n".utf8).write(to: output)
+
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try writer.finish()
+  }
+  #expect(try Data(contentsOf: output) == Data("raced\n".utf8))
+}
+
+@Test func dataOutputRejectsDestinationCreatedAfterPreflight() throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try validateOutputPath(output, force: false)
+  try Data("raced\n".utf8).write(to: output)
+
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try writeOutputData(Data("replacement\n".utf8), to: output, force: false)
+  }
+  #expect(try Data(contentsOf: output) == Data("raced\n".utf8))
+}
+
+@Test(arguments: ["ocr", "scan-result"])
+func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let arguments =
+    commandName == "ocr"
+    ? [
+      "ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path,
+      "--force",
+    ]
+    : [
+      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "--output", output.path, "--force",
+    ]
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
+
+  do {
+    _ = try await executeForMCP(parsed)
+    Issue.record("Expected missing input to fail")
+  } catch {
+    #expect(!String(describing: error).contains("Output already exists"))
+  }
+}
+
+@Test(arguments: ["ocr", "scan-result"])
+func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let arguments =
+    commandName == "ocr"
+    ? ["ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
+    : [
+      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "--output", output.path,
+    ]
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try await executeForMCP(parsed)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
+
+@Test(arguments: ["ocr", "scan-result"])
+func writingCommandsRejectExistingOutputBeforeProcessing(commandName: String) async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let arguments =
+    commandName == "ocr"
+    ? ["ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
+    : [
+      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "--output", output.path,
+    ]
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try await executeCLI(parsed)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}

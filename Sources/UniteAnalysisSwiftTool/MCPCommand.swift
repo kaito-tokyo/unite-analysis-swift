@@ -37,7 +37,7 @@ package func builtInMCPOutput(arguments: [String]) throws -> String? {
   return String(decoding: data, as: UTF8.self)
 }
 
-private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] {
+package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] {
   var records: [Any] = []
   switch parsed {
   case let command as AudioPeaks:
@@ -74,7 +74,9 @@ private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
   case let command as ExtractClip:
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as OCRCommand:
-    let writer = try command.output.map { try JSONLResponseWriter(output: $0) }
+    let writer = try command.output.map {
+      try JSONLResponseWriter(output: $0, force: command.force)
+    }
     for try await record in command.outputRecords() {
       switch record {
       case .success(let output):
@@ -89,13 +91,14 @@ private func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
     }
     try writer?.finish()
   case let command as ScanResultCommand:
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       if let output = command.output {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         var data = try encoder.encode(record)
         data.append(0x0A)
-        try data.write(to: resolvePath(output), options: .atomic)
+        try writeOutputData(data, to: resolvePath(output), force: command.force)
       }
       records.append(try encodedObject(record))
     }

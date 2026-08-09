@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -23,14 +24,18 @@
 
 namespace unite_analysis {
 
-bool isAkazeAvailable() {
-  const auto detector = cv::xfeatures2d::AKAZE::create(
-      cv::xfeatures2d::AKAZE::DESCRIPTOR_MLDB,
-      0,
-      3,
-      0.001F);
-  return !detector.empty() &&
-      detector->getDescriptorType() == cv::xfeatures2d::AKAZE::DESCRIPTOR_MLDB;
+bool isAkazeAvailable() noexcept {
+  try {
+    const auto detector = cv::xfeatures2d::AKAZE::create(
+        cv::xfeatures2d::AKAZE::DESCRIPTOR_MLDB,
+        0,
+        3,
+        0.001F);
+    return !detector.empty() &&
+        detector->getDescriptorType() == cv::xfeatures2d::AKAZE::DESCRIPTOR_MLDB;
+  } catch (...) {
+    return false;
+  }
 }
 
 namespace {
@@ -41,6 +46,14 @@ constexpr int kMaximumEntries = 4096;
 constexpr std::uint64_t kMaximumDescriptorsPerEntry = 1'000'000;
 constexpr float kHeldCircleEdgeFraction = 0.49F;
 constexpr float kHeldPaddingFraction = 0.20F;
+
+void setError(std::string &destination, const char *message) noexcept {
+  try {
+    destination = message;
+  } catch (...) {
+    destination.clear();
+  }
+}
 
 struct RankedMatch {
   std::string name;
@@ -441,7 +454,8 @@ std::string validate(const DescriptorDatabase &database) {
 class IconMatcher::Implementation final {
  public:
   DescriptorDatabase message;
-  std::string error;
+  std::string databaseError;
+  mutable std::string operationError;
 };
 
 struct IconMatchResults::Value final {
@@ -463,99 +477,110 @@ IconDescriptors::IconDescriptors(
     const std::uint32_t imageHeight,
     const std::uint32_t descriptorSize,
     const float threshold,
-    const float paddingFraction)
-    : implementation_(std::make_shared<Implementation>()) {
-  if (bytes == nullptr || width == 0 || height == 0 ||
-      bytesPerRow < static_cast<std::size_t>(width) * 4 ||
-      bytesPerRow > std::numeric_limits<std::size_t>::max() / height ||
-      byteCount < bytesPerRow * height || imageHeight < 4 || imageHeight > 4096 ||
-      descriptorSize > 486 ||
-      !std::isfinite(threshold) || threshold <= 0 ||
-      !std::isfinite(paddingFraction) || paddingFraction < 0 || paddingFraction > 1) {
-    implementation_->error = "invalid descriptor source image or configuration";
-    return;
-  }
-  const cv::Mat source(
-      static_cast<int>(height),
-      static_cast<int>(width),
-      CV_8UC4,
-      const_cast<std::uint8_t *>(bytes),
-      bytesPerRow);
-  const int padding = static_cast<int>(std::lround(height * paddingFraction));
-  cv::Mat padded;
-  cv::copyMakeBorder(
-      source,
-      padded,
-      padding,
-      padding,
-      padding,
-      padding,
-      cv::BORDER_CONSTANT,
-      cv::Scalar(0, 0, 0, 0));
-  const auto scaledWidthValue =
-      static_cast<std::uint64_t>(padded.cols) * imageHeight / padded.rows;
-  if (scaledWidthValue > 4096) {
-    implementation_->error = "resized descriptor image exceeds 4096 pixels in width";
-    return;
-  }
-  const int scaledWidth = std::max(1, static_cast<int>(scaledWidthValue));
-  cv::Mat scaled;
-  cv::resize(
-      padded,
-      scaled,
-      cv::Size(scaledWidth, static_cast<int>(imageHeight)),
-      0,
-      0,
-      cv::INTER_LINEAR);
-  std::vector<cv::Mat> channels;
-  cv::split(scaled, channels);
-  cv::Mat bgr;
-  cv::merge(std::vector<cv::Mat>{channels[0], channels[1], channels[2]}, bgr);
-  const cv::Mat inverseAlpha = 255 - channels[3];
-  cv::Mat inverseAlphaBGR;
-  cv::merge(
-      std::vector<cv::Mat>{inverseAlpha, inverseAlpha, inverseAlpha},
-      inverseAlphaBGR);
-  cv::add(bgr, inverseAlphaBGR, bgr);
-  const int kernelSizeCandidate = std::max(3, static_cast<int>(std::lround(imageHeight * 17.0 / 512.0)));
-  const int kernelSize = kernelSizeCandidate % 2 == 0 ? kernelSizeCandidate + 1 : kernelSizeCandidate;
-  cv::Mat mask = cv::Mat::zeros(channels[3].size(), CV_8U);
-  const int radius = kernelSize / 2;
-  const int integralColumns = mask.cols + 1;
-  std::vector<int> integral(static_cast<std::size_t>(mask.rows + 1) * integralColumns, 0);
-  for (int row = 0; row < mask.rows; ++row) {
-    const auto *alphaRow = channels[3].ptr<std::uint8_t>(row);
-    int rowSum = 0;
-    for (int column = 0; column < mask.cols; ++column) {
-      rowSum += alphaRow[column] > 8 ? 1 : 0;
-      integral[static_cast<std::size_t>(row + 1) * integralColumns + column + 1] =
-          integral[static_cast<std::size_t>(row) * integralColumns + column + 1] + rowSum;
+    const float paddingFraction) noexcept
+    : implementation_(nullptr) {
+  try {
+    implementation_ = std::make_shared<Implementation>();
+    if (bytes == nullptr || width == 0 || height == 0 ||
+        bytesPerRow < static_cast<std::size_t>(width) * 4 ||
+        bytesPerRow > std::numeric_limits<std::size_t>::max() / height ||
+        byteCount < bytesPerRow * height || imageHeight < 4 || imageHeight > 4096 ||
+        descriptorSize > 486 ||
+        !std::isfinite(threshold) || threshold <= 0 ||
+        !std::isfinite(paddingFraction) || paddingFraction < 0 || paddingFraction > 1) {
+      implementation_->error = "invalid descriptor source image or configuration";
+      return;
     }
-  }
-  for (int row = 0; row < mask.rows; ++row) {
-    auto *maskRow = mask.ptr<std::uint8_t>(row);
-    for (int column = 0; column < mask.cols; ++column) {
-      const int top = std::max(0, row - radius);
-      const int left = std::max(0, column - radius);
-      const int bottom = std::min(mask.rows, row + radius + 1);
-      const int right = std::min(mask.cols, column + radius + 1);
-      const int sum =
-          integral[static_cast<std::size_t>(bottom) * integralColumns + right] -
-          integral[static_cast<std::size_t>(top) * integralColumns + right] -
-          integral[static_cast<std::size_t>(bottom) * integralColumns + left] +
-          integral[static_cast<std::size_t>(top) * integralColumns + left];
-      maskRow[column] = sum > 0 ? 255 : 0;
+    const cv::Mat source(
+        static_cast<int>(height),
+        static_cast<int>(width),
+        CV_8UC4,
+        const_cast<std::uint8_t *>(bytes),
+        bytesPerRow);
+    const int padding = static_cast<int>(std::lround(height * paddingFraction));
+    cv::Mat padded;
+    cv::copyMakeBorder(
+        source,
+        padded,
+        padding,
+        padding,
+        padding,
+        padding,
+        cv::BORDER_CONSTANT,
+        cv::Scalar(0, 0, 0, 0));
+    const auto scaledWidthValue =
+        static_cast<std::uint64_t>(padded.cols) * imageHeight / padded.rows;
+    if (scaledWidthValue > 4096) {
+      implementation_->error = "resized descriptor image exceeds 4096 pixels in width";
+      return;
     }
-  }
-  std::vector<cv::KeyPoint> keypoints;
-  auto detector = cv::xfeatures2d::AKAZE::create(
-      cv::xfeatures2d::AKAZE::DESCRIPTOR_MLDB,
-      static_cast<int>(descriptorSize),
-      3,
-      threshold);
-  detector->detectAndCompute(bgr, mask, keypoints, implementation_->descriptors);
-  if (implementation_->descriptors.empty()) {
-    implementation_->error = "AKAZE produced no descriptors";
+    const int scaledWidth = std::max(1, static_cast<int>(scaledWidthValue));
+    cv::Mat scaled;
+    cv::resize(
+        padded,
+        scaled,
+        cv::Size(scaledWidth, static_cast<int>(imageHeight)),
+        0,
+        0,
+        cv::INTER_LINEAR);
+    std::vector<cv::Mat> channels;
+    cv::split(scaled, channels);
+    cv::Mat bgr;
+    cv::merge(std::vector<cv::Mat>{channels[0], channels[1], channels[2]}, bgr);
+    const cv::Mat inverseAlpha = 255 - channels[3];
+    cv::Mat inverseAlphaBGR;
+    cv::merge(
+        std::vector<cv::Mat>{inverseAlpha, inverseAlpha, inverseAlpha},
+        inverseAlphaBGR);
+    cv::add(bgr, inverseAlphaBGR, bgr);
+    const int kernelSizeCandidate = std::max(3, static_cast<int>(std::lround(imageHeight * 17.0 / 512.0)));
+    const int kernelSize = kernelSizeCandidate % 2 == 0 ? kernelSizeCandidate + 1 : kernelSizeCandidate;
+    cv::Mat mask = cv::Mat::zeros(channels[3].size(), CV_8U);
+    const int radius = kernelSize / 2;
+    const int integralColumns = mask.cols + 1;
+    std::vector<int> integral(static_cast<std::size_t>(mask.rows + 1) * integralColumns, 0);
+    for (int row = 0; row < mask.rows; ++row) {
+      const auto *alphaRow = channels[3].ptr<std::uint8_t>(row);
+      int rowSum = 0;
+      for (int column = 0; column < mask.cols; ++column) {
+        rowSum += alphaRow[column] > 8 ? 1 : 0;
+        integral[static_cast<std::size_t>(row + 1) * integralColumns + column + 1] =
+            integral[static_cast<std::size_t>(row) * integralColumns + column + 1] + rowSum;
+      }
+    }
+    for (int row = 0; row < mask.rows; ++row) {
+      auto *maskRow = mask.ptr<std::uint8_t>(row);
+      for (int column = 0; column < mask.cols; ++column) {
+        const int top = std::max(0, row - radius);
+        const int left = std::max(0, column - radius);
+        const int bottom = std::min(mask.rows, row + radius + 1);
+        const int right = std::min(mask.cols, column + radius + 1);
+        const int sum =
+            integral[static_cast<std::size_t>(bottom) * integralColumns + right] -
+            integral[static_cast<std::size_t>(top) * integralColumns + right] -
+            integral[static_cast<std::size_t>(bottom) * integralColumns + left] +
+            integral[static_cast<std::size_t>(top) * integralColumns + left];
+        maskRow[column] = sum > 0 ? 255 : 0;
+      }
+    }
+    std::vector<cv::KeyPoint> keypoints;
+    auto detector = cv::xfeatures2d::AKAZE::create(
+        cv::xfeatures2d::AKAZE::DESCRIPTOR_MLDB,
+        static_cast<int>(descriptorSize),
+        3,
+        threshold);
+    detector->detectAndCompute(bgr, mask, keypoints, implementation_->descriptors);
+    if (implementation_->descriptors.empty()) {
+      implementation_->error = "AKAZE produced no descriptors";
+    }
+  } catch (const std::exception &error) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->error, error.what());
+    }
+  } catch (...) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->error, "unknown descriptor generation error");
+    }
   }
 }
 
@@ -602,40 +627,55 @@ float IconMatchResults::score(const std::size_t index) const noexcept {
       : value_->matches[index].score;
 }
 
-IconMatcher::IconMatcher(const std::string &path)
-    : implementation_(std::make_shared<Implementation>()) {
-  std::ifstream stream(path, std::ios::binary | std::ios::ate);
-  if (!stream) {
-    implementation_->error = "could not open descriptor database";
-    return;
+IconMatcher::IconMatcher(const std::string &path) noexcept
+    : implementation_(nullptr) {
+  try {
+    implementation_ = std::make_shared<Implementation>();
+    std::ifstream stream(path, std::ios::binary | std::ios::ate);
+    if (!stream) {
+      implementation_->databaseError = "could not open descriptor database";
+      return;
+    }
+    const auto byteCount = stream.tellg();
+    if (byteCount < 0 ||
+        static_cast<std::uint64_t>(byteCount) > kMaximumDatabaseBytes) {
+      implementation_->databaseError = "descriptor database is too large";
+      return;
+    }
+    stream.seekg(0);
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(byteCount));
+    if (!stream.read(
+            reinterpret_cast<char *>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()))) {
+      implementation_->databaseError = "could not read descriptor database";
+      return;
+    }
+    if (!decodeDatabase(bytes, implementation_->message, implementation_->databaseError)) {
+      return;
+    }
+    implementation_->databaseError = validate(implementation_->message);
+  } catch (const std::exception &error) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->databaseError, error.what());
+    }
+  } catch (...) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->databaseError, "unknown descriptor database error");
+    }
   }
-  const auto byteCount = stream.tellg();
-  if (byteCount < 0 ||
-      static_cast<std::uint64_t>(byteCount) > kMaximumDatabaseBytes) {
-    implementation_->error = "descriptor database is too large";
-    return;
-  }
-  stream.seekg(0);
-  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(byteCount));
-  if (!stream.read(
-          reinterpret_cast<char *>(bytes.data()),
-          static_cast<std::streamsize>(bytes.size()))) {
-    implementation_->error = "could not read descriptor database";
-    return;
-  }
-  if (!decodeDatabase(bytes, implementation_->message, implementation_->error)) {
-    return;
-  }
-  implementation_->error = validate(implementation_->message);
 }
 
 bool IconMatcher::isValid() const noexcept {
-  return implementation_ != nullptr && implementation_->error.empty();
+  return implementation_ != nullptr && implementation_->databaseError.empty();
 }
 
 std::string IconMatcher::errorMessage() const {
-  return implementation_ == nullptr ? "descriptor database is unavailable"
-                                    : implementation_->error;
+  if (implementation_ == nullptr) {
+    return "descriptor database is unavailable";
+  }
+  return implementation_->operationError.empty()
+      ? implementation_->databaseError
+      : implementation_->operationError;
 }
 
 std::uint32_t IconMatcher::formatVersion() const noexcept {
@@ -699,62 +739,78 @@ IconMatchResults IconMatcher::matchHeldBGR(
     const std::size_t bytesPerRow,
     const float radiusFraction,
     const std::size_t limit,
-    const float ratio) const {
-  auto value = std::make_shared<IconMatchResults::Value>();
-  const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
-  if (!isValid() || source.empty() || !(radiusFraction > 0 && radiusFraction <= 0.5F)) {
-    return IconMatchResults(std::move(value));
-  }
+    const float ratio) const noexcept {
+  try {
+    auto value = std::make_shared<IconMatchResults::Value>();
+    if (!isValid()) {
+      return IconMatchResults(std::move(value));
+    }
+    implementation_->operationError.clear();
+    const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
+    if (source.empty() || !(radiusFraction > 0 && radiusFraction <= 0.5F)) {
+      implementation_->operationError = "invalid held-item match input";
+      return IconMatchResults(std::move(value));
+    }
 
-  const int side = std::max(
-      4,
-      static_cast<int>(std::lround(
-          std::min(source.cols, source.rows) * radiusFraction * 2)));
-  const int x = std::max(0, source.cols / 2 - side / 2);
-  const int y = std::max(0, source.rows / 2 - side / 2);
-  const int croppedSide = std::min({side, source.cols - x, source.rows - y});
-  const auto crop = source(cv::Rect(x, y, croppedSide, croppedSide));
-  cv::Mat circleMask = cv::Mat::zeros(crop.size(), CV_8U);
-  const int circleCenterX = crop.cols / 2;
-  const int circleCenterY = crop.rows / 2;
-  const int circleRadius = static_cast<int>(
-      std::lround(std::min(crop.cols, crop.rows) * kHeldCircleEdgeFraction));
-  for (int row = 0; row < crop.rows; ++row) {
-    auto *maskRow = circleMask.ptr<std::uint8_t>(row);
-    for (int column = 0; column < crop.cols; ++column) {
-      const int dx = column - circleCenterX;
-      const int dy = row - circleCenterY;
-      maskRow[column] = dx * dx + dy * dy <= circleRadius * circleRadius ? 255 : 0;
+    const int side = std::max(
+        4,
+        static_cast<int>(std::lround(
+            std::min(source.cols, source.rows) * radiusFraction * 2)));
+    const int x = std::max(0, source.cols / 2 - side / 2);
+    const int y = std::max(0, source.rows / 2 - side / 2);
+    const int croppedSide = std::min({side, source.cols - x, source.rows - y});
+    const auto crop = source(cv::Rect(x, y, croppedSide, croppedSide));
+    cv::Mat circleMask = cv::Mat::zeros(crop.size(), CV_8U);
+    const int circleCenterX = crop.cols / 2;
+    const int circleCenterY = crop.rows / 2;
+    const int circleRadius = static_cast<int>(
+        std::lround(std::min(crop.cols, crop.rows) * kHeldCircleEdgeFraction));
+    for (int row = 0; row < crop.rows; ++row) {
+      auto *maskRow = circleMask.ptr<std::uint8_t>(row);
+      for (int column = 0; column < crop.cols; ++column) {
+        const int dx = column - circleCenterX;
+        const int dy = row - circleCenterY;
+        maskRow[column] = dx * dx + dy * dy <= circleRadius * circleRadius ? 255 : 0;
+      }
+    }
+    cv::Mat circular(crop.size(), crop.type(), cv::Scalar(255, 255, 255));
+    crop.copyTo(circular, circleMask);
+    const int padding = static_cast<int>(std::lround(croppedSide * kHeldPaddingFraction));
+    cv::Mat padded;
+    cv::copyMakeBorder(
+        circular,
+        padded,
+        padding,
+        padding,
+        padding,
+        padding,
+        cv::BORDER_CONSTANT,
+        cv::Scalar(255, 255, 255));
+    cv::Mat scaled;
+    const int imageHeight = static_cast<int>(implementation_->message.akaze.imageHeight);
+    cv::resize(padded, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
+    cv::Mat keypointsMask(scaled.size(), CV_8U, cv::Scalar(255));
+    std::vector<cv::KeyPoint> keypoints;
+    cv::Mat query;
+    makeDetector(implementation_->message.akaze)
+        ->detectAndCompute(scaled, keypointsMask, keypoints, query);
+    value->matches = rankDescriptors(
+        implementation_->message,
+        query,
+        ItemCategory::held,
+        limit,
+        ratio);
+    return IconMatchResults(std::move(value));
+  } catch (const std::exception &error) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, error.what());
+    }
+  } catch (...) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, "unknown held-item matching error");
     }
   }
-  cv::Mat circular(crop.size(), crop.type(), cv::Scalar(255, 255, 255));
-  crop.copyTo(circular, circleMask);
-  const int padding = static_cast<int>(std::lround(croppedSide * kHeldPaddingFraction));
-  cv::Mat padded;
-  cv::copyMakeBorder(
-      circular,
-      padded,
-      padding,
-      padding,
-      padding,
-      padding,
-      cv::BORDER_CONSTANT,
-      cv::Scalar(255, 255, 255));
-  cv::Mat scaled;
-  const int imageHeight = static_cast<int>(implementation_->message.akaze.imageHeight);
-  cv::resize(padded, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
-  cv::Mat keypointsMask(scaled.size(), CV_8U, cv::Scalar(255));
-  std::vector<cv::KeyPoint> keypoints;
-  cv::Mat query;
-  makeDetector(implementation_->message.akaze)
-      ->detectAndCompute(scaled, keypointsMask, keypoints, query);
-  value->matches = rankDescriptors(
-      implementation_->message,
-      query,
-      ItemCategory::held,
-      limit,
-      ratio);
-  return IconMatchResults(std::move(value));
+  return IconMatchResults(nullptr);
 }
 
 IconMatchResults IconMatcher::matchBattleBGR(
@@ -764,37 +820,53 @@ IconMatchResults IconMatcher::matchBattleBGR(
     const std::uint32_t height,
     const std::size_t bytesPerRow,
     const std::size_t limit,
-    const float ratio) const {
-  auto value = std::make_shared<IconMatchResults::Value>();
-  const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
-  if (!isValid() || source.empty()) {
+    const float ratio) const noexcept {
+  try {
+    auto value = std::make_shared<IconMatchResults::Value>();
+    if (!isValid()) {
+      return IconMatchResults(std::move(value));
+    }
+    implementation_->operationError.clear();
+    const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
+    if (source.empty()) {
+      implementation_->operationError = "invalid battle-item match input";
+      return IconMatchResults(std::move(value));
+    }
+    const int imageHeight = static_cast<int>(implementation_->message.akaze.imageHeight);
+    cv::Mat scaled;
+    cv::resize(source, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
+    const int inset = static_cast<int>(std::lround(imageHeight * 0.08));
+    const int center = imageHeight / 2;
+    cv::Mat mask = cv::Mat::zeros(scaled.size(), CV_8U);
+    const int diamondRadius = center - inset;
+    for (int row = 0; row < mask.rows; ++row) {
+      auto *maskRow = mask.ptr<std::uint8_t>(row);
+      for (int column = 0; column < mask.cols; ++column) {
+        maskRow[column] =
+            std::abs(column - center) + std::abs(row - center) <= diamondRadius ? 255 : 0;
+      }
+    }
+    std::vector<cv::KeyPoint> keypoints;
+    cv::Mat query;
+    makeDetector(implementation_->message.akaze)
+        ->detectAndCompute(scaled, mask, keypoints, query);
+    value->matches = rankDescriptors(
+        implementation_->message,
+        query,
+        ItemCategory::battle,
+        limit,
+        ratio);
     return IconMatchResults(std::move(value));
-  }
-  const int imageHeight = static_cast<int>(implementation_->message.akaze.imageHeight);
-  cv::Mat scaled;
-  cv::resize(source, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
-  const int inset = static_cast<int>(std::lround(imageHeight * 0.08));
-  const int center = imageHeight / 2;
-  cv::Mat mask = cv::Mat::zeros(scaled.size(), CV_8U);
-  const int diamondRadius = center - inset;
-  for (int row = 0; row < mask.rows; ++row) {
-    auto *maskRow = mask.ptr<std::uint8_t>(row);
-    for (int column = 0; column < mask.cols; ++column) {
-      maskRow[column] =
-          std::abs(column - center) + std::abs(row - center) <= diamondRadius ? 255 : 0;
+  } catch (const std::exception &error) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, error.what());
+    }
+  } catch (...) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, "unknown battle-item matching error");
     }
   }
-  std::vector<cv::KeyPoint> keypoints;
-  cv::Mat query;
-  makeDetector(implementation_->message.akaze)
-      ->detectAndCompute(scaled, mask, keypoints, query);
-  value->matches = rankDescriptors(
-      implementation_->message,
-      query,
-      ItemCategory::battle,
-      limit,
-      ratio);
-  return IconMatchResults(std::move(value));
+  return IconMatchResults(nullptr);
 }
 
 }  // namespace unite_analysis

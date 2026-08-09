@@ -74,7 +74,7 @@ struct OCRCommand: ParsableCommand {
 
       TYPE. text returns recognized lines in reading order. player-name joins the recognized text and applies the shared player-name cleanup. numeric returns numeric tokens. Every result also retains the raw Vision observations and confidence values.
 
-      OUTPUT. One JSON response line containing jobId, ok, and either result or error is written before the next job is read. A malformed line has no jobId when it cannot be recovered. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Each successful result records the absolute input path, source, region, type, raw observations, and interpreted values. Observation boxes are normalized within source and use Apple Vision's bottom-left origin; source itself uses top-left-origin input-image pixels. stdout is used when --output is omitted; otherwise all response lines are atomically written to that path after EOF.
+      OUTPUT. One JSON response line containing jobId, ok, and either result or error is written before the next job is read. A malformed line has no jobId when it cannot be recovered. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Each successful result records the absolute input path, source, region, type, raw observations, and interpreted values. Observation boxes are normalized within source and use Apple Vision's bottom-left origin; source itself uses top-left-origin input-image pixels. stdout is used when --output is omitted; otherwise all response lines are atomically written to that path after EOF. An existing output is rejected unless --force is supplied.
 
       SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema ocr.schema.json`, the response schema with `unite-analysis-swift schema ocr.output.schema.json`, and OCR option schema with `unite-analysis-swift schema ocr-options.schema.json`.
       """.reflowedHelp()
@@ -86,10 +86,11 @@ struct OCRCommand: ParsableCommand {
   @Option(help: "Required path to ocr-options.json. Relative paths use the current directory.")
   var ocrOptions: String
 
-  @Option(
-    help: "JSONL path to replace atomically after EOF. Writes responses to stdout when omitted.")
+  @Option(help: "JSONL output path. Writes responses to stdout when omitted.")
   var output: String?
 
+  @Flag(help: "Allow --output to replace an existing file atomically.")
+  var force = false
 }
 
 extension OCRCommand {
