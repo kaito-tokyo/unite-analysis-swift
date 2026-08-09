@@ -165,6 +165,31 @@ import UniteAnalysisSwiftCommands
   }
 }
 
+@Test func cgImageConversionRendersIntoBGRStorage() throws {
+  let sourceBytes: [UInt8] = [12, 34, 56, 255, 78, 90, 123, 255]
+  let provider = try #require(CGDataProvider(data: Data(sourceBytes) as CFData))
+  let image = try #require(
+    CGImage(
+      width: 2,
+      height: 1,
+      bitsPerComponent: 8,
+      bitsPerPixel: 32,
+      bytesPerRow: 8,
+      space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+      provider: provider,
+      decode: nil,
+      shouldInterpolate: false,
+      intent: .defaultIntent))
+
+  let converted = try BGRImage(image)
+
+  #expect(converted.width == 2)
+  #expect(converted.height == 1)
+  #expect(converted.bytesPerRow == 6)
+  #expect(converted.bytes == [56, 34, 12, 123, 90, 78])
+}
+
 @Test(arguments: [
   ([UInt8](arrayLiteral: 0, 0, 255), "top"),
   ([UInt8](arrayLiteral: 255, 255, 0), "central"),

@@ -39,25 +39,31 @@ package struct BGRImage: Sendable {
     self.bytes = bytes
   }
 
-  init(_ image: CGImage) throws {
+  package init(_ image: CGImage) throws {
     let width = image.width
     let height = image.height
     let bytesPerRow = width * 4
     var rgba = [UInt8](repeating: 0, count: bytesPerRow * height)
-    guard
-      let context = CGContext(
-        data: &rgba,
-        width: width,
-        height: height,
-        bitsPerComponent: 8,
-        bytesPerRow: bytesPerRow,
-        space: CGColorSpaceCreateDeviceRGB(),
-        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
-      )
-    else {
+    let rendered = rgba.withUnsafeMutableBytes { bytes in
+      guard
+        let context = CGContext(
+          data: bytes.baseAddress,
+          width: width,
+          height: height,
+          bitsPerComponent: 8,
+          bytesPerRow: bytesPerRow,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        )
+      else {
+        return false
+      }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+    guard rendered else {
       throw LoadoutRecognitionError.invalidImage
     }
-    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
 
     var bgr = [UInt8]()
     bgr.reserveCapacity(width * height * 3)
