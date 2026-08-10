@@ -741,8 +741,7 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   let times = energies.indices.map { Double($0) * 0.01 }
 
   let indices = AudioPeakDetector.peakIndices(
-    blockEnergies: energies,
-    samplesPerBlock: 1,
+    scores: AudioPeakDetector.normalizedRiseScores(blockEnergies: energies, samplesPerBlock: 1),
     blockPTS: times,
     requestedStart: 0,
     requestedEnd: 1.2
@@ -761,8 +760,7 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   let times = energies.indices.map { Double($0) * 0.01 }
 
   let indices = AudioPeakDetector.peakIndices(
-    blockEnergies: energies,
-    samplesPerBlock: 1,
+    scores: AudioPeakDetector.normalizedRiseScores(blockEnergies: energies, samplesPerBlock: 1),
     blockPTS: times,
     requestedStart: 0,
     requestedEnd: 1.8
@@ -884,8 +882,7 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   let times = energies.indices.map { Double($0) * 0.01 }
 
   let indices = AudioPeakDetector.peakIndices(
-    blockEnergies: energies,
-    samplesPerBlock: 1,
+    scores: AudioPeakDetector.normalizedRiseScores(blockEnergies: energies, samplesPerBlock: 1),
     blockPTS: times,
     requestedStart: 1.5,
     requestedEnd: 2.0
