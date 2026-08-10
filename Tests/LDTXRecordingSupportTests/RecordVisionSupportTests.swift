@@ -119,11 +119,26 @@ import Testing
   #expect(preferredPlayerNameCell([combined, korean, english]).text == "우알이")
 }
 
-@Test func playerNameOCRPreservesLanguageOrderOnConfidenceTies() {
-  let japanese = OCRCell(text: "ゆっぴーそば", confidence: 1, alternatives: ["ゆっぴーそば"])
-  let english = OCRCell(text: "Yuppie Soba", confidence: 1, alternatives: ["Yuppie Soba"])
+@Test func playerNameOCRPrefersCombinedLanguagePassOnConfidenceTies() {
+  let partial = OCRCell(text: "Player", confidence: 1, alternatives: ["Player"])
+  let combined = OCRCell(text: "Player名前", confidence: 1, alternatives: ["Player名前"])
 
-  #expect(preferredPlayerNameCell([japanese, english]).text == "ゆっぴーそば")
+  #expect(preferredPlayerNameCell([partial, combined]).text == "Player名前")
+}
+
+@Test func playerNameOCRPreservesLegitimateDelimiters() {
+  let observations = [
+    TextObservation(
+      text: "<Ace>", confidence: 1,
+      box: .init(x: 0.1, y: 0.5, width: 0.2, height: 0.1)),
+    TextObservation(
+      text: "(Player)", confidence: 1,
+      box: .init(x: 0.4, y: 0.5, width: 0.3, height: 0.1)),
+  ]
+
+  #expect(
+    OCRInput.interpreted(observations, type: .playerName).values
+      == ["<Ace> (Player)"])
 }
 
 private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {

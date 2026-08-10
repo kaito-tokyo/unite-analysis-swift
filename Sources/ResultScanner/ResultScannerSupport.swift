@@ -76,7 +76,7 @@ package func preferredPlayerNameCell(_ cells: [OCRCell]) -> OCRCell {
     return OCRCell(text: nil, confidence: nil, alternatives: [])
   }
   for cell in cells.dropFirst()
-  where (cell.confidence ?? -1) > (preferred.confidence ?? -1) {
+  where (cell.confidence ?? -1) >= (preferred.confidence ?? -1) {
     preferred = cell
   }
   return preferred
@@ -477,7 +477,7 @@ enum OCR {
   }
 
   static func cleanName(_ value: String) -> String {
-    value.trimmingCharacters(in: CharacterSet(charactersIn: "「『|()（）<>＜＞ "))
+    value.trimmingCharacters(in: CharacterSet(charactersIn: "「『| "))
   }
 
   static func recognizeResultScreen(
