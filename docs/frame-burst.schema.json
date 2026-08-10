@@ -35,6 +35,11 @@
       "minimum": 1,
       "default": 1
     },
+    "labelFrames": {
+      "type": "boolean",
+      "default": false,
+      "description": "Overlay each retained source index and actual match-relative timestamp."
+    },
     "columns": {
       "type": "integer",
       "minimum": 1,

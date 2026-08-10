@@ -215,6 +215,11 @@ package enum EmbeddedSchemas {
         "source": { "$ref": "#/$defs/rectangle" },
         "frameCount": { "type": "integer", "minimum": 1, "maximum": 600 },
         "decimate": { "type": "integer", "minimum": 1, "default": 1 },
+        "labelFrames": {
+          "type": "boolean",
+          "default": false,
+          "description": "Overlay each retained source index and actual match-relative timestamp."
+        },
         "columns": { "type": "integer", "minimum": 1, "maximum": 32768 },
         "cellWidth": { "type": "integer", "minimum": 1, "maximum": 32768 },
         "output": { "type": "string", "minLength": 1 }
