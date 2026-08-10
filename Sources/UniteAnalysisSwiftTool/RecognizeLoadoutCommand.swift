@@ -8,8 +8,10 @@ import CoreMedia
 import CxxStdlib
 import Foundation
 import IconMatcherNative
+import ImageIO
 import LDTXRecordingSupport
 import RecordVisionSupport
+import UniformTypeIdentifiers
 import UniteAnalysisConfiguration
 
 private struct LoadoutOutputDocument: Encodable {
@@ -198,17 +200,10 @@ package func normalizedGameScreen(
 
 private func writeLoadout(
   _ document: LoadoutOutputDocument,
-  defaultName: String,
-  outputDirectory: URL,
-  output: String?,
+  to outputURL: URL,
   force: Bool
 ) throws -> String {
-  let outputURL =
-    output.map(resolvePath)
-    ?? outputDirectory.appendingPathComponent(defaultName)
-  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw ValidationError("Output exists: \(outputURL.path). Pass --force to overwrite")
-  }
+  try validateOutputPath(outputURL, force: force)
   try FileManager.default.createDirectory(
     at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
   let encoder = JSONEncoder()
@@ -220,6 +215,200 @@ private func writeLoadout(
   return outputURL.path
 }
 
+private func writeAKAZEInput(
+  _ input: PreparedAKAZEInput, named name: String, to directory: URL, force: Bool
+) throws {
+  try writeDiagnosticPNG(
+    input.image, to: directory.appendingPathComponent(name), force: force)
+  if let mask = input.mask {
+    try writeDiagnosticPNG(
+      mask, to: directory.appendingPathComponent("\(name)-mask"), force: force)
+  }
+}
+
+private func writeDiagnosticPNG(_ image: BGRImage, to path: URL, force: Bool) throws {
+  var rgba = [UInt8]()
+  rgba.reserveCapacity(image.width * image.height * 4)
+  for y in 0..<image.height {
+    for x in 0..<image.width {
+      let offset = y * image.bytesPerRow + x * 3
+      rgba.append(image.bytes[offset + 2])
+      rgba.append(image.bytes[offset + 1])
+      rgba.append(image.bytes[offset])
+      rgba.append(255)
+    }
+  }
+  guard
+    let provider = CGDataProvider(data: Data(rgba) as CFData),
+    let cgImage = CGImage(
+      width: image.width, height: image.height, bitsPerComponent: 8, bitsPerPixel: 32,
+      bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+      provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+  else {
+    throw ValidationError("Could not create AKAZE diagnostic image")
+  }
+  let url = path.appendingPathExtension("png")
+  let encoded = NSMutableData()
+  guard
+    let destination = CGImageDestinationCreateWithData(
+      encoded, UTType.png.identifier as CFString, 1, nil)
+  else {
+    throw ValidationError("Could not create AKAZE diagnostic output: \(url.path)")
+  }
+  CGImageDestinationAddImage(destination, cgImage, nil)
+  guard CGImageDestinationFinalize(destination) else {
+    throw ValidationError("Could not write AKAZE diagnostic output: \(url.path)")
+  }
+  try writeOutputData(encoded as Data, to: url, force: force)
+}
+
+private func loadoutOutputURL(
+  defaultName: String, outputDirectory: URL, output: String?
+) -> URL {
+  output.map(resolvePath) ?? outputDirectory.appendingPathComponent(defaultName)
+}
+
+private func diagnosticNames(matchFormat: String) -> [String] {
+  let allyHeld = (1...5).flatMap { player in
+    (1...3).map { item in "ally-\(player)-held-\(item)" }
+  }
+  let allyBattle = (1...5).flatMap { player in
+    ["ally-\(player)-battle", "ally-\(player)-battle-mask"]
+  }
+  let enemyBattle =
+    matchFormat == "draft"
+    ? (1...5).flatMap { player in
+      ["enemy-\(player)-battle", "enemy-\(player)-battle-mask"]
+    } : []
+  return allyHeld + allyBattle + enemyBattle
+}
+
+private func resolvingSymlinkComponents(in url: URL) throws -> URL {
+  var pending = Array(url.standardizedFileURL.pathComponents.dropFirst())
+  var resolved = URL(fileURLWithPath: "/", isDirectory: true)
+  var followedLinks = 0
+  while let component = pending.first {
+    pending.removeFirst()
+    let candidate = resolved.appendingPathComponent(component)
+    guard
+      let destination = try? FileManager.default.destinationOfSymbolicLink(
+        atPath: candidate.path)
+    else {
+      resolved = candidate
+      continue
+    }
+    followedLinks += 1
+    guard followedLinks <= 40 else {
+      throw ValidationError("Too many symbolic links in output path: \(url.path)")
+    }
+    let destinationURL =
+      destination.hasPrefix("/")
+      ? URL(fileURLWithPath: destination)
+      : resolved.appendingPathComponent(destination)
+    let destinationComponents = destinationURL.standardized.pathComponents
+    resolved = URL(fileURLWithPath: "/", isDirectory: true)
+    pending = Array(destinationComponents.dropFirst()) + pending
+  }
+  return resolved.standardized
+}
+
+package func validateDistinctLoadoutOutputs(
+  outputURL: URL, diagnosticDirectory: URL?, matchFormat: String
+) throws {
+  guard let diagnosticDirectory else { return }
+  let normalizedOutput = try resolvingSymlinkComponents(in: outputURL)
+  let normalizedDirectory = try resolvingSymlinkComponents(in: diagnosticDirectory)
+  var existingAncestor = normalizedDirectory
+  while !FileManager.default.fileExists(atPath: existingAncestor.path) {
+    let parent = existingAncestor.deletingLastPathComponent()
+    guard parent != existingAncestor else { break }
+    existingAncestor = parent
+  }
+  let volumeValues = try existingAncestor.resourceValues(forKeys: [
+    .volumeSupportsCaseSensitiveNamesKey
+  ])
+  let caseSensitive = volumeValues.volumeSupportsCaseSensitiveNames ?? true
+  let pathKey: (URL) -> [String] = { url in
+    url.standardized.pathComponents.map { component in
+      let normalized = component.decomposedStringWithCanonicalMapping
+      return caseSensitive ? normalized : normalized.lowercased()
+    }
+  }
+  let outputComponents = pathKey(normalizedOutput)
+  let directoryComponents = pathKey(normalizedDirectory)
+  let contains: ([String], [String]) -> Bool = { ancestor, descendant in
+    ancestor.count <= descendant.count
+      && Array(descendant.prefix(ancestor.count)) == ancestor
+  }
+  let outputContainsDiagnostics =
+    contains(outputComponents, directoryComponents)
+  let diagnosticURLs = diagnosticNames(matchFormat: matchFormat).map {
+    normalizedDirectory.appendingPathComponent($0).appendingPathExtension("png")
+      .standardized
+  }
+  let normalizedOutputComponents = pathKey(normalizedOutput)
+  guard !outputContainsDiagnostics,
+    !diagnosticURLs.contains(where: {
+      let diagnosticComponents = pathKey($0)
+      return contains(diagnosticComponents, normalizedOutputComponents)
+    })
+  else {
+    throw ValidationError(
+      "Output path overlaps an AKAZE diagnostic output: \(normalizedOutput.path)")
+  }
+}
+
+package func prepareDiagnosticDirectory(
+  _ directory: URL?, matchFormat: String, force: Bool
+) throws {
+  guard let directory else { return }
+  for name in diagnosticNames(matchFormat: matchFormat) {
+    let outputURL = directory.appendingPathComponent(name).appendingPathExtension("png")
+    if let attributes = try? FileManager.default.attributesOfItem(atPath: outputURL.path),
+      attributes[.type] as? FileAttributeType == .typeSymbolicLink
+    {
+      throw ValidationError(
+        "AKAZE diagnostic output is a symbolic link: \(outputURL.path)")
+    }
+    try validateOutputPath(outputURL, force: force)
+    var isDirectory: ObjCBool = false
+    if FileManager.default.fileExists(atPath: outputURL.path, isDirectory: &isDirectory),
+      isDirectory.boolValue
+    {
+      throw ValidationError("AKAZE diagnostic output is a directory: \(outputURL.path)")
+    }
+  }
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+}
+
+package func validateLoadoutOutputDestination(_ outputURL: URL, force: Bool) throws {
+  try validateOutputPath(outputURL, force: force)
+  var isDirectory: ObjCBool = false
+  if FileManager.default.fileExists(atPath: outputURL.path, isDirectory: &isDirectory),
+    isDirectory.boolValue
+  {
+    throw ValidationError("Output path is a directory: \(outputURL.path)")
+  }
+  var ancestor = outputURL.deletingLastPathComponent()
+  while !FileManager.default.fileExists(atPath: ancestor.path, isDirectory: &isDirectory) {
+    if let attributes = try? FileManager.default.attributesOfItem(atPath: ancestor.path),
+      attributes[.type] as? FileAttributeType == .typeSymbolicLink
+    {
+      throw ValidationError("Output parent is a dangling symbolic link: \(ancestor.path)")
+    }
+    let parent = ancestor.deletingLastPathComponent()
+    guard parent != ancestor else { break }
+    ancestor = parent
+  }
+  guard isDirectory.boolValue else {
+    throw ValidationError("Output parent is not a directory: \(ancestor.path)")
+  }
+  guard FileManager.default.isWritableFile(atPath: ancestor.path) else {
+    throw ValidationError("Output parent is not writable: \(ancestor.path)")
+  }
+}
+
 struct RecognizeDraftLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "recognize-draft-loadout",
@@ -229,7 +418,7 @@ struct RecognizeDraftLoadout: ParsableCommand {
 
       Select draft mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, times are relative to match start. With --input for a v1 .ldtxrecord, times use the recording timeline. Use the last stable final-preparation frame, not an intermediate edited loadout. The versus frame supplies enemy battle items; enemy held items are never inferred.
 
-      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score; candidates and the top score remain available when recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
+      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score. A player's held-item names also become null when independently accepted slots select the same item, because duplicate held items are invalid. Candidates and the top score remain available whenever recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
   @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
@@ -246,7 +435,11 @@ struct RecognizeDraftLoadout: ParsableCommand {
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
-  @Flag(help: "Overwrite an existing output JSON file.") var force = false
+  @Option(
+    name: .customLong("dump-akaze-inputs"),
+    help: "Directory for lossless PNGs of the normalized AKAZE pixels and keypoint masks.")
+  var dumpAKAZEInputs: String?
+  @Flag(help: "Overwrite existing output JSON and AKAZE diagnostic PNG files.") var force = false
 
 }
 
@@ -261,9 +454,24 @@ extension RecognizeDraftLoadout {
         matchTimes: [command.finalPreparationTime, command.versusTime])
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
+      let outputURL = loadoutOutputURL(
+        defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
+        output: command.output)
+      let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      try validateDistinctLoadoutOutputs(
+        outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "draft")
+      try validateLoadoutOutputDestination(outputURL, force: command.force)
+      try prepareDiagnosticDirectory(
+        diagnosticDirectory, matchFormat: "draft", force: command.force)
       let result = try LoadoutRecognizer.recognizeDraft(
         finalPreparation: inputs.frames[0].image, versus: inputs.frames[1].image,
-        matcher: matcher)
+        matcher: matcher,
+        akazeInputObserver: diagnosticDirectory.map { directory in
+          return { name, input in
+            try writeAKAZEInput(
+              input, named: name, to: directory, force: command.force)
+          }
+        })
       let output = try writeLoadout(
         LoadoutOutputDocument(
           format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
@@ -274,8 +482,7 @@ extension RecognizeDraftLoadout {
           prepPresentationTime: nil,
           timeBasis: command.recordSpec == nil ? "recording-timeline" : "match-relative",
           recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
-        defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
-        output: command.output, force: command.force)
+        to: outputURL, force: command.force)
       continuation.yield(.init(output: output))
     }
   }
@@ -291,7 +498,7 @@ struct RecognizeBlindLoadout: ParsableCommand {
 
       Select blind mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, --prep-time is relative to match start. With --input for a v1 .ldtxrecord, it uses the recording timeline. The time must identify the stable five-card selection screen. Enemy loadouts are absent because this screen does not expose them.
 
-      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score; candidates and the top score remain available when recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
+      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score. A player's held-item names also become null when independently accepted slots select the same item, because duplicate held items are invalid. Candidates and the top score remain available whenever recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
   @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
@@ -303,7 +510,11 @@ struct RecognizeBlindLoadout: ParsableCommand {
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
-  @Flag(help: "Overwrite an existing output JSON file.") var force = false
+  @Option(
+    name: .customLong("dump-akaze-inputs"),
+    help: "Directory for lossless PNGs of the normalized AKAZE pixels and keypoint masks.")
+  var dumpAKAZEInputs: String?
+  @Flag(help: "Overwrite existing output JSON and AKAZE diagnostic PNG files.") var force = false
 
 }
 
@@ -317,8 +528,23 @@ extension RecognizeBlindLoadout {
         recordSpec: command.recordSpec, input: command.input, matchTimes: [command.prepTime])
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
+      let outputURL = loadoutOutputURL(
+        defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
+        output: command.output)
+      let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      try validateDistinctLoadoutOutputs(
+        outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "blind")
+      try validateLoadoutOutputDestination(outputURL, force: command.force)
+      try prepareDiagnosticDirectory(
+        diagnosticDirectory, matchFormat: "blind", force: command.force)
       let result = try LoadoutRecognizer.recognizeBlind(
-        preparation: inputs.frames[0].image, matcher: matcher)
+        preparation: inputs.frames[0].image, matcher: matcher,
+        akazeInputObserver: diagnosticDirectory.map { directory in
+          return { name, input in
+            try writeAKAZEInput(
+              input, named: name, to: directory, force: command.force)
+          }
+        })
       let output = try writeLoadout(
         LoadoutOutputDocument(
           format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
@@ -327,8 +553,7 @@ extension RecognizeBlindLoadout {
           prepPresentationTime: inputs.frames[0].presentationTime,
           timeBasis: command.recordSpec == nil ? "recording-timeline" : "match-relative",
           recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
-        defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
-        output: command.output, force: command.force)
+        to: outputURL, force: command.force)
       continuation.yield(.init(output: output))
     }
   }

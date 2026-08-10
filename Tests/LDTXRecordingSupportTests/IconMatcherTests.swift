@@ -6,9 +6,17 @@ import CoreGraphics
 import CxxStdlib
 import Foundation
 import IconMatcherNative
+import ImageIO
+import LDTXRecordingSupport
 import RecordVisionSupport
 import Testing
 import UniteAnalysisSwiftCommands
+
+private let descriptorFixtureURL = URL(fileURLWithPath: #filePath)
+  .deletingLastPathComponent()
+  .deletingLastPathComponent()
+  .deletingLastPathComponent()
+  .appendingPathComponent("Contents/Resources/descriptors.pb")
 
 @Test func openCV5AkazeIsAvailable() {
   #expect(unite_analysis.isAkazeAvailable())
@@ -266,6 +274,238 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(item.score == 2)
 }
 
+@Test func duplicateHeldItemsAbstainWithoutDiscardingEvidence() {
+  let duplicate = RecognizedItem([
+    IconMatch(name: "same", score: 4), IconMatch(name: "other", score: 1),
+  ])
+  let distinct = RecognizedItem([
+    IconMatch(name: "distinct", score: 4), IconMatch(name: "other", score: 1),
+  ])
+
+  let result = LoadoutRecognizer.abstainingOnDuplicateHeldItems([
+    duplicate, duplicate, distinct,
+  ])
+
+  #expect(result.map(\.name) == [nil, nil, "distinct"])
+  #expect(result[0].candidates == duplicate.candidates)
+  #expect(result[1].score == duplicate.score)
+}
+
+@Test func recognizesDraftRecordingFixture() throws {
+  let preparation = try loadAndNormalizeFixtureImage(
+    try #require(
+      Bundle.module.url(forResource: "final-preparation", withExtension: "jpg")))
+  let versus = try loadAndNormalizeFixtureImage(
+    try #require(
+      Bundle.module.url(forResource: "versus", withExtension: "jpg")))
+  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
+  #expect(matcher.isValid())
+
+  let result = try LoadoutRecognizer.recognizeDraft(
+    finalPreparation: preparation, versus: versus, matcher: matcher)
+
+  #expect(
+    result.allies.map { $0.heldItems.map(\.name) } == [
+      ["Choice Specs", "Shell Bell", "Slick Spoon"],
+      ["Vanguard Bell", "Focus Band", "Muscle Band"],
+      ["Rapid Fire Scarf", "Float Stone", "Curse Bangle"],
+      ["Choice Specs", "Slick Spoon", "Wise Glasses"],
+      ["Accel Bracer", "Razor Claw", "Weakness Policy"],
+    ])
+  #expect(
+    result.allies.map { $0.battleItem.name } == [
+      "Eject Button", "Eject Button", "Eject Button", "X Speed", "Full Heal",
+    ])
+  #expect(
+    result.allies.map { $0.declaredRoute.name } == [
+      "top", "bottom", "top", "bottom", "central",
+    ])
+  #expect(
+    result.enemies.map { $0.battleItem.name } == [
+      "Eject Button", "X Speed", "Eject Button", "Full Heal", "Full Heal",
+    ])
+}
+
+@Test func preparedDiagnosticImagesUseDatabaseDimensions() throws {
+  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
+  let pixels = [UInt8](repeating: 255, count: 48 * 48 * 3)
+  let input = try BGRImage(width: 48, height: 48, bytesPerRow: 48 * 3, bytes: pixels)
+
+  let held = try matcher.preparedHeldImage(input)
+  let battle = try matcher.preparedBattleImage(input)
+
+  #expect(held.image.width == Int(matcher.akazeImageHeight()))
+  #expect(held.image.height == Int(matcher.akazeImageHeight()))
+  #expect(held.mask == nil)
+  #expect(battle.image.width == Int(matcher.akazeImageHeight()))
+  #expect(battle.image.height == Int(matcher.akazeImageHeight()))
+  let battleMask = try #require(battle.mask)
+  #expect(battleMask.bytes[0] == 0)
+  let centerOffset =
+    battleMask.height / 2 * battleMask.bytesPerRow + battleMask.width / 2 * 3
+  #expect(battleMask.bytes[centerOffset] == 255)
+}
+
+@Test func preparedDiagnosticImageFailuresUpdateAndClearMatcherError() throws {
+  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
+
+  let invalid = matcher.prepareHeldBGR(nil, 0, 0, 0, 0, 0.40)
+  #expect(!invalid.isValid())
+  #expect(swiftString(from: matcher.errorMessage()) == "invalid held-item preparation input")
+
+  let pixels = [UInt8](repeating: 255, count: 48 * 48 * 3)
+  let input = try BGRImage(width: 48, height: 48, bytesPerRow: 48 * 3, bytes: pixels)
+  _ = try matcher.preparedHeldImage(input)
+  #expect(swiftString(from: matcher.errorMessage()).isEmpty)
+}
+
+@Test func diagnosticOutputsPreflightEveryGeneratedPath() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let collision = directory.appendingPathComponent("ally-3-battle-mask.png")
+  try Data("existing".utf8).write(to: collision)
+
+  #expect(throws: Error.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: false)
+  }
+  #expect(try Data(contentsOf: collision) == Data("existing".utf8))
+  #expect(throws: Never.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: true)
+  }
+  let directoryCollision = directory.appendingPathComponent("ally-4-battle-mask.png")
+  try FileManager.default.createDirectory(
+    at: directoryCollision, withIntermediateDirectories: false)
+  #expect(throws: Error.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: true)
+  }
+  try FileManager.default.removeItem(at: directoryCollision)
+  let danglingCollision = directory.appendingPathComponent("ally-5-battle-mask.png")
+  try FileManager.default.createSymbolicLink(
+    at: danglingCollision,
+    withDestinationURL: directory.appendingPathComponent("missing.png"))
+  #expect(throws: Error.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: false)
+  }
+  #expect(throws: Error.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: true)
+  }
+}
+
+@Test func loadoutOutputDestinationRejectsInvalidTypesBeforeRecognition() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let regularFile = root.appendingPathComponent("file")
+  try Data().write(to: regularFile)
+
+  #expect(throws: Error.self) {
+    try validateLoadoutOutputDestination(
+      regularFile.appendingPathComponent("result.json"), force: false)
+  }
+  #expect(throws: Error.self) {
+    try validateLoadoutOutputDestination(root, force: true)
+  }
+  #expect(throws: Never.self) {
+    try validateLoadoutOutputDestination(root.appendingPathComponent("result.json"), force: false)
+  }
+}
+
+@Test func loadoutOutputCannotOverlapDiagnosticOutput() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let output = directory.appendingPathComponent("ally-1-held-1.png")
+
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: output, diagnosticDirectory: directory, matchFormat: "draft")
+  }
+  let volumeValues = try FileManager.default.temporaryDirectory.resourceValues(forKeys: [
+    .volumeSupportsCaseSensitiveNamesKey
+  ])
+  if volumeValues.volumeSupportsCaseSensitiveNames == true {
+    #expect(throws: Never.self) {
+      try validateDistinctLoadoutOutputs(
+        outputURL: directory.appendingPathComponent("ALLY-1-HELD-1.PNG"),
+        diagnosticDirectory: directory,
+        matchFormat: "draft")
+    }
+  } else {
+    #expect(throws: Error.self) {
+      try validateDistinctLoadoutOutputs(
+        outputURL: directory.appendingPathComponent("ALLY-1-HELD-1.PNG"),
+        diagnosticDirectory: directory,
+        matchFormat: "draft")
+    }
+  }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory.deletingLastPathComponent(),
+      diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory, diagnosticDirectory: directory, matchFormat: "draft")
+  }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory.appendingPathComponent("ally-1-held-1.png/result.json"),
+      diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
+  #expect(throws: Never.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory.appendingPathComponent("loadout.json"),
+      diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
+}
+
+@Test func loadoutOutputCollisionResolvesExistingSymlinks() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let realDirectory = root.appendingPathComponent("real", isDirectory: true)
+  let linkedDirectory = root.appendingPathComponent("link", isDirectory: true)
+  try FileManager.default.createDirectory(at: realDirectory, withIntermediateDirectories: true)
+  try FileManager.default.createSymbolicLink(
+    at: linkedDirectory, withDestinationURL: realDirectory)
+  defer { try? FileManager.default.removeItem(at: root) }
+
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: realDirectory.appendingPathComponent("ally-1-held-1.png"),
+      diagnosticDirectory: linkedDirectory,
+      matchFormat: "draft")
+  }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: linkedDirectory.appendingPathComponent("ally-1-held-1.png"),
+      diagnosticDirectory: realDirectory,
+      matchFormat: "draft")
+  }
+}
+
+@Test func loadoutOutputCollisionResolvesDanglingSymlinks() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let realDirectory = root.appendingPathComponent("real", isDirectory: true)
+  let linkedDirectory = root.appendingPathComponent("link", isDirectory: true)
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  try FileManager.default.createSymbolicLink(
+    at: linkedDirectory, withDestinationURL: realDirectory)
+  defer { try? FileManager.default.removeItem(at: root) }
+
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: linkedDirectory.appendingPathComponent("ally-1-held-1.png"),
+      diagnosticDirectory: realDirectory,
+      matchFormat: "draft")
+  }
+}
+
 @Test func normalizesDeclaredGameScreenComponent() throws {
   let context = try #require(
     CGContext(
@@ -322,6 +562,12 @@ private func descriptorDatabaseFixture(
     protobufBytesField(4, Data("550e8400-e29b-41d4-a716-446655440000".utf8)),
     protobufBytesField(5, Data(createdAt.utf8)),
   ])
+}
+
+private func loadAndNormalizeFixtureImage(_ url: URL) throws -> CGImage {
+  let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+  let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+  return try VideoFrameSupport.resized(image, width: 1920, height: 1080)
 }
 
 private func descriptorEntry(name: Data, category: UInt64, byte: UInt8) -> Data {
