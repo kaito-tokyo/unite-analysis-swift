@@ -211,16 +211,15 @@ public enum AudioPeakDetector {
     }
     accumulator.finish()
 
-    let peakIndices = peakIndices(
-      blockEnergies: accumulator.blockEnergies,
-      samplesPerBlock: accumulator.samplesPerBlock,
-      blockPTS: accumulator.blockPTS,
-      requestedStart: requestedStart,
-      requestedEnd: requestedEnd
-    )
     let scores = normalizedRiseScores(
       blockEnergies: accumulator.blockEnergies,
       samplesPerBlock: accumulator.samplesPerBlock
+    )
+    let peakIndices = peakIndices(
+      scores: scores,
+      blockPTS: accumulator.blockPTS,
+      requestedStart: requestedStart,
+      requestedEnd: requestedEnd
     )
     let peaks = peakIndices.map { index in
       AudioPeak(
@@ -320,14 +319,11 @@ public enum AudioPeakDetector {
   }
 
   package static func peakIndices(
-    blockEnergies: [Int64],
-    samplesPerBlock: Int,
+    scores: [Double],
     blockPTS: [Double],
     requestedStart: Double,
     requestedEnd: Double
   ) -> [Int] {
-    let scores = normalizedRiseScores(
-      blockEnergies: blockEnergies, samplesPerBlock: samplesPerBlock)
     guard scores.count == blockPTS.count, scores.count >= 3 else { return [] }
     var peaks: [Int] = []
     for index in 1..<(scores.count - 1) {
