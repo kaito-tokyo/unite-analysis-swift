@@ -76,6 +76,8 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
     }
   case let command as DetectChromaEvents:
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
+  case let command as EventDetect:
+    for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as ExtractClip:
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as OCRCommand:

@@ -30,6 +30,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       stdin one line at a time; every job requires a unique jobId echoed by its JSONL response.
       Commands that use AVFoundation media access or Apple Vision text recognition must run outside a sandbox; their individual help identifies this requirement. Audio peak detection uses recording format v2 main-media audio to propose visually interesting times; it does not classify events. Run `batch-frame --help`, `sample-frames --help`, `precise-frame --help`,
       `contact-sheet --help`, `frame-burst --help`, `detect-chroma-events --help`,
+      `event-detect --help`,
       `audio-peaks --help`, `extract-clip --help`, `ocr --help`, `scan-result --help`,
       `recognize-draft-loadout --help`, `recognize-blind-loadout --help`,
       `eval-draw-text-script --help`, `schema --help`, or `config --help`
@@ -39,7 +40,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
     subcommands: [
       BatchFrame.self, SampleFrames.self, PreciseFrame.self, ContactSheet.self,
       FrameBurst.self,
-      DetectChromaEvents.self, AudioPeaks.self, ExtractClip.self, OCRCommand.self,
+      DetectChromaEvents.self, AudioPeaks.self, EventDetect.self, ExtractClip.self, OCRCommand.self,
       ScanResultCommand.self,
       RecognizeDraftLoadout.self, RecognizeBlindLoadout.self,
       EvaluateDrawText.self, Schema.self, Config.self, MCPCommand.self,
