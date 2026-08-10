@@ -465,8 +465,41 @@ func canonicalSeconds(_ value: Double) -> String {
   String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), value)
 }
 
+struct RecordingMediaContext {
+  let recordSpecURL: URL
+  let isFinalized: Bool
+  let spec: RecordSpec
+  let recording: ResolvedRecordingInput
+  let extractor: VideoFrameExtractor
+
+  static func prepare(recordSpecURL: URL) async throws -> Self {
+    let spec = try JSONDecoder().decode(
+      RecordSpec.self, from: Data(contentsOf: recordSpecURL))
+    RecordVisionInputLogger.recordSpec(recordSpecURL)
+    guard spec.startPTS.timescale > 0 else {
+      throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
+    }
+    let bundleURL = try recordingBundle(above: recordSpecURL)
+    let isFinalized = FileManager.default.fileExists(
+      atPath: bundleURL.appendingPathComponent(".finalized").path)
+    if !isFinalized {
+      RecordVisionInputLogger.unfinishedRecording(bundleURL)
+    }
+    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
+    RecordVisionInputLogger.sourceVideo(recording.videoURL)
+    return try await Self(
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, spec: spec, recording: recording,
+      extractor: VideoFrameExtractor(videoURL: recording.videoURL))
+  }
+
+  func refreshedIfUnfinished() async throws -> Self {
+    if isFinalized { return self }
+    return try await Self.prepare(recordSpecURL: recordSpecURL)
+  }
+}
+
 func renderFrames(
-  recordSpecURL: URL,
+  context media: RecordingMediaContext,
   requests frameRequests: [FrameRequest],
   quality: Double,
   force: Bool
@@ -474,19 +507,10 @@ func renderFrames(
   guard !frameRequests.isEmpty else {
     throw UniteAnalysisSwiftToolError.message("At least one frame request is required")
   }
-  let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
-  RecordVisionInputLogger.recordSpec(recordSpecURL)
-  guard spec.startPTS.timescale > 0 else {
-    throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
-  }
+  let spec = media.spec
   let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
-  let bundleURL = try recordingBundle(above: recordSpecURL)
-  if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
-    RecordVisionInputLogger.unfinishedRecording(bundleURL)
-  }
-  let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
-  RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
+  let recording = media.recording
+  let extractor = media.extractor
   let videoDurationSeconds = CMTimeGetSeconds(extractor.duration)
   guard videoDurationSeconds.isFinite, videoDurationSeconds > 0 else {
     throw UniteAnalysisSwiftToolError.message(

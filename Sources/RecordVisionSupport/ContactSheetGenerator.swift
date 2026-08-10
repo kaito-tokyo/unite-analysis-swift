@@ -314,6 +314,51 @@ public enum ContactSheetGenerator {
   private static let cellSeparator: Int = 8
   private static let cellSeparatorColor = CGColor(red: 1, green: 0, blue: 1, alpha: 1)
 
+  package struct PreparedInput {
+    fileprivate let recordSpecURL: URL
+    fileprivate let isFinalized: Bool
+    fileprivate let recordSpec: RecordVisionRecordSpec
+    fileprivate let asset: AVURLAsset
+    fileprivate let videoDuration: CMTime
+    fileprivate let video: VideoMetadata
+  }
+
+  package static func prepare(recordSpecURL: URL) async throws -> PreparedInput {
+    let recordSpec = try JSONDecoder().decode(
+      RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
+    RecordVisionInputLogger.recordSpec(recordSpecURL)
+    guard recordSpec.startPTS.timescale > 0 else {
+      throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
+    }
+    try validate(duration: recordSpec.duration)
+    let bundleURL = try recordingBundle(above: recordSpecURL)
+    let isFinalized = FileManager.default.fileExists(
+      atPath: bundleURL.appendingPathComponent(".finalized").path)
+    if !isFinalized {
+      RecordVisionInputLogger.unfinishedRecording(bundleURL)
+    }
+    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
+    RecordVisionInputLogger.sourceVideo(recording.videoURL)
+    let asset = AVURLAsset(url: recording.videoURL)
+    guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+      throw ContactSheetGeneratorError.message("No video track: \(recording.videoURL.path)")
+    }
+    let naturalSize = try await track.load(.naturalSize)
+    let videoDuration = try await asset.load(.duration)
+    return PreparedInput(
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, recordSpec: recordSpec, asset: asset,
+      videoDuration: videoDuration,
+      video: VideoMetadata(
+        width: Int(naturalSize.width), height: Int(naturalSize.height),
+        frameRate: Double(try await track.load(.nominalFrameRate)),
+        duration: videoDuration.seconds))
+  }
+
+  package static func refreshIfUnfinished(_ prepared: PreparedInput) async throws -> PreparedInput {
+    if prepared.isFinalized { return prepared }
+    return try await prepare(recordSpecURL: prepared.recordSpecURL)
+  }
+
   public static func run(
     definitionURL: URL, recordSpecURL: URL, outputURL: URL, quality: Double, force: Bool
   ) async throws {
@@ -325,18 +370,21 @@ public enum ContactSheetGenerator {
   public static func run(
     definitionData: Data, recordSpecURL: URL, outputURL: URL, quality: Double, force: Bool
   ) async throws {
+    let prepared = try await prepare(recordSpecURL: recordSpecURL)
+    try await run(
+      definitionData: definitionData, prepared: prepared, outputURL: outputURL,
+      quality: quality, force: force)
+  }
+
+  package static func run(
+    definitionData: Data, prepared: PreparedInput, outputURL: URL, quality: Double, force: Bool
+  ) async throws {
     guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
       throw ContactSheetGeneratorError.message(
         "Output already exists: \(outputURL.path). Pass --force to overwrite.")
     }
     let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: definitionData)
-    let recordSpec = try JSONDecoder().decode(
-      RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
-    RecordVisionInputLogger.recordSpec(recordSpecURL)
-    guard recordSpec.startPTS.timescale > 0 else {
-      throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
-    }
-    try validate(duration: recordSpec.duration)
+    let recordSpec = prepared.recordSpec
     let frameOffsets = try validate(definition: definition)
     let rows = Int(ceil(Double(definition.matchTimestamps.count) / Double(definition.columns)))
     let width =
@@ -360,25 +408,9 @@ public enum ContactSheetGenerator {
       context.fill(CGRect(x: 0, y: y, width: width, height: cellSeparator))
     }
 
-    let bundleURL = try recordingBundle(above: recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
-    {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
-    }
-    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
-    RecordVisionInputLogger.sourceVideo(recording.videoURL)
-    let asset = AVURLAsset(url: recording.videoURL)
-    guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-      throw ContactSheetGeneratorError.message("No video track: \(recording.videoURL.path)")
-    }
-    let naturalSize = try await track.load(.naturalSize)
-    let videoDuration = try await asset.load(.duration)
-    let video = VideoMetadata(
-      width: Int(naturalSize.width),
-      height: Int(naturalSize.height),
-      frameRate: Double(try await track.load(.nominalFrameRate)),
-      duration: videoDuration.seconds
-    )
+    let asset = prepared.asset
+    let videoDuration = prepared.videoDuration
+    let video = prepared.video
     let start = CMTime(value: recordSpec.startPTS.value, timescale: recordSpec.startPTS.timescale)
     let sourceTimes = try validatedSourceTimes(
       start: start, offsets: frameOffsets, videoDuration: videoDuration)
@@ -618,7 +650,7 @@ public enum ContactSheetGenerator {
     CTLineDraw(line, context)
   }
 
-  private struct VideoMetadata {
+  fileprivate struct VideoMetadata {
     let width: Int
     let height: Int
     let frameRate: Double

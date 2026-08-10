@@ -85,6 +85,8 @@ extension BatchFrame {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
+      var media = try await RecordingMediaContext.prepare(
+        recordSpecURL: resolveRecordSpec(command.recordSpec))
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
@@ -92,6 +94,7 @@ extension BatchFrame {
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
             throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
           }
+          media = try await media.refreshedIfUnfinished()
           let job = try JSONDecoder().decode(BatchFrameJob.self, from: line.data)
           _ = try job.validatedMatchTimestamps()
           let prefixURL = resolvePath(job.outputPrefix)
@@ -103,7 +106,7 @@ extension BatchFrame {
               outputURL: URL(fileURLWithPath: prefixURL.path + suffix).standardizedFileURL)
           }
           let outputs = try await renderFrames(
-            recordSpecURL: resolveRecordSpec(command.recordSpec),
+            context: media,
             requests: requests,
             quality: command.quality,
             force: command.force

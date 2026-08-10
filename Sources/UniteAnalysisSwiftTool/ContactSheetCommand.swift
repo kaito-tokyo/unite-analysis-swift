@@ -82,6 +82,8 @@ extension ContactSheet {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
+      var prepared = try await ContactSheetGenerator.prepare(
+        recordSpecURL: resolveRecordSpec(command.recordSpec))
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
@@ -89,6 +91,7 @@ extension ContactSheet {
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
             throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
           }
+          prepared = try await ContactSheetGenerator.refreshIfUnfinished(prepared)
           let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: line.data)
           guard let jobId = definition.jobId,
             !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -102,7 +105,7 @@ extension ContactSheet {
           let outputURL = resolvePath(output)
           try await ContactSheetGenerator.run(
             definitionData: try JSONEncoder().encode(definition),
-            recordSpecURL: resolveRecordSpec(command.recordSpec),
+            prepared: prepared,
             outputURL: outputURL,
             quality: command.quality,
             force: command.force
