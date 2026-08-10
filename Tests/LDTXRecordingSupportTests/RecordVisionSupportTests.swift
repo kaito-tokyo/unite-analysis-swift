@@ -352,6 +352,41 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   #expect(value == "#3 / 44.5 / 600 / record-01 / 1920")
 }
 
+@Test func standardOverviewDrawTextScriptsEvaluateStandalone() throws {
+  let repositoryRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+  let jobsURL = repositoryRoot.appendingPathComponent(
+    ".apm/skills/review-unite-matches-ja/references/overview-contact-sheet-jobs.jsonl")
+  let lines = try String(contentsOf: jobsURL, encoding: .utf8)
+    .split(whereSeparator: \.isNewline)
+  #expect(lines.count == 5)
+
+  for line in lines {
+    let definition = try JSONDecoder().decode(
+      ContactSheetDefinition.self, from: Data(line.utf8))
+    let scripts = definition.placements.compactMap { $0.drawText?.script?.return }
+    #expect(scripts.count == 1)
+    for script in scripts {
+      let value = try DrawTextScriptEngine.evaluate(
+        script: script,
+        index: 2,
+        inmatch: 45.25,
+        beforeStart: nil,
+        afterEnd: nil,
+        actualInmatch: 44.5,
+        matchDuration: 600,
+        recordMatchId: "record-01",
+        videoWidth: 1920,
+        videoHeight: 1080,
+        videoFrameRate: 60,
+        videoDuration: 681.383333)
+      #expect(value.contains("F002 | 44.500s"))
+    }
+  }
+}
+
 @Test func contactSheetDefinitionDecodesScriptReturnObject() throws {
   let data = Data(
     """

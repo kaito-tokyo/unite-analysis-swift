@@ -124,7 +124,8 @@ public enum DrawTextScriptEngine {
     index: Int,
     inmatch: Double?,
     beforeStart: Double?,
-    afterEnd: Double?
+    afterEnd: Double?,
+    actualInmatch: Double? = nil
   ) async throws -> String {
     let values = [inmatch, beforeStart, afterEnd].compactMap { $0 }
     guard values.count == 1, values[0].isFinite else {
@@ -148,6 +149,7 @@ public enum DrawTextScriptEngine {
     let size = try await track.load(.naturalSize)
     return try evaluate(
       script: script, index: index, inmatch: inmatch, beforeStart: beforeStart, afterEnd: afterEnd,
+      actualInmatch: actualInmatch,
       matchDuration: record.duration, recordMatchId: record.matchId,
       videoWidth: Int(size.width), videoHeight: Int(size.height),
       videoFrameRate: Double(try await track.load(.nominalFrameRate)),

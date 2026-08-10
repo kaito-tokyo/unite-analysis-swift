@@ -29,7 +29,7 @@ struct EvaluateDrawText: ParsableCommand {
 
       TIME. Specify exactly one of --inmatch, --before-start, or --after-end. Values are seconds in the corresponding match-relative domain.
 
-      GLOBALS. The expression receives the same JSC globals as contact-sheet drawText.script: FRAME (index, inmatch, beforeStart, afterEnd), MATCH (duration), RECORD (matchId), and VIDEO (width, height, frameRate, duration). FRAME.index is set by --index and is zero-based.
+      GLOBALS. The expression receives the same JSC globals as contact-sheet drawText.script: FRAME (index, inmatch, beforeStart, afterEnd, actualInmatch), MATCH (duration), RECORD (matchId), and VIDEO (width, height, frameRate, duration). FRAME.index is set by --index and is zero-based. FRAME.actualInmatch is set by --actual-inmatch.
       """.reflowedHelp()
   )
 
@@ -43,9 +43,13 @@ struct EvaluateDrawText: ParsableCommand {
   @Option(help: "Seconds elapsed from the match start.") var inmatch: Double?
   @Option(help: "Seconds before the match start.") var beforeStart: Double?
   @Option(help: "Seconds after the match end.") var afterEnd: Double?
+  @Option(help: "Decoded timestamp in match-relative seconds.") var actualInmatch: Double?
 
   func validate() throws {
     guard index >= 0 else { throw ValidationError("--index must be non-negative") }
+    guard actualInmatch?.isFinite != false else {
+      throw ValidationError("--actual-inmatch must be finite")
+    }
   }
 
 }
@@ -66,7 +70,8 @@ extension EvaluateDrawText {
         index: command.index,
         inmatch: command.inmatch,
         beforeStart: command.beforeStart,
-        afterEnd: command.afterEnd)
+        afterEnd: command.afterEnd,
+        actualInmatch: command.actualInmatch)
       continuation.yield(.init(text: result))
     }
   }
