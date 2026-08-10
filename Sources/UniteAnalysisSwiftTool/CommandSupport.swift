@@ -255,6 +255,8 @@ func validateOutputPath(_ outputURL: URL?, force: Bool) throws {
 
 func writeOutputData(_ data: Data, to outputURL: URL, force: Bool) throws {
   try validateOutputPath(outputURL, force: force)
+  try FileManager.default.createDirectory(
+    at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
   let temporaryURL = outputURL.deletingLastPathComponent().appendingPathComponent(
     ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp")
   defer { try? FileManager.default.removeItem(at: temporaryURL) }

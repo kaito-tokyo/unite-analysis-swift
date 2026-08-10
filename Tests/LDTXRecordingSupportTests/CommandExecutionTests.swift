@@ -179,6 +179,18 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   #expect(try Data(contentsOf: output) == Data("raced\n".utf8))
 }
 
+@Test func dataOutputCreatesMissingParentDirectories() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("candidates/audio-peaks.json")
+  let expected = Data("complete\n".utf8)
+
+  try writeOutputData(expected, to: output, force: false)
+
+  #expect(try Data(contentsOf: output) == expected)
+}
+
 @Test(arguments: ["ocr", "scan-result"])
 func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
