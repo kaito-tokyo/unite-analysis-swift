@@ -376,6 +376,26 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   }
 }
 
+@Test func loadoutOutputDestinationRejectsInvalidTypesBeforeRecognition() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let regularFile = root.appendingPathComponent("file")
+  try Data().write(to: regularFile)
+
+  #expect(throws: Error.self) {
+    try validateLoadoutOutputDestination(
+      regularFile.appendingPathComponent("result.json"), force: false)
+  }
+  #expect(throws: Error.self) {
+    try validateLoadoutOutputDestination(root, force: true)
+  }
+  #expect(throws: Never.self) {
+    try validateLoadoutOutputDestination(root.appendingPathComponent("result.json"), force: false)
+  }
+}
+
 @Test func loadoutOutputCannotOverlapDiagnosticOutput() throws {
   let directory = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString, isDirectory: true)

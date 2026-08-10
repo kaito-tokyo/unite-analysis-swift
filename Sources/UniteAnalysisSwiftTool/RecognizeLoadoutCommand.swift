@@ -371,6 +371,33 @@ package func prepareDiagnosticDirectory(
   try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 }
 
+package func validateLoadoutOutputDestination(_ outputURL: URL, force: Bool) throws {
+  try validateOutputPath(outputURL, force: force)
+  var isDirectory: ObjCBool = false
+  if FileManager.default.fileExists(atPath: outputURL.path, isDirectory: &isDirectory),
+    isDirectory.boolValue
+  {
+    throw ValidationError("Output path is a directory: \(outputURL.path)")
+  }
+  var ancestor = outputURL.deletingLastPathComponent()
+  while !FileManager.default.fileExists(atPath: ancestor.path, isDirectory: &isDirectory) {
+    if let attributes = try? FileManager.default.attributesOfItem(atPath: ancestor.path),
+      attributes[.type] as? FileAttributeType == .typeSymbolicLink
+    {
+      throw ValidationError("Output parent is a dangling symbolic link: \(ancestor.path)")
+    }
+    let parent = ancestor.deletingLastPathComponent()
+    guard parent != ancestor else { break }
+    ancestor = parent
+  }
+  guard isDirectory.boolValue else {
+    throw ValidationError("Output parent is not a directory: \(ancestor.path)")
+  }
+  guard FileManager.default.isWritableFile(atPath: ancestor.path) else {
+    throw ValidationError("Output parent is not writable: \(ancestor.path)")
+  }
+}
+
 struct RecognizeDraftLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "recognize-draft-loadout",
@@ -401,7 +428,7 @@ struct RecognizeDraftLoadout: ParsableCommand {
     name: .customLong("dump-akaze-inputs"),
     help: "Directory for lossless PNGs of the normalized AKAZE pixels and keypoint masks.")
   var dumpAKAZEInputs: String?
-  @Flag(help: "Overwrite an existing output JSON file.") var force = false
+  @Flag(help: "Overwrite existing output JSON and AKAZE diagnostic PNG files.") var force = false
 
 }
 
@@ -422,7 +449,7 @@ extension RecognizeDraftLoadout {
       let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
       try validateDistinctLoadoutOutputs(
         outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "draft")
-      try validateOutputPath(outputURL, force: command.force)
+      try validateLoadoutOutputDestination(outputURL, force: command.force)
       try prepareDiagnosticDirectory(
         diagnosticDirectory, matchFormat: "draft", force: command.force)
       let result = try LoadoutRecognizer.recognizeDraft(
@@ -476,7 +503,7 @@ struct RecognizeBlindLoadout: ParsableCommand {
     name: .customLong("dump-akaze-inputs"),
     help: "Directory for lossless PNGs of the normalized AKAZE pixels and keypoint masks.")
   var dumpAKAZEInputs: String?
-  @Flag(help: "Overwrite an existing output JSON file.") var force = false
+  @Flag(help: "Overwrite existing output JSON and AKAZE diagnostic PNG files.") var force = false
 
 }
 
@@ -496,7 +523,7 @@ extension RecognizeBlindLoadout {
       let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
       try validateDistinctLoadoutOutputs(
         outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "blind")
-      try validateOutputPath(outputURL, force: command.force)
+      try validateLoadoutOutputDestination(outputURL, force: command.force)
       try prepareDiagnosticDirectory(
         diagnosticDirectory, matchFormat: "blind", force: command.force)
       let result = try LoadoutRecognizer.recognizeBlind(
