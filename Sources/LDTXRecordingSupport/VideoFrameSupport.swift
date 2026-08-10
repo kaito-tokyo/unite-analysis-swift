@@ -318,40 +318,57 @@ public enum VideoFrameSupport {
       throw VideoFrameSupportError.message("Could not write JPEG: \(url.path)")
     }
     // ImageIO can add an EXIF orientation block even though this CGImage has
-    // already been normalized. Keep only JFIF and JPEG coding segments so
-    // consumers such as Google Docs do not need to interpret sidecar metadata.
+    // already been normalized. Remove APP1 metadata while preserving colour
+    // profiles and other application segments.
     try stripApplicationMetadata(from: url)
   }
 
   private static func stripApplicationMetadata(from url: URL) throws {
     let source = try Data(contentsOf: url)
+    let result = try removingAPP1Metadata(from: source, sourceDescription: url.path)
+    try result.write(to: url, options: .atomic)
+  }
+
+  package static func removingAPP1Metadata(
+    from source: Data, sourceDescription: String = "JPEG data"
+  ) throws -> Data {
     let bytes = [UInt8](source)
     guard bytes.count >= 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else {
-      throw VideoFrameSupportError.message("JPEG writer produced invalid data: \(url.path)")
+      throw VideoFrameSupportError.message(
+        "JPEG writer produced invalid data: \(sourceDescription)")
     }
     var result = Data(bytes[0...1])
     var index = 2
-    while index + 3 < bytes.count {
+    while index < bytes.count {
+      let markerStart = index
       guard bytes[index] == 0xFF else {
-        throw VideoFrameSupportError.message("JPEG header is malformed: \(url.path)")
+        throw VideoFrameSupportError.message("JPEG header is malformed: \(sourceDescription)")
       }
-      let marker = bytes[index + 1]
+      while index < bytes.count, bytes[index] == 0xFF {
+        index += 1
+      }
+      guard index < bytes.count else {
+        throw VideoFrameSupportError.message("JPEG header is malformed: \(sourceDescription)")
+      }
+      let marker = bytes[index]
+      index += 1
       if marker == 0xDA {  // Start of Scan: entropy data follows unchanged.
-        result.append(contentsOf: bytes[index...])
-        try result.write(to: url, options: .atomic)
-        return
+        result.append(contentsOf: bytes[markerStart...])
+        return result
       }
-      let length = Int(bytes[index + 2]) << 8 | Int(bytes[index + 3])
-      let end = index + 2 + length
+      guard index + 1 < bytes.count else {
+        throw VideoFrameSupportError.message("JPEG segment is malformed: \(sourceDescription)")
+      }
+      let length = Int(bytes[index]) << 8 | Int(bytes[index + 1])
+      let end = index + length
       guard length >= 2, end <= bytes.count else {
-        throw VideoFrameSupportError.message("JPEG segment is malformed: \(url.path)")
+        throw VideoFrameSupportError.message("JPEG segment is malformed: \(sourceDescription)")
       }
-      // Preserve APP0 (JFIF) and remove APP1...APP15 (EXIF, XMP, ICC, etc.).
-      if marker < 0xE1 || marker > 0xEF {
-        result.append(contentsOf: bytes[index..<end])
+      if marker != 0xE1 {
+        result.append(contentsOf: bytes[markerStart..<end])
       }
       index = end
     }
-    throw VideoFrameSupportError.message("JPEG has no scan data: \(url.path)")
+    throw VideoFrameSupportError.message("JPEG has no scan data: \(sourceDescription)")
   }
 }
