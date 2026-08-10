@@ -65,6 +65,15 @@ func batchFrameJobRejectsUnknownKeys(json: String) {
   }
 }
 
+@Test func frameBurstJobAcceptsFrameLabels() throws {
+  let data = Data(
+    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"labelFrames":true,"columns":1,"cellWidth":1,"output":"out.jpg"}"#
+      .utf8
+  )
+  let job = try JSONDecoder().decode(FrameBurstJob.self, from: data)
+  #expect(job.labelsFrames)
+}
+
 @Test func ocrJobRejectsUnknownTopLevelKey() {
   let data = Data(
     #"{"jobId":"job","input":"in.jpg","source":{"x":0,"y":0,"width":1,"height":1},"region":"test","type":"generic","extra":true}"#

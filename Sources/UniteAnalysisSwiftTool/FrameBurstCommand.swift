@@ -5,6 +5,7 @@
 import ArgumentParser
 import CoreGraphics
 import CoreMedia
+import CoreText
 import Foundation
 import LDTXRecordingSupport
 import RecordVisionSupport
@@ -19,12 +20,14 @@ struct FrameBurstJob: Decodable {
   let source: FrameSource
   let frameCount: Int
   let decimate: Int?
+  let labelFrames: Bool?
   let columns: Int
   let cellWidth: Int
   let output: String
 
   private enum CodingKeys: String, CodingKey, CaseIterable {
-    case jobId, matchTimestamp, source, frameCount, decimate, columns, cellWidth, output
+    case jobId, matchTimestamp, source, frameCount, decimate, labelFrames, columns, cellWidth,
+      output
   }
 
   init(from decoder: Decoder) throws {
@@ -37,12 +40,14 @@ struct FrameBurstJob: Decodable {
     source = try container.decode(FrameSource.self, forKey: .source)
     frameCount = try container.decode(Int.self, forKey: .frameCount)
     decimate = try container.decodeIfPresent(Int.self, forKey: .decimate)
+    labelFrames = try container.decodeIfPresent(Bool.self, forKey: .labelFrames)
     columns = try container.decode(Int.self, forKey: .columns)
     cellWidth = try container.decode(Int.self, forKey: .cellWidth)
     output = try container.decode(String.self, forKey: .output)
   }
 
   var decimation: Int { decimate ?? 1 }
+  var labelsFrames: Bool { labelFrames ?? false }
 
   func validate() throws {
     guard !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -133,11 +138,11 @@ struct FrameBurst: ParsableCommand {
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
-      INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, matchTimestamp, source, frameCount, columns, cellWidth, and output. decimate is optional and defaults to 1. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
+      INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, matchTimestamp, source, frameCount, columns, cellWidth, and output. decimate is optional and defaults to 1. labelFrames optionally overlays each retained source index and actual match-relative timestamp. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
 
       COMPLETE jobs.jsonl EXAMPLE.
 
-      {"jobId":"absol-499.2","matchTimestamp":499.2,"source":{"x":0,"y":0,"width":1632,"height":918},"frameCount":60,"decimate":2,"columns":8,"cellWidth":320,"output":"_PokemonUniteAnalysis/matches/match-01/frame-bursts/absol-499.2.jpg"}
+      {"jobId":"absol-499.2","matchTimestamp":499.2,"source":{"x":0,"y":0,"width":1632,"height":918},"frameCount":60,"decimate":2,"labelFrames":true,"columns":8,"cellWidth":320,"output":"_PokemonUniteAnalysis/matches/match-01/frame-bursts/absol-499.2.jpg"}
 
       JOB-ID. jobId is a required non-empty caller-defined correlation string and must be unique within the input stream. It is returned unchanged and is never used to derive the output filename.
 
@@ -260,6 +265,13 @@ private func renderFrameBurst(
       width: job.cellWidth, height: cellHeight)
     context.interpolationQuality = .high
     context.draw(cropped, in: destination)
+    if job.labelsFrames {
+      drawFrameBurstLabel(
+        sourceIndex: index,
+        actualInmatch: presentationTime.seconds
+          - Double(spec.startPTS.value) / Double(spec.startPTS.timescale),
+        in: destination, context: context)
+    }
   }
   guard let image = context.makeImage(), let firstPTS, let lastPTS else {
     throw UniteAnalysisSwiftToolError.message("Could not finalize frame burst image")
@@ -271,4 +283,27 @@ private func renderFrameBurst(
     Data(
       "unite-analysis-swift: frame burst requested PTS \(canonicalSeconds(requestedTime.seconds))s, first PTS \(canonicalSeconds(firstPTS.seconds))s, last PTS \(canonicalSeconds(lastPTS.seconds))s\n"
         .utf8))
+}
+
+private func drawFrameBurstLabel(
+  sourceIndex: Int, actualInmatch: Double, in destination: CGRect, context: CGContext
+) {
+  let fontSize = max(10, min(16, destination.width / 20))
+  let band = CGRect(
+    x: destination.minX, y: destination.minY, width: destination.width, height: fontSize + 8)
+  context.setFillColor(CGColor(gray: 0, alpha: 0.8))
+  context.fill(band)
+  let font = CTFontCreateWithName("Menlo" as CFString, fontSize, nil)
+  let text = String(
+    format: "F%04d  %+.3fs", locale: Locale(identifier: "en_US_POSIX"), sourceIndex,
+    actualInmatch)
+  let line = CTLineCreateWithAttributedString(
+    NSAttributedString(
+      string: text,
+      attributes: [
+        kCTFontAttributeName as NSAttributedString.Key: font,
+        kCTForegroundColorAttributeName as NSAttributedString.Key: CGColor(gray: 1, alpha: 1),
+      ]))
+  context.textPosition = CGPoint(x: destination.minX + 4, y: destination.minY + 4)
+  CTLineDraw(line, context)
 }
