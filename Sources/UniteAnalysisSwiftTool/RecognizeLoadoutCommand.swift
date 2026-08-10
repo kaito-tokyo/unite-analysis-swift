@@ -289,11 +289,17 @@ package func validateDistinctLoadoutOutputs(
 ) throws {
   guard let diagnosticDirectory else { return }
   let normalizedOutput = outputURL.standardizedFileURL
+  let normalizedDirectory = diagnosticDirectory.standardizedFileURL
+  let outputComponents = normalizedOutput.pathComponents
+  let directoryComponents = normalizedDirectory.pathComponents
+  let outputContainsDiagnostics =
+    outputComponents.count <= directoryComponents.count
+    && Array(directoryComponents.prefix(outputComponents.count)) == outputComponents
   let diagnosticURLs = diagnosticNames(matchFormat: matchFormat).map {
-    diagnosticDirectory.appendingPathComponent($0).appendingPathExtension("png")
+    normalizedDirectory.appendingPathComponent($0).appendingPathExtension("png")
       .standardizedFileURL
   }
-  guard !diagnosticURLs.contains(normalizedOutput) else {
+  guard !outputContainsDiagnostics, !diagnosticURLs.contains(normalizedOutput) else {
     throw ValidationError(
       "Output path overlaps an AKAZE diagnostic output: \(normalizedOutput.path)")
   }

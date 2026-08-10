@@ -385,6 +385,16 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
     try validateDistinctLoadoutOutputs(
       outputURL: output, diagnosticDirectory: directory, matchFormat: "draft")
   }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory.deletingLastPathComponent(),
+      diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory, diagnosticDirectory: directory, matchFormat: "draft")
+  }
   #expect(throws: Never.self) {
     try validateDistinctLoadoutOutputs(
       outputURL: directory.appendingPathComponent("loadout.json"),
