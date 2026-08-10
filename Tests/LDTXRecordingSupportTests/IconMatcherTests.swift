@@ -451,6 +451,24 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   }
 }
 
+@Test func loadoutOutputCollisionResolvesDanglingSymlinks() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let realDirectory = root.appendingPathComponent("real", isDirectory: true)
+  let linkedDirectory = root.appendingPathComponent("link", isDirectory: true)
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  try FileManager.default.createSymbolicLink(
+    at: linkedDirectory, withDestinationURL: realDirectory)
+  defer { try? FileManager.default.removeItem(at: root) }
+
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: linkedDirectory.appendingPathComponent("ally-1-held-1.png"),
+      diagnosticDirectory: realDirectory,
+      matchFormat: "draft")
+  }
+}
+
 @Test func normalizesDeclaredGameScreenComponent() throws {
   let context = try #require(
     CGContext(

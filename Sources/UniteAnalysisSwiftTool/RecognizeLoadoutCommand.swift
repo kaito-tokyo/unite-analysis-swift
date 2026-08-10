@@ -284,28 +284,41 @@ private func diagnosticNames(matchFormat: String) -> [String] {
   return allyHeld + allyBattle + enemyBattle
 }
 
-private func resolvingExistingSymlinkComponents(in url: URL) -> URL {
-  var existingAncestor = url.standardizedFileURL
-  var missingComponents: [String] = []
-  while !FileManager.default.fileExists(atPath: existingAncestor.path) {
-    let parent = existingAncestor.deletingLastPathComponent()
-    guard parent != existingAncestor else { break }
-    missingComponents.append(existingAncestor.lastPathComponent)
-    existingAncestor = parent
+private func resolvingSymlinkComponents(in url: URL) throws -> URL {
+  var pending = Array(url.standardizedFileURL.pathComponents.dropFirst())
+  var resolved = URL(fileURLWithPath: "/", isDirectory: true)
+  var followedLinks = 0
+  while let component = pending.first {
+    pending.removeFirst()
+    let candidate = resolved.appendingPathComponent(component)
+    guard
+      let destination = try? FileManager.default.destinationOfSymbolicLink(
+        atPath: candidate.path)
+    else {
+      resolved = candidate
+      continue
+    }
+    followedLinks += 1
+    guard followedLinks <= 40 else {
+      throw ValidationError("Too many symbolic links in output path: \(url.path)")
+    }
+    let destinationURL =
+      destination.hasPrefix("/")
+      ? URL(fileURLWithPath: destination)
+      : resolved.appendingPathComponent(destination)
+    let destinationComponents = destinationURL.standardized.pathComponents
+    resolved = URL(fileURLWithPath: "/", isDirectory: true)
+    pending = Array(destinationComponents.dropFirst()) + pending
   }
-  var resolved = existingAncestor.resolvingSymlinksInPath()
-  for component in missingComponents.reversed() {
-    resolved.appendPathComponent(component)
-  }
-  return resolved.standardizedFileURL
+  return resolved.standardized
 }
 
 package func validateDistinctLoadoutOutputs(
   outputURL: URL, diagnosticDirectory: URL?, matchFormat: String
 ) throws {
   guard let diagnosticDirectory else { return }
-  let normalizedOutput = resolvingExistingSymlinkComponents(in: outputURL)
-  let normalizedDirectory = resolvingExistingSymlinkComponents(in: diagnosticDirectory)
+  let normalizedOutput = try resolvingSymlinkComponents(in: outputURL)
+  let normalizedDirectory = try resolvingSymlinkComponents(in: diagnosticDirectory)
   var existingAncestor = normalizedDirectory
   while !FileManager.default.fileExists(atPath: existingAncestor.path) {
     let parent = existingAncestor.deletingLastPathComponent()
@@ -317,7 +330,7 @@ package func validateDistinctLoadoutOutputs(
   ])
   let caseSensitive = volumeValues.volumeSupportsCaseSensitiveNames ?? true
   let pathKey: (URL) -> [String] = { url in
-    url.standardizedFileURL.pathComponents.map { component in
+    url.standardized.pathComponents.map { component in
       let normalized = component.decomposedStringWithCanonicalMapping
       return caseSensitive ? normalized : normalized.lowercased()
     }
@@ -332,7 +345,7 @@ package func validateDistinctLoadoutOutputs(
     contains(outputComponents, directoryComponents)
   let diagnosticURLs = diagnosticNames(matchFormat: matchFormat).map {
     normalizedDirectory.appendingPathComponent($0).appendingPathExtension("png")
-      .standardizedFileURL
+      .standardized
   }
   let normalizedOutputComponents = pathKey(normalizedOutput)
   guard !outputContainsDiagnostics,
