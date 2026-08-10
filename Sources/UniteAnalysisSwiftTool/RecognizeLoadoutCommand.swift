@@ -290,8 +290,24 @@ package func validateDistinctLoadoutOutputs(
   guard let diagnosticDirectory else { return }
   let normalizedOutput = outputURL.standardizedFileURL
   let normalizedDirectory = diagnosticDirectory.standardizedFileURL
-  let outputComponents = normalizedOutput.pathComponents
-  let directoryComponents = normalizedDirectory.pathComponents
+  var existingAncestor = normalizedDirectory
+  while !FileManager.default.fileExists(atPath: existingAncestor.path) {
+    let parent = existingAncestor.deletingLastPathComponent()
+    guard parent != existingAncestor else { break }
+    existingAncestor = parent
+  }
+  let volumeValues = try existingAncestor.resourceValues(forKeys: [
+    .volumeSupportsCaseSensitiveNamesKey
+  ])
+  let caseSensitive = volumeValues.volumeSupportsCaseSensitiveNames ?? true
+  let pathKey: (URL) -> [String] = { url in
+    url.standardizedFileURL.pathComponents.map { component in
+      let normalized = component.decomposedStringWithCanonicalMapping
+      return caseSensitive ? normalized : normalized.lowercased()
+    }
+  }
+  let outputComponents = pathKey(normalizedOutput)
+  let directoryComponents = pathKey(normalizedDirectory)
   let outputContainsDiagnostics =
     outputComponents.count <= directoryComponents.count
     && Array(directoryComponents.prefix(outputComponents.count)) == outputComponents
@@ -299,7 +315,10 @@ package func validateDistinctLoadoutOutputs(
     normalizedDirectory.appendingPathComponent($0).appendingPathExtension("png")
       .standardizedFileURL
   }
-  guard !outputContainsDiagnostics, !diagnosticURLs.contains(normalizedOutput) else {
+  let normalizedOutputComponents = pathKey(normalizedOutput)
+  guard !outputContainsDiagnostics,
+    !diagnosticURLs.contains(where: { pathKey($0) == normalizedOutputComponents })
+  else {
     throw ValidationError(
       "Output path overlaps an AKAZE diagnostic output: \(normalizedOutput.path)")
   }

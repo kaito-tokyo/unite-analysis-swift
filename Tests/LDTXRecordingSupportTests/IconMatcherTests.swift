@@ -385,6 +385,24 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
     try validateDistinctLoadoutOutputs(
       outputURL: output, diagnosticDirectory: directory, matchFormat: "draft")
   }
+  let volumeValues = try FileManager.default.temporaryDirectory.resourceValues(forKeys: [
+    .volumeSupportsCaseSensitiveNamesKey
+  ])
+  if volumeValues.volumeSupportsCaseSensitiveNames == true {
+    #expect(throws: Never.self) {
+      try validateDistinctLoadoutOutputs(
+        outputURL: directory.appendingPathComponent("ALLY-1-HELD-1.PNG"),
+        diagnosticDirectory: directory,
+        matchFormat: "draft")
+    }
+  } else {
+    #expect(throws: Error.self) {
+      try validateDistinctLoadoutOutputs(
+        outputURL: directory.appendingPathComponent("ALLY-1-HELD-1.PNG"),
+        diagnosticDirectory: directory,
+        matchFormat: "draft")
+    }
+  }
   #expect(throws: Error.self) {
     try validateDistinctLoadoutOutputs(
       outputURL: directory.deletingLastPathComponent(),
