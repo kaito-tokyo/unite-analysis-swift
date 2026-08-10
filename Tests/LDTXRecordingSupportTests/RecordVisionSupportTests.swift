@@ -732,23 +732,6 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   }
 }
 
-@Test func chromaEventCandidatesExpandAroundSelectedSamples() throws {
-  let samples = [
-    ChromaEventSample(
-      requestedInmatch: 1, actualInmatch: 1.1, score: 59, cbThreshold: 59, crThreshold: 10,
-      cbChangedPixelCount: 0, crChangedPixelCount: 0, bothChangedPixelCount: 0, changedPixelCount: 0
-    ),
-    ChromaEventSample(
-      requestedInmatch: 4, actualInmatch: 4.1, score: 60, cbThreshold: 60, crThreshold: 10,
-      cbChangedPixelCount: 0, crChangedPixelCount: 0, bothChangedPixelCount: 0, changedPixelCount: 0
-    ),
-  ]
-  #expect(
-    try ChromaEventDetector.expandedCandidateTimes(samples, minimumScore: 60, duration: 5) == [
-      3.5, 4, 4.5,
-    ])
-}
-
 @Test func audioPeakDetectorFindsAndMergesFixedPowerRise() {
   var energies = Array(repeating: Int64(100_000), count: 120)
   energies[50] = 10_000_000

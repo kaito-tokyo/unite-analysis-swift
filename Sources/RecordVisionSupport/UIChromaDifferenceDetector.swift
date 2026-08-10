@@ -120,29 +120,6 @@ public struct ChromaEventResult: Codable, Equatable, Sendable {
 /// Each consecutive chroma-difference plane receives its own Otsu threshold. The maximum is exposed
 /// as a scalar score so ordinary threshold-filter commands can consume this result directly.
 public enum ChromaEventDetector {
-  public static let candidateContextSeconds = 0.5
-
-  /// Expands each selected temporal difference to cover both its appearance and disappearance side.
-  public static func expandedCandidateTimes(
-    _ samples: [ChromaEventSample],
-    minimumScore: Int,
-    duration: Double
-  ) throws -> [Double] {
-    guard minimumScore >= 0 else {
-      throw ChromaEventError.message("minimum score must be nonnegative")
-    }
-    guard duration.isFinite, duration > 0 else {
-      throw ChromaEventError.message("match duration must be positive and finite")
-    }
-    let offsets = [-candidateContextSeconds, 0, candidateContextSeconds]
-    // Candidate expansion stays on the JPEG sequence's fixed sampling lattice.
-    let times = samples.lazy
-      .filter { $0.score >= minimumScore }
-      .flatMap { sample in offsets.map { sample.requestedInmatch + $0 } }
-      .filter { $0 >= 0 && $0 <= duration }
-    return Array(Set(times)).sorted()
-  }
-
   public static func jpegURLs(in directoryURL: URL) throws -> [URL] {
     var isDirectory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory),
