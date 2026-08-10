@@ -65,9 +65,13 @@ class PreparedIconImage final {
   [[nodiscard]] std::uint32_t height() const noexcept;
   [[nodiscard]] std::size_t byteCount() const noexcept;
   [[nodiscard]] std::uint8_t byte(std::size_t index) const noexcept;
+  [[nodiscard]] bool copyBytes(
+      std::uint8_t *destination, std::size_t destinationByteCount) const noexcept;
   [[nodiscard]] bool hasMask() const noexcept;
   [[nodiscard]] std::size_t maskByteCount() const noexcept;
   [[nodiscard]] std::uint8_t maskByte(std::size_t index) const noexcept;
+  [[nodiscard]] bool copyMaskBytes(
+      std::uint8_t *destination, std::size_t destinationByteCount) const noexcept;
 
  private:
   struct Value;

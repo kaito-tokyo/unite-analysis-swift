@@ -145,15 +145,31 @@ extension unite_analysis.IconMatcher {
     }
     let width = Int(image.width())
     let height = Int(image.height())
+    var preparedBytes = [UInt8](repeating: 0, count: image.byteCount())
+    guard
+      preparedBytes.withUnsafeMutableBufferPointer({
+        image.copyBytes($0.baseAddress, $0.count)
+      })
+    else {
+      throw ValidationError("Could not copy prepared AKAZE diagnostic image")
+    }
     let prepared = try BGRImage(
       width: width, height: height, bytesPerRow: width * 3,
-      bytes: (0..<image.byteCount()).map { image.byte($0) })
+      bytes: preparedBytes)
     let mask: BGRImage?
     if image.hasMask() {
       let maskByteCount = Int(image.maskByteCount())
+      var grayscaleMask = [UInt8](repeating: 0, count: maskByteCount)
+      guard
+        grayscaleMask.withUnsafeMutableBufferPointer({
+          image.copyMaskBytes($0.baseAddress, $0.count)
+        })
+      else {
+        throw ValidationError("Could not copy prepared AKAZE diagnostic mask")
+      }
       var maskBytes = [UInt8](repeating: 0, count: maskByteCount * 3)
       for index in 0..<maskByteCount {
-        let value = image.maskByte(index)
+        let value = grayscaleMask[index]
         let offset = index * 3
         maskBytes[offset] = value
         maskBytes[offset + 1] = value

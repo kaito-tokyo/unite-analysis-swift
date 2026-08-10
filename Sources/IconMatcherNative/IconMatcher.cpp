@@ -730,6 +730,17 @@ std::uint8_t PreparedIconImage::byte(const std::size_t index) const noexcept {
   return isValid() && index < value_->bytes.size() ? value_->bytes[index] : 0;
 }
 
+bool PreparedIconImage::copyBytes(
+    std::uint8_t *const destination,
+    const std::size_t destinationByteCount) const noexcept {
+  if (!isValid() || destination == nullptr ||
+      destinationByteCount < value_->bytes.size()) {
+    return false;
+  }
+  std::copy(value_->bytes.begin(), value_->bytes.end(), destination);
+  return true;
+}
+
 bool PreparedIconImage::hasMask() const noexcept {
   return isValid() && value_->mask.size() ==
       static_cast<std::size_t>(value_->width) * value_->height;
@@ -741,6 +752,17 @@ std::size_t PreparedIconImage::maskByteCount() const noexcept {
 
 std::uint8_t PreparedIconImage::maskByte(const std::size_t index) const noexcept {
   return hasMask() && index < value_->mask.size() ? value_->mask[index] : 0;
+}
+
+bool PreparedIconImage::copyMaskBytes(
+    std::uint8_t *const destination,
+    const std::size_t destinationByteCount) const noexcept {
+  if (!hasMask() || destination == nullptr ||
+      destinationByteCount < value_->mask.size()) {
+    return false;
+  }
+  std::copy(value_->mask.begin(), value_->mask.end(), destination);
+  return true;
 }
 
 IconMatcher::IconMatcher(const std::string &path) noexcept
