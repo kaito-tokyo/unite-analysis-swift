@@ -186,6 +186,7 @@ let package = Package(
         .product(name: "MCP", package: "swift-sdk"),
       ],
       path: "Sources/UniteAnalysisSwiftTool",
+      resources: [.embedInCode("Schemas")],
       swiftSettings: [.interoperabilityMode(.Cxx)]),
     .executableTarget(
       name: "UniteAnalysisSwiftTool",
