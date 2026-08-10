@@ -8,7 +8,7 @@ package struct UniteAnalysisModelCommand: ParsableCommand {
   package static let configuration = CommandConfiguration(
     commandName: "unite-analysis-model-tool",
     abstract: "Build and maintain ポケモンユナイト recognition models.",
-    version: "0.1.6",
+    version: "0.2.0",
     subcommands: [BuildDescriptorDatabase.self])
 
   package init() {}
