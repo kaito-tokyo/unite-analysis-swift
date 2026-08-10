@@ -12,8 +12,19 @@ struct MCPCommand: ParsableCommand {
     abstract: "Run the native stdio MCP server.")
 }
 
-private func mcpToolResult(_ text: String, isError: Bool = false) -> CallTool.Result {
-  .init(content: [.text(text: text, annotations: nil, _meta: nil)], isError: isError)
+package func mcpToolResult(
+  _ text: String, mediaURLs: [URL] = [], isError: Bool = false
+) -> CallTool.Result {
+  let media = mediaURLs.map { url in
+    Tool.Content.resourceLink(
+      uri: url.absoluteString,
+      name: url.lastPathComponent,
+      description: "Generated playable video clip",
+      mimeType: "video/mp4")
+  }
+  return .init(
+    content: [.text(text: text, annotations: nil, _meta: nil)] + media,
+    isError: isError)
 }
 
 private func encodedObject<T: Encodable>(_ value: T) throws -> Any {
@@ -153,12 +164,17 @@ private actor MCPExecutionGate {
   }
 }
 
+private struct MCPCommandRunnerOutput: Sendable {
+  let text: String
+  let mediaURLs: [URL]
+}
+
 private actor MCPCommandRunner {
   private let executionGate = MCPExecutionGate()
 
   func run(
     arguments: [String], currentDirectory: String?, standardInput: String?
-  ) async throws -> String {
+  ) async throws -> MCPCommandRunnerOutput {
     await executionGate.acquire()
     do {
       let result = try await runExclusively(
@@ -173,7 +189,7 @@ private actor MCPCommandRunner {
 
   private func runExclusively(
     arguments: [String], currentDirectory: String?, standardInput: String?
-  ) async throws -> String {
+  ) async throws -> MCPCommandRunnerOutput {
     let originalDirectory = FileManager.default.currentDirectoryPath
     if let currentDirectory {
       var isDirectory: ObjCBool = false
@@ -187,7 +203,7 @@ private actor MCPCommandRunner {
     defer { _ = FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
 
     if let output = try builtInMCPOutput(arguments: arguments) {
-      return output
+      return MCPCommandRunnerOutput(text: output, mediaURLs: [])
     }
 
     var parsedArguments = arguments
@@ -224,7 +240,14 @@ private actor MCPCommandRunner {
     let records = try await executeForMCP(command)
     let data = try JSONSerialization.data(
       withJSONObject: ["records": records], options: [.sortedKeys])
-    return String(decoding: data, as: UTF8.self)
+    let mediaURLs: [URL]
+    if let extractClip = command as? ExtractClip {
+      mediaURLs = [resolvePath(extractClip.output)]
+    } else {
+      mediaURLs = []
+    }
+    return MCPCommandRunnerOutput(
+      text: String(decoding: data, as: UTF8.self), mediaURLs: mediaURLs)
   }
 }
 
@@ -270,7 +293,7 @@ func executeMCPServer() async throws {
         arguments: values.compactMap(\.stringValue),
         currentDirectory: request.arguments?["currentDirectory"]?.stringValue,
         standardInput: request.arguments?["standardInput"]?.stringValue)
-      return mcpToolResult(result)
+      return mcpToolResult(result.text, mediaURLs: result.mediaURLs)
     } catch {
       return mcpToolResult(String(describing: error), isError: true)
     }
