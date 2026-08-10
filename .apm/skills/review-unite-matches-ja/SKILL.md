@@ -28,10 +28,22 @@ description: LDTXの.ldtxrecordに収録された完了済みポケモンユナ�
 
 現在の作業に必要な参照文書だけを選び、選んだ文書は最後まで読む。
 
-- 録画を調べる前、または分析ツールを実行・変更する前に、[recording-workflow.md](references/recording-workflow.md)を読む。コンタクトシートを生成するときは、完成済み配置とJSON生成手順を再利用するため[contact-sheet-layouts.md](references/contact-sheet-layouts.md)も読む。1秒未満の連続動作を検証するときは[frame-burst.md](references/frame-burst.md)を読む。
+- 録画を調べる前、または分析ツールを実行・変更する前に、[recording-workflow.md](references/recording-workflow.md)を読む。証拠不足を検知したら[tools.md](references/tools.md)を読む。コンタクトシートを生成するときは、完成済み配置とJSON生成手順を再利用するため[contact-sheet-layouts.md](references/contact-sheet-layouts.md)も読む。1秒未満の連続動作を検証するときは[frame-burst.md](references/frame-burst.md)を読む。
 - 完全な試合スタッツを表示する前、またはレポートを作成・更新する前に、[report-contract.md](references/report-contract.md)を読む。持ち物名を表示する場合は[item-abbreviations.md](references/item-abbreviations.md)も読む。
 - 正本ファイルの作成・移行、Obsidian同期、Drive公開、分類体系の変更前に、[storage-publication.md](references/storage-publication.md)を読む。
 - ランク分類または公開前には、[ranked-season-registry.md](references/ranked-season-registry.md)と[ranked-seasons.json](references/ranked-seasons.json)も読む。台帳は読み取り専用として扱い、試合レビュー中に変更しない。
+
+## 証拠不足の検知
+
+次のいずれかに該当するときは、コンタクトシートや孤立フレームから欠けた事実を推測しない。結論を出す前に[tools.md](references/tools.md)を最後まで読み、目的に合う追加証拠を収集する。
+
+- 技またはユナイトわざの使用者、対象、命中した相手が不明である。
+- 攻撃の命中、回避、中断、または複数動作の前後関係が不明である。
+- 短時間に動作が重なり、通常の静止画では順序を確定できない。
+- 接敵前の配置、離脱機会、味方の追撃、戦闘後の変換、またはオブジェクト戦全体が見えない。
+- 長い録画内の関連時間帯が不明である。
+- 縮小セルでHUD、タイマー、クールダウン、または参加者の識別を読めない。
+- リザルト画面、参加者、またはロードアウトの証拠が不完全である。
 
 ## 分析方針
 
