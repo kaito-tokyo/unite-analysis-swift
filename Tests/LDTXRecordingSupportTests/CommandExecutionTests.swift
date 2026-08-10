@@ -31,6 +31,16 @@ import Testing
   #expect(String(decoding: record.data, as: UTF8.self).contains("publication.schema.json"))
 }
 
+@Test(arguments: [
+  #"{"jobId":"job","matchTimestamps":[0],"source":{"x":0,"y":0,"width":1,"height":1},"outputPrefix":"frame","extra":true}"#,
+  #"{"jobId":"job","matchTimestamps":[0],"source":{"x":0,"y":0,"width":1,"height":1,"extra":true},"outputPrefix":"frame"}"#,
+])
+func batchFrameJobRejectsUnknownKeys(json: String) {
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(BatchFrameJob.self, from: Data(json.utf8))
+  }
+}
+
 @Test func modelParserReturnsTypedCommandWithoutRunningIt() throws {
   let parsed = try UniteAnalysisModelCommand.parseAsRoot([
     "build", "manifest.json", "--output", "descriptors.pb",

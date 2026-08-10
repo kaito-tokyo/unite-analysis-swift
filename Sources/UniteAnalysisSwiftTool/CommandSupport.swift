@@ -52,11 +52,61 @@ enum Scene {
   case afterEnd(Double)
 }
 
+private struct AnyCodingKey: CodingKey {
+  let stringValue: String
+  let intValue: Int?
+
+  init?(stringValue: String) {
+    self.stringValue = stringValue
+    intValue = nil
+  }
+
+  init?(intValue: Int) {
+    stringValue = String(intValue)
+    self.intValue = intValue
+  }
+}
+
+private func rejectUnknownKeys(
+  from decoder: Decoder, allowedKeys: Set<String>, context: String
+) throws {
+  let container = try decoder.container(keyedBy: AnyCodingKey.self)
+  let unknownKeys = Set(container.allKeys.map(\.stringValue)).subtracting(allowedKeys)
+  guard unknownKeys.isEmpty else {
+    throw DecodingError.dataCorrupted(
+      .init(
+        codingPath: decoder.codingPath,
+        debugDescription: "Unknown \(context) keys: \(unknownKeys.sorted().joined(separator: ", "))"
+      ))
+  }
+}
+
 struct FrameSource: Codable {
   let x: Int
   let y: Int
   let width: Int
   let height: Int
+
+  private enum CodingKeys: String, CodingKey, CaseIterable {
+    case x, y, width, height
+  }
+
+  init(x: Int, y: Int, width: Int, height: Int) {
+    self.x = x
+    self.y = y
+    self.width = width
+    self.height = height
+  }
+
+  init(from decoder: Decoder) throws {
+    try rejectUnknownKeys(
+      from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)), context: "source")
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    x = try container.decode(Int.self, forKey: .x)
+    y = try container.decode(Int.self, forKey: .y)
+    width = try container.decode(Int.self, forKey: .width)
+    height = try container.decode(Int.self, forKey: .height)
+  }
 
   var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
 
@@ -80,12 +130,14 @@ struct BatchFrameJob: Decodable {
   let source: FrameSource
   let outputPrefix: String
 
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case jobId, matchTimestamps, source, outputPrefix, frames, frame, output, inmatch, beforeStart,
       afterEnd
   }
 
   init(from decoder: Decoder) throws {
+    try rejectUnknownKeys(
+      from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)), context: "batch-frame")
     let container = try decoder.container(keyedBy: CodingKeys.self)
     if container.contains(.frames) || container.contains(.frame) || container.contains(.output)
       || container.contains(.inmatch)
