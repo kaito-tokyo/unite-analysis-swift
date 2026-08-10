@@ -82,6 +82,11 @@ package struct BGRImage: Sendable {
   }
 }
 
+package struct PreparedAKAZEInput: Sendable {
+  package var image: BGRImage
+  package var mask: BGRImage?
+}
+
 extension unite_analysis.IconMatcher {
   package func matchHeldItem(in image: BGRImage) throws -> [IconMatch] {
     let results = image.bytes.withUnsafeBufferPointer { buffer in
@@ -112,6 +117,49 @@ extension unite_analysis.IconMatcher {
       )
     }
     return try iconMatches(results)
+  }
+
+  package func preparedHeldImage(_ image: BGRImage) throws -> PreparedAKAZEInput {
+    let prepared = image.bytes.withUnsafeBufferPointer { buffer in
+      prepareHeldBGR(
+        buffer.baseAddress, buffer.count, UInt32(image.width), UInt32(image.height),
+        image.bytesPerRow, 0.40)
+    }
+    return try preparedImage(prepared)
+  }
+
+  package func preparedBattleImage(_ image: BGRImage) throws -> PreparedAKAZEInput {
+    let prepared = image.bytes.withUnsafeBufferPointer { buffer in
+      prepareBattleBGR(
+        buffer.baseAddress, buffer.count, UInt32(image.width), UInt32(image.height),
+        image.bytesPerRow)
+    }
+    return try preparedImage(prepared)
+  }
+
+  private func preparedImage(_ image: unite_analysis.PreparedIconImage) throws
+    -> PreparedAKAZEInput
+  {
+    guard image.isValid() else {
+      throw ValidationError("Could not prepare AKAZE diagnostic image")
+    }
+    let width = Int(image.width())
+    let height = Int(image.height())
+    let prepared = try BGRImage(
+      width: width, height: height, bytesPerRow: width * 3,
+      bytes: (0..<image.byteCount()).map { image.byte($0) })
+    let mask: BGRImage? =
+      if image.hasMask() {
+        try BGRImage(
+          width: width, height: height, bytesPerRow: width * 3,
+          bytes: (0..<image.maskByteCount()).flatMap { index in
+            let value = image.maskByte(index)
+            return [value, value, value]
+          })
+      } else {
+        nil
+      }
+    return PreparedAKAZEInput(image: prepared, mask: mask)
   }
 
   private func iconMatches(_ results: unite_analysis.IconMatchResults) throws -> [IconMatch] {
@@ -158,23 +206,23 @@ package struct DeclaredRoute: Codable, Sendable, Equatable {
   package var chromaticFraction: Float
 }
 
-struct RecognizedAllyLoadout: Codable, Sendable, Equatable {
-  var slot: Int
-  var heldItems: [RecognizedItem]
-  var battleItem: RecognizedItem
-  var declaredRoute: DeclaredRoute
+package struct RecognizedAllyLoadout: Codable, Sendable, Equatable {
+  package var slot: Int
+  package var heldItems: [RecognizedItem]
+  package var battleItem: RecognizedItem
+  package var declaredRoute: DeclaredRoute
 }
 
-struct RecognizedEnemyLoadout: Codable, Sendable, Equatable {
-  var slot: Int
-  var battleItem: RecognizedItem
+package struct RecognizedEnemyLoadout: Codable, Sendable, Equatable {
+  package var slot: Int
+  package var battleItem: RecognizedItem
 }
 
-struct LoadoutRecognition: Codable, Sendable, Equatable {
-  var format: String
-  var matchFormat: String
-  var allies: [RecognizedAllyLoadout]
-  var enemies: [RecognizedEnemyLoadout]
+package struct LoadoutRecognition: Codable, Sendable, Equatable {
+  package var format: String
+  package var matchFormat: String
+  package var allies: [RecognizedAllyLoadout]
+  package var enemies: [RecognizedEnemyLoadout]
 }
 
 package enum LoadoutRecognizer {
@@ -184,37 +232,56 @@ package enum LoadoutRecognizer {
   package static let minimumTopToRunnerUpRatio: Float = 2
   /// Half the smallest circular separation between the three declared-route reference hues.
   package static let maximumRouteHueDistance: Float = 24.5
+  /// Tolerates JPEG chroma subsampling while still requiring a substantial colored glyph.
+  package static let minimumRouteChromaticFraction: Float = 0.12
 
-  static func recognizeDraft(
+  package static func recognizeDraft(
     finalPreparation: CGImage,
     versus: CGImage,
-    matcher: unite_analysis.IconMatcher
+    matcher: unite_analysis.IconMatcher,
+    akazeInputObserver: ((String, PreparedAKAZEInput) throws -> Void)? = nil
   ) throws -> LoadoutRecognition {
     let preparation = try requireFullHD(finalPreparation)
     let versus = try requireFullHD(versus)
-    let heldX = [153, 443, 733, 1023, 1313]
-    let heldDX = [0, 45, 90]
-    let battleX = [287, 577, 868, 1157, 1446]
-    let versusX = [350, 625, 895, 1165, 1435]
+    // These landmarks were measured on the Switch's 1632x918 game viewport. Frames are
+    // normalized to 1920x1080 before recognition, so keep the ROI coordinates in that
+    // canonical space as well (both dimensions scale by exactly 20/17).
+    let heldX = [180, 521, 862, 1204, 1545]
+    let heldDX = [0, 53, 106]
+    let battleX = [338, 679, 1021, 1361, 1701]
+    let versusX = [412, 735, 1053, 1371, 1688]
 
     let allies = try heldX.indices.map { player in
-      let heldItems = try heldDX.map { offset in
-        RecognizedItem(
-          try matcher.matchHeldItem(
-            in: try preparation.crop(centerX: heldX[player] + offset, centerY: 514, side: 40)))
+      let heldItems = try heldDX.enumerated().map { item, offset in
+        let crop = try preparation.crop(
+          centerX: heldX[player] + offset, centerY: 605, side: 47)
+        if let akazeInputObserver {
+          try akazeInputObserver(
+            "ally-\(player + 1)-held-\(item + 1)", try matcher.preparedHeldImage(crop))
+        }
+        return RecognizedItem(
+          try matcher.matchHeldItem(in: crop))
       }
-      let battle = try preparation.crop(centerX: battleX[player], centerY: 516, side: 48)
+      let battle = try preparation.crop(centerX: battleX[player], centerY: 607, side: 56)
+      if let akazeInputObserver {
+        try akazeInputObserver(
+          "ally-\(player + 1)-battle", try matcher.preparedBattleImage(battle))
+      }
       let route = try preparation.crop(
-        centerX: heldX[player] - 44, centerY: 597, width: 36, height: 28)
+        centerX: heldX[player] - 52, centerY: 702, width: 42, height: 33)
       return RecognizedAllyLoadout(
         slot: player + 1,
-        heldItems: heldItems,
+        heldItems: abstainingOnDuplicateHeldItems(heldItems),
         battleItem: RecognizedItem(try matcher.matchBattleItem(in: battle)),
         declaredRoute: classifyRoute(route)
       )
     }
     let enemies = try versusX.indices.map { player in
-      let battle = try versus.crop(centerX: versusX[player], centerY: 729, side: 48)
+      let battle = try versus.crop(centerX: versusX[player], centerY: 858, side: 56)
+      if let akazeInputObserver {
+        try akazeInputObserver(
+          "enemy-\(player + 1)-battle", try matcher.preparedBattleImage(battle))
+      }
       return RecognizedEnemyLoadout(
         slot: player + 1,
         battleItem: RecognizedItem(try matcher.matchBattleItem(in: battle)))
@@ -226,9 +293,10 @@ package enum LoadoutRecognizer {
       enemies: enemies)
   }
 
-  static func recognizeBlind(
+  package static func recognizeBlind(
     preparation: CGImage,
-    matcher: unite_analysis.IconMatcher
+    matcher: unite_analysis.IconMatcher,
+    akazeInputObserver: ((String, PreparedAKAZEInput) throws -> Void)? = nil
   ) throws -> LoadoutRecognition {
     let image = try requireFullHD(preparation)
     let heldX = [308, 576, 844, 1114, 1384]
@@ -237,16 +305,25 @@ package enum LoadoutRecognizer {
     let routeX = [452, 720, 988, 1256, 1524]
 
     let allies = try heldX.indices.map { player in
-      let heldItems = try heldDX.map { offset in
-        RecognizedItem(
-          try matcher.matchHeldItem(
-            in: try image.crop(centerX: heldX[player] + offset, centerY: 756, side: 40)))
+      let heldItems = try heldDX.enumerated().map { item, offset in
+        let crop = try image.crop(
+          centerX: heldX[player] + offset, centerY: 756, side: 40)
+        if let akazeInputObserver {
+          try akazeInputObserver(
+            "ally-\(player + 1)-held-\(item + 1)", try matcher.preparedHeldImage(crop))
+        }
+        return RecognizedItem(
+          try matcher.matchHeldItem(in: crop))
       }
       let battle = try image.crop(centerX: battleX[player], centerY: 818, side: 48)
+      if let akazeInputObserver {
+        try akazeInputObserver(
+          "ally-\(player + 1)-battle", try matcher.preparedBattleImage(battle))
+      }
       let route = try image.crop(centerX: routeX[player], centerY: 722, width: 36, height: 28)
       return RecognizedAllyLoadout(
         slot: player + 1,
-        heldItems: heldItems,
+        heldItems: abstainingOnDuplicateHeldItems(heldItems),
         battleItem: RecognizedItem(try matcher.matchBattleItem(in: battle)),
         declaredRoute: classifyRoute(route)
       )
@@ -261,7 +338,7 @@ package enum LoadoutRecognizer {
   package static func classifyRoute(_ image: BGRImage) -> DeclaredRoute {
     let hues = image.chromaticHues(minimumSaturation: 120, minimumValue: 80)
     let fraction = Float(hues.count) / Float(image.width * image.height)
-    guard fraction >= 0.15 else {
+    guard fraction >= minimumRouteChromaticFraction else {
       return DeclaredRoute(name: nil, medianHue: nil, chromaticFraction: fraction)
     }
     let sorted = hues.sorted()
@@ -271,6 +348,22 @@ package enum LoadoutRecognizer {
     let name =
       hueDistance(median, nearest.1) <= maximumRouteHueDistance ? nearest.0 : nil
     return DeclaredRoute(name: name, medianHue: median, chromaticFraction: fraction)
+  }
+
+  /// A player cannot equip the same held item twice. Preserve the evidence but do not
+  /// publish any contradictory duplicate as a recognized value.
+  package static func abstainingOnDuplicateHeldItems(_ items: [RecognizedItem])
+    -> [RecognizedItem]
+  {
+    let accepted = items.compactMap(\.name)
+    let duplicates = Set(accepted.filter { name in accepted.count(where: { $0 == name }) > 1 })
+    guard !duplicates.isEmpty else { return items }
+    return items.map { item in
+      guard let name = item.name, duplicates.contains(name) else { return item }
+      var result = item
+      result.name = nil
+      return result
+    }
   }
 
   private static func requireFullHD(_ image: CGImage) throws -> BGRImage {

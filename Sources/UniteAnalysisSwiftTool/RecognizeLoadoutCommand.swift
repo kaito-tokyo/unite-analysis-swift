@@ -8,8 +8,10 @@ import CoreMedia
 import CxxStdlib
 import Foundation
 import IconMatcherNative
+import ImageIO
 import LDTXRecordingSupport
 import RecordVisionSupport
+import UniformTypeIdentifiers
 import UniteAnalysisConfiguration
 
 private struct LoadoutOutputDocument: Encodable {
@@ -220,6 +222,51 @@ private func writeLoadout(
   return outputURL.path
 }
 
+private func writeAKAZEInput(
+  _ input: PreparedAKAZEInput, named name: String, to directory: URL
+) throws {
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  try writeDiagnosticPNG(input.image, to: directory.appendingPathComponent(name))
+  if let mask = input.mask {
+    try writeDiagnosticPNG(mask, to: directory.appendingPathComponent("\(name)-mask"))
+  }
+}
+
+private func writeDiagnosticPNG(_ image: BGRImage, to path: URL) throws {
+  var rgba = [UInt8]()
+  rgba.reserveCapacity(image.width * image.height * 4)
+  for y in 0..<image.height {
+    for x in 0..<image.width {
+      let offset = y * image.bytesPerRow + x * 3
+      rgba.append(image.bytes[offset + 2])
+      rgba.append(image.bytes[offset + 1])
+      rgba.append(image.bytes[offset])
+      rgba.append(255)
+    }
+  }
+  guard
+    let provider = CGDataProvider(data: Data(rgba) as CFData),
+    let cgImage = CGImage(
+      width: image.width, height: image.height, bitsPerComponent: 8, bitsPerPixel: 32,
+      bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+      provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+  else {
+    throw ValidationError("Could not create AKAZE diagnostic image")
+  }
+  let url = path.appendingPathExtension("png")
+  guard
+    let destination = CGImageDestinationCreateWithURL(
+      url as CFURL, UTType.png.identifier as CFString, 1, nil)
+  else {
+    throw ValidationError("Could not create AKAZE diagnostic output: \(url.path)")
+  }
+  CGImageDestinationAddImage(destination, cgImage, nil)
+  guard CGImageDestinationFinalize(destination) else {
+    throw ValidationError("Could not write AKAZE diagnostic output: \(url.path)")
+  }
+}
+
 struct RecognizeDraftLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "recognize-draft-loadout",
@@ -246,6 +293,10 @@ struct RecognizeDraftLoadout: ParsableCommand {
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
+  @Option(
+    name: .customLong("dump-akaze-inputs"),
+    help: "Directory for lossless PNGs of the normalized AKAZE pixels and keypoint masks.")
+  var dumpAKAZEInputs: String?
   @Flag(help: "Overwrite an existing output JSON file.") var force = false
 
 }
@@ -263,7 +314,13 @@ extension RecognizeDraftLoadout {
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
       let result = try LoadoutRecognizer.recognizeDraft(
         finalPreparation: inputs.frames[0].image, versus: inputs.frames[1].image,
-        matcher: matcher)
+        matcher: matcher,
+        akazeInputObserver: command.dumpAKAZEInputs.map { path in
+          let directory = resolvePath(path)
+          return { name, image in
+            try writeAKAZEInput(image, named: name, to: directory)
+          }
+        })
       let output = try writeLoadout(
         LoadoutOutputDocument(
           format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,
@@ -303,6 +360,10 @@ struct RecognizeBlindLoadout: ParsableCommand {
   var descriptors: String?
   @Option(help: "Output JSON path; defaults inside _PokemonUniteAnalysis.")
   var output: String?
+  @Option(
+    name: .customLong("dump-akaze-inputs"),
+    help: "Directory for lossless PNGs of the normalized AKAZE pixels and keypoint masks.")
+  var dumpAKAZEInputs: String?
   @Flag(help: "Overwrite an existing output JSON file.") var force = false
 
 }
@@ -318,7 +379,13 @@ extension RecognizeBlindLoadout {
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
       let result = try LoadoutRecognizer.recognizeBlind(
-        preparation: inputs.frames[0].image, matcher: matcher)
+        preparation: inputs.frames[0].image, matcher: matcher,
+        akazeInputObserver: command.dumpAKAZEInputs.map { path in
+          let directory = resolvePath(path)
+          return { name, image in
+            try writeAKAZEInput(image, named: name, to: directory)
+          }
+        })
       let output = try writeLoadout(
         LoadoutOutputDocument(
           format: result.format, matchFormat: result.matchFormat, video: inputs.video.path,

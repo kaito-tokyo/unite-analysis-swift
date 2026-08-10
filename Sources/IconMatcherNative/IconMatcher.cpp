@@ -278,6 +278,77 @@ std::vector<RankedMatch> rankDescriptors(
   return result;
 }
 
+cv::Mat prepareHeldImage(
+    const cv::Mat &source,
+    const int imageHeight,
+    const float radiusFraction) {
+  if (source.empty() || !(radiusFraction > 0 && radiusFraction <= 0.5F)) {
+    return {};
+  }
+  const int side = std::max(
+      4,
+      static_cast<int>(std::lround(
+          std::min(source.cols, source.rows) * radiusFraction * 2)));
+  const int x = std::max(0, source.cols / 2 - side / 2);
+  const int y = std::max(0, source.rows / 2 - side / 2);
+  const int croppedSide = std::min({side, source.cols - x, source.rows - y});
+  const auto crop = source(cv::Rect(x, y, croppedSide, croppedSide));
+  cv::Mat circleMask = cv::Mat::zeros(crop.size(), CV_8U);
+  const int circleCenterX = crop.cols / 2;
+  const int circleCenterY = crop.rows / 2;
+  const int circleRadius = static_cast<int>(
+      std::lround(std::min(crop.cols, crop.rows) * kHeldCircleEdgeFraction));
+  for (int row = 0; row < crop.rows; ++row) {
+    auto *maskRow = circleMask.ptr<std::uint8_t>(row);
+    for (int column = 0; column < crop.cols; ++column) {
+      const int dx = column - circleCenterX;
+      const int dy = row - circleCenterY;
+      maskRow[column] = dx * dx + dy * dy <= circleRadius * circleRadius ? 255 : 0;
+    }
+  }
+  cv::Mat circular(crop.size(), crop.type(), cv::Scalar(255, 255, 255));
+  crop.copyTo(circular, circleMask);
+  const int padding = static_cast<int>(std::lround(croppedSide * kHeldPaddingFraction));
+  cv::Mat padded;
+  cv::copyMakeBorder(
+      circular,
+      padded,
+      padding,
+      padding,
+      padding,
+      padding,
+      cv::BORDER_CONSTANT,
+      cv::Scalar(255, 255, 255));
+  cv::Mat scaled;
+  cv::resize(padded, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
+  return scaled;
+}
+
+cv::Mat prepareBattleImage(const cv::Mat &source, const int imageHeight) {
+  if (source.empty()) {
+    return {};
+  }
+  cv::Mat scaled;
+  cv::resize(source, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
+  return scaled;
+}
+
+cv::Mat battleImageMask(const cv::Size size) {
+  const int inset = static_cast<int>(std::lround(size.height * 0.08));
+  const int centerX = size.width / 2;
+  const int centerY = size.height / 2;
+  const int diamondRadius = std::min(centerX, centerY) - inset;
+  cv::Mat mask = cv::Mat::zeros(size, CV_8U);
+  for (int row = 0; row < mask.rows; ++row) {
+    auto *maskRow = mask.ptr<std::uint8_t>(row);
+    for (int column = 0; column < mask.cols; ++column) {
+      maskRow[column] =
+          std::abs(column - centerX) + std::abs(row - centerY) <= diamondRadius ? 255 : 0;
+    }
+  }
+  return mask;
+}
+
 bool isRFC3339UTC(const std::string &value) {
   if (value.size() < 20 || value[4] != '-' || value[7] != '-' ||
       value[10] != 'T' || value[13] != ':' || value[16] != ':' ||
@@ -462,6 +533,13 @@ struct IconMatchResults::Value final {
   std::vector<RankedMatch> matches;
 };
 
+struct PreparedIconImage::Value final {
+  std::uint32_t width = 0;
+  std::uint32_t height = 0;
+  std::vector<std::uint8_t> bytes;
+  std::vector<std::uint8_t> mask;
+};
+
 class IconDescriptors::Implementation final {
  public:
   cv::Mat descriptors;
@@ -627,6 +705,44 @@ float IconMatchResults::score(const std::size_t index) const noexcept {
       : value_->matches[index].score;
 }
 
+PreparedIconImage::PreparedIconImage(std::shared_ptr<Value> value)
+    : value_(std::move(value)) {}
+
+bool PreparedIconImage::isValid() const noexcept {
+  return value_ != nullptr && value_->width > 0 && value_->height > 0 &&
+      value_->bytes.size() ==
+          static_cast<std::size_t>(value_->width) * value_->height * 3;
+}
+
+std::uint32_t PreparedIconImage::width() const noexcept {
+  return isValid() ? value_->width : 0;
+}
+
+std::uint32_t PreparedIconImage::height() const noexcept {
+  return isValid() ? value_->height : 0;
+}
+
+std::size_t PreparedIconImage::byteCount() const noexcept {
+  return isValid() ? value_->bytes.size() : 0;
+}
+
+std::uint8_t PreparedIconImage::byte(const std::size_t index) const noexcept {
+  return isValid() && index < value_->bytes.size() ? value_->bytes[index] : 0;
+}
+
+bool PreparedIconImage::hasMask() const noexcept {
+  return isValid() && value_->mask.size() ==
+      static_cast<std::size_t>(value_->width) * value_->height;
+}
+
+std::size_t PreparedIconImage::maskByteCount() const noexcept {
+  return hasMask() ? value_->mask.size() : 0;
+}
+
+std::uint8_t PreparedIconImage::maskByte(const std::size_t index) const noexcept {
+  return hasMask() && index < value_->mask.size() ? value_->mask[index] : 0;
+}
+
 IconMatcher::IconMatcher(const std::string &path) noexcept
     : implementation_(nullptr) {
   try {
@@ -752,43 +868,8 @@ IconMatchResults IconMatcher::matchHeldBGR(
       return IconMatchResults(std::move(value));
     }
 
-    const int side = std::max(
-        4,
-        static_cast<int>(std::lround(
-            std::min(source.cols, source.rows) * radiusFraction * 2)));
-    const int x = std::max(0, source.cols / 2 - side / 2);
-    const int y = std::max(0, source.rows / 2 - side / 2);
-    const int croppedSide = std::min({side, source.cols - x, source.rows - y});
-    const auto crop = source(cv::Rect(x, y, croppedSide, croppedSide));
-    cv::Mat circleMask = cv::Mat::zeros(crop.size(), CV_8U);
-    const int circleCenterX = crop.cols / 2;
-    const int circleCenterY = crop.rows / 2;
-    const int circleRadius = static_cast<int>(
-        std::lround(std::min(crop.cols, crop.rows) * kHeldCircleEdgeFraction));
-    for (int row = 0; row < crop.rows; ++row) {
-      auto *maskRow = circleMask.ptr<std::uint8_t>(row);
-      for (int column = 0; column < crop.cols; ++column) {
-        const int dx = column - circleCenterX;
-        const int dy = row - circleCenterY;
-        maskRow[column] = dx * dx + dy * dy <= circleRadius * circleRadius ? 255 : 0;
-      }
-    }
-    cv::Mat circular(crop.size(), crop.type(), cv::Scalar(255, 255, 255));
-    crop.copyTo(circular, circleMask);
-    const int padding = static_cast<int>(std::lround(croppedSide * kHeldPaddingFraction));
-    cv::Mat padded;
-    cv::copyMakeBorder(
-        circular,
-        padded,
-        padding,
-        padding,
-        padding,
-        padding,
-        cv::BORDER_CONSTANT,
-        cv::Scalar(255, 255, 255));
-    cv::Mat scaled;
     const int imageHeight = static_cast<int>(implementation_->message.akaze.imageHeight);
-    cv::resize(padded, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
+    const cv::Mat scaled = prepareHeldImage(source, imageHeight, radiusFraction);
     cv::Mat keypointsMask(scaled.size(), CV_8U, cv::Scalar(255));
     std::vector<cv::KeyPoint> keypoints;
     cv::Mat query;
@@ -833,19 +914,8 @@ IconMatchResults IconMatcher::matchBattleBGR(
       return IconMatchResults(std::move(value));
     }
     const int imageHeight = static_cast<int>(implementation_->message.akaze.imageHeight);
-    cv::Mat scaled;
-    cv::resize(source, scaled, cv::Size(imageHeight, imageHeight), 0, 0, cv::INTER_LINEAR);
-    const int inset = static_cast<int>(std::lround(imageHeight * 0.08));
-    const int center = imageHeight / 2;
-    cv::Mat mask = cv::Mat::zeros(scaled.size(), CV_8U);
-    const int diamondRadius = center - inset;
-    for (int row = 0; row < mask.rows; ++row) {
-      auto *maskRow = mask.ptr<std::uint8_t>(row);
-      for (int column = 0; column < mask.cols; ++column) {
-        maskRow[column] =
-            std::abs(column - center) + std::abs(row - center) <= diamondRadius ? 255 : 0;
-      }
-    }
+    const cv::Mat scaled = prepareBattleImage(source, imageHeight);
+    const cv::Mat mask = battleImageMask(scaled.size());
     std::vector<cv::KeyPoint> keypoints;
     cv::Mat query;
     makeDetector(implementation_->message.akaze)
@@ -867,6 +937,68 @@ IconMatchResults IconMatcher::matchBattleBGR(
     }
   }
   return IconMatchResults(nullptr);
+}
+
+PreparedIconImage IconMatcher::prepareHeldBGR(
+    const std::uint8_t *bytes,
+    const std::size_t byteCount,
+    const std::uint32_t width,
+    const std::uint32_t height,
+    const std::size_t bytesPerRow,
+    const float radiusFraction) const noexcept {
+  try {
+    auto value = std::make_shared<PreparedIconImage::Value>();
+    if (!isValid()) {
+      return PreparedIconImage(std::move(value));
+    }
+    const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
+    const auto prepared = prepareHeldImage(
+        source,
+        static_cast<int>(implementation_->message.akaze.imageHeight),
+        radiusFraction);
+    if (prepared.empty() || !prepared.isContinuous()) {
+      return PreparedIconImage(std::move(value));
+    }
+    value->width = static_cast<std::uint32_t>(prepared.cols);
+    value->height = static_cast<std::uint32_t>(prepared.rows);
+    value->bytes.assign(
+        prepared.ptr<std::uint8_t>(),
+        prepared.ptr<std::uint8_t>() + prepared.total() * prepared.elemSize());
+    return PreparedIconImage(std::move(value));
+  } catch (...) {
+    return PreparedIconImage(nullptr);
+  }
+}
+
+PreparedIconImage IconMatcher::prepareBattleBGR(
+    const std::uint8_t *bytes,
+    const std::size_t byteCount,
+    const std::uint32_t width,
+    const std::uint32_t height,
+    const std::size_t bytesPerRow) const noexcept {
+  try {
+    auto value = std::make_shared<PreparedIconImage::Value>();
+    if (!isValid()) {
+      return PreparedIconImage(std::move(value));
+    }
+    const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
+    const auto prepared = prepareBattleImage(
+        source, static_cast<int>(implementation_->message.akaze.imageHeight));
+    if (prepared.empty() || !prepared.isContinuous()) {
+      return PreparedIconImage(std::move(value));
+    }
+    value->width = static_cast<std::uint32_t>(prepared.cols);
+    value->height = static_cast<std::uint32_t>(prepared.rows);
+    value->bytes.assign(
+        prepared.ptr<std::uint8_t>(),
+        prepared.ptr<std::uint8_t>() + prepared.total() * prepared.elemSize());
+    const cv::Mat mask = battleImageMask(prepared.size());
+    value->mask.assign(
+        mask.ptr<std::uint8_t>(), mask.ptr<std::uint8_t>() + mask.total());
+    return PreparedIconImage(std::move(value));
+  } catch (...) {
+    return PreparedIconImage(nullptr);
+  }
 }
 
 }  // namespace unite_analysis

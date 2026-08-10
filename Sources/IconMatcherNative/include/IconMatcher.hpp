@@ -58,6 +58,24 @@ class IconDescriptors final {
   std::shared_ptr<Implementation> implementation_;
 };
 
+class PreparedIconImage final {
+ public:
+  [[nodiscard]] bool isValid() const noexcept;
+  [[nodiscard]] std::uint32_t width() const noexcept;
+  [[nodiscard]] std::uint32_t height() const noexcept;
+  [[nodiscard]] std::size_t byteCount() const noexcept;
+  [[nodiscard]] std::uint8_t byte(std::size_t index) const noexcept;
+  [[nodiscard]] bool hasMask() const noexcept;
+  [[nodiscard]] std::size_t maskByteCount() const noexcept;
+  [[nodiscard]] std::uint8_t maskByte(std::size_t index) const noexcept;
+
+ private:
+  struct Value;
+  std::shared_ptr<Value> value_;
+  explicit PreparedIconImage(std::shared_ptr<Value> value);
+  friend class IconMatcher;
+};
+
 class IconMatcher final {
  public:
   explicit IconMatcher(const std::string &path) noexcept;
@@ -92,6 +110,21 @@ class IconMatcher final {
       std::size_t bytesPerRow,
       std::size_t limit = 3,
       float ratio = 0.80F) const noexcept;
+  /// Returns the exact normalized BGR pixels supplied to AKAZE for diagnostics.
+  [[nodiscard]] PreparedIconImage prepareHeldBGR(
+      const std::uint8_t *bytes,
+      std::size_t byteCount,
+      std::uint32_t width,
+      std::uint32_t height,
+      std::size_t bytesPerRow,
+      float radiusFraction = 0.40F) const noexcept;
+  /// Returns the exact normalized BGR pixels supplied to AKAZE for diagnostics.
+  [[nodiscard]] PreparedIconImage prepareBattleBGR(
+      const std::uint8_t *bytes,
+      std::size_t byteCount,
+      std::uint32_t width,
+      std::uint32_t height,
+      std::size_t bytesPerRow) const noexcept;
 
  private:
   class Implementation;

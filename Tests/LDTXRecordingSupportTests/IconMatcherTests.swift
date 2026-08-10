@@ -6,6 +6,8 @@ import CoreGraphics
 import CxxStdlib
 import Foundation
 import IconMatcherNative
+import ImageIO
+import LDTXRecordingSupport
 import RecordVisionSupport
 import Testing
 import UniteAnalysisSwiftCommands
@@ -266,6 +268,82 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(item.score == 2)
 }
 
+@Test func duplicateHeldItemsAbstainWithoutDiscardingEvidence() {
+  let duplicate = RecognizedItem([
+    IconMatch(name: "same", score: 4), IconMatch(name: "other", score: 1),
+  ])
+  let distinct = RecognizedItem([
+    IconMatch(name: "distinct", score: 4), IconMatch(name: "other", score: 1),
+  ])
+
+  let result = LoadoutRecognizer.abstainingOnDuplicateHeldItems([
+    duplicate, duplicate, distinct,
+  ])
+
+  #expect(result.map(\.name) == [nil, nil, "distinct"])
+  #expect(result[0].candidates == duplicate.candidates)
+  #expect(result[1].score == duplicate.score)
+}
+
+@Test func recognizesDraftRecordingFixture() throws {
+  let preparation = try loadAndNormalizeFixtureImage(
+    try #require(
+      Bundle.module.url(forResource: "final-preparation", withExtension: "jpg")))
+  let versus = try loadAndNormalizeFixtureImage(
+    try #require(
+      Bundle.module.url(forResource: "versus", withExtension: "jpg")))
+  let database = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("Contents/Resources/descriptors.pb")
+  let matcher = unite_analysis.IconMatcher(std.string(database.path))
+  #expect(matcher.isValid())
+
+  let result = try LoadoutRecognizer.recognizeDraft(
+    finalPreparation: preparation, versus: versus, matcher: matcher)
+
+  #expect(
+    result.allies.map { $0.heldItems.map(\.name) } == [
+      ["Choice Specs", "Shell Bell", "Slick Spoon"],
+      ["Vanguard Bell", "Focus Band", "Muscle Band"],
+      ["Rapid Fire Scarf", "Float Stone", "Curse Bangle"],
+      ["Choice Specs", "Slick Spoon", "Wise Glasses"],
+      ["Accel Bracer", "Razor Claw", "Weakness Policy"],
+    ])
+  #expect(
+    result.allies.map { $0.battleItem.name } == [
+      "Eject Button", "Eject Button", "Eject Button", "X Speed", "Full Heal",
+    ])
+  #expect(
+    result.allies.map { $0.declaredRoute.name } == [
+      "top", "bottom", "top", "bottom", "central",
+    ])
+  #expect(
+    result.enemies.map { $0.battleItem.name } == [
+      "Eject Button", "X Speed", "Eject Button", "Full Heal", "Full Heal",
+    ])
+}
+
+@Test func preparedDiagnosticImagesUseDatabaseDimensions() throws {
+  let database = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("Contents/Resources/descriptors.pb")
+  let matcher = unite_analysis.IconMatcher(std.string(database.path))
+  let pixels = [UInt8](repeating: 255, count: 48 * 48 * 3)
+  let input = try BGRImage(width: 48, height: 48, bytesPerRow: 48 * 3, bytes: pixels)
+
+  let held = try matcher.preparedHeldImage(input)
+  let battle = try matcher.preparedBattleImage(input)
+
+  #expect(held.image.width == Int(matcher.akazeImageHeight()))
+  #expect(held.image.height == Int(matcher.akazeImageHeight()))
+  #expect(held.mask == nil)
+  #expect(battle.image.width == Int(matcher.akazeImageHeight()))
+  #expect(battle.image.height == Int(matcher.akazeImageHeight()))
+  let battleMask = try #require(battle.mask)
+  #expect(battleMask.bytes[0] == 0)
+  let centerOffset =
+    battleMask.height / 2 * battleMask.bytesPerRow + battleMask.width / 2 * 3
+  #expect(battleMask.bytes[centerOffset] == 255)
+}
+
 @Test func normalizesDeclaredGameScreenComponent() throws {
   let context = try #require(
     CGContext(
@@ -322,6 +400,12 @@ private func descriptorDatabaseFixture(
     protobufBytesField(4, Data("550e8400-e29b-41d4-a716-446655440000".utf8)),
     protobufBytesField(5, Data(createdAt.utf8)),
   ])
+}
+
+private func loadAndNormalizeFixtureImage(_ url: URL) throws -> CGImage {
+  let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+  let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+  return try VideoFrameSupport.resized(image, width: 1920, height: 1080)
 }
 
 private func descriptorEntry(name: Data, category: UInt64, byte: UInt8) -> Data {

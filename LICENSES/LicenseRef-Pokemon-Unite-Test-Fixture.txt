@@ -1,0 +1,5 @@
+These cropped gameplay screenshots are included only as regression test fixtures.
+
+Pokemon and Pokemon character names are trademarks of Nintendo. Pokemon UNITE is
+developed by TiMi Studios and published by The Pokemon Company. No permission is
+granted to redistribute these images outside this repository's test suite.
