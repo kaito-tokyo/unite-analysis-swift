@@ -3,6 +3,7 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/contact-sheet.schema.json",
   "title": "unite-analysis-swift contact sheet job",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "jobId",
     "cell",
@@ -38,6 +39,7 @@
     "matchTimestamps": {
       "type": "array",
       "minItems": 1,
+      "description": "Finite, strictly increasing seconds relative to match start; negative values select pre-match frames and values above match duration select post-match frames.",
       "items": {
         "type": "number"
       }
@@ -50,6 +52,7 @@
   "$defs": {
     "size": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "width",
         "height"
@@ -67,6 +70,7 @@
     },
     "rectangle": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -96,6 +100,7 @@
       "oneOf": [
         {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "source",
             "destination"
@@ -111,6 +116,7 @@
         },
         {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "drawText"
           ],
@@ -124,6 +130,7 @@
     },
     "drawText": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "x",
         "y",
@@ -135,6 +142,7 @@
         },
         "script": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "return"
           ],

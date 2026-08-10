@@ -3,6 +3,7 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.schema.json",
   "title": "unite-analysis-swift frame burst job",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "jobId",
     "matchTimestamp",
@@ -52,6 +53,7 @@
   "$defs": {
     "rectangle": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "x",
         "y",

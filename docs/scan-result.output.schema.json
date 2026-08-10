@@ -105,7 +105,8 @@
         "confidence": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "Apple Vision recognition confidence for the raw text observation, from 0 through 1."
         },
         "box": {
           "$ref": "#/$defs/box"
@@ -125,7 +126,8 @@
         "confidence": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "Confidence of the selected OCR value, from 0 through 1; omitted when unavailable or when the value was inferred rather than observed."
         },
         "alternatives": {
           "type": "array",
@@ -220,7 +222,8 @@
           ]
         },
         "detectionScore": {
-          "type": "integer"
+          "type": "integer",
+          "description": "Unnormalized screen-layout evidence score from recognized keywords and numeric-token count; it is diagnostic and not a probability."
         },
         "rawText": {
           "type": "array",
