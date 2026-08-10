@@ -89,6 +89,18 @@ func batchFrameJobRejectsUnknownKeys(json: String) {
   }
 }
 
+@Test func eventDetectManifestAcceptsAndValidatesSchemaURL() throws {
+  let valid =
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json","audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[]}"#
+  _ = try JSONDecoder().decode(EventDetectManifest.self, from: Data(valid.utf8))
+
+  let invalid =
+    #"{"$schema":"https://example.com/wrong.json","audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[]}"#
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(EventDetectManifest.self, from: Data(invalid.utf8))
+  }
+}
+
 @Test func modelParserReturnsTypedCommandWithoutRunningIt() throws {
   let parsed = try UniteAnalysisModelCommand.parseAsRoot([
     "build", "manifest.json", "--output", "descriptors.pb",

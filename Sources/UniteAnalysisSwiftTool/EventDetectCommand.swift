@@ -49,12 +49,16 @@ struct EventDetect: ParsableCommand {
 }
 
 struct EventDetectManifest: Codable, Equatable, Sendable {
+  static let schemaURL =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json"
+
   let audioPeaks: String
   let chromaEvents: [ChromaInput]
   let ocrCandidates: [OCRCandidate]
   let scheduledCandidates: [ScheduledCandidate]
 
   private enum CodingKeys: String, CodingKey, CaseIterable {
+    case schema = "$schema"
     case audioPeaks, chromaEvents, ocrCandidates, scheduledCandidates
   }
 
@@ -73,11 +77,26 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
       from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
       context: "event-detect manifest")
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    if let schema = try container.decodeIfPresent(String.self, forKey: .schema),
+      schema != Self.schemaURL
+    {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schema, in: container,
+        debugDescription: "$schema must equal \(Self.schemaURL)")
+    }
     audioPeaks = try container.decode(String.self, forKey: .audioPeaks)
     chromaEvents = try container.decode([ChromaInput].self, forKey: .chromaEvents)
     ocrCandidates = try container.decode([OCRCandidate].self, forKey: .ocrCandidates)
     scheduledCandidates = try container.decode(
       [ScheduledCandidate].self, forKey: .scheduledCandidates)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(audioPeaks, forKey: .audioPeaks)
+    try container.encode(chromaEvents, forKey: .chromaEvents)
+    try container.encode(ocrCandidates, forKey: .ocrCandidates)
+    try container.encode(scheduledCandidates, forKey: .scheduledCandidates)
   }
 
   struct ChromaInput: Codable, Equatable, Sendable {
