@@ -169,6 +169,37 @@ private struct MCPCommandRunnerOutput: Sendable {
   let mediaURLs: [URL]
 }
 
+package actor MCPMediaResourceStore {
+  private var urlsByURI: [String: URL] = [:]
+
+  func register(_ urls: [URL]) {
+    for url in urls {
+      urlsByURI[url.absoluteString] = url
+    }
+  }
+
+  func resources() -> [Resource] {
+    urlsByURI.sorted { $0.key < $1.key }.map { uri, url in
+      Resource(
+        name: url.lastPathComponent,
+        uri: uri,
+        description: "Generated playable video clip",
+        mimeType: "video/mp4")
+    }
+  }
+
+  func content(for uri: String) throws -> Resource.Content {
+    guard let url = urlsByURI[uri] else {
+      throw MCPError.invalidParams("Unknown media resource: \(uri)")
+    }
+    do {
+      return try .binary(Data(contentsOf: url), uri: uri, mimeType: "video/mp4")
+    } catch {
+      throw MCPError.internalError("Could not read media resource: \(uri)")
+    }
+  }
+}
+
 private actor MCPCommandRunner {
   private let executionGate = MCPExecutionGate()
 
@@ -253,10 +284,11 @@ private actor MCPCommandRunner {
 
 func executeMCPServer() async throws {
   let runner = MCPCommandRunner()
+  let mediaResources = MCPMediaResourceStore()
   let server = Server(
     name: "unite-analysis-swift",
     version: UniteAnalysisSwiftCommand.configuration.version,
-    capabilities: .init(tools: .init()))
+    capabilities: .init(resources: .init(), tools: .init()))
 
   await server.withMethodHandler(ListTools.self) { _ in
     .init(tools: [
@@ -293,10 +325,19 @@ func executeMCPServer() async throws {
         arguments: values.compactMap(\.stringValue),
         currentDirectory: request.arguments?["currentDirectory"]?.stringValue,
         standardInput: request.arguments?["standardInput"]?.stringValue)
+      await mediaResources.register(result.mediaURLs)
       return mcpToolResult(result.text, mediaURLs: result.mediaURLs)
     } catch {
       return mcpToolResult(String(describing: error), isError: true)
     }
+  }
+
+  await server.withMethodHandler(ListResources.self) { _ in
+    .init(resources: await mediaResources.resources())
+  }
+
+  await server.withMethodHandler(ReadResource.self) { request in
+    .init(contents: [try await mediaResources.content(for: request.uri)])
   }
 
   let transport = StdioTransport()

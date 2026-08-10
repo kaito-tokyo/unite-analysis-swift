@@ -59,6 +59,28 @@ import Testing
   #expect(content[1]["mimeType"] as? String == "video/mp4")
 }
 
+@Test func mcpMediaResourceStoreServesRegisteredClip() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+    UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let clipURL = directory.appendingPathComponent("highlight.mp4")
+  let clipData = Data([0, 1, 2, 3])
+  try clipData.write(to: clipURL)
+
+  let store = MCPMediaResourceStore()
+  await store.register([clipURL])
+  let resources = await store.resources()
+  let content = try await store.content(for: clipURL.absoluteString)
+
+  #expect(resources.count == 1)
+  #expect(resources[0].uri == clipURL.absoluteString)
+  #expect(resources[0].mimeType == "video/mp4")
+  #expect(content.uri == clipURL.absoluteString)
+  #expect(content.mimeType == "video/mp4")
+  #expect(content.blob == clipData.base64EncodedString())
+}
+
 @Test func mcpInterpretsBuiltInCLIOptionsBeforeParsingCommands() throws {
   let help = try #require(try builtInMCPOutput(arguments: ["--help"]))
   let helpObject = try #require(
