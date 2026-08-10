@@ -1,5 +1,5 @@
 {
-  "$schema": "ranked-seasons.schema.json",
+  "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ranked-seasons.schema.json",
   "schemaVersion": 1,
   "updatedAt": "2026-08-05",
   "timezone": "Asia/Tokyo",

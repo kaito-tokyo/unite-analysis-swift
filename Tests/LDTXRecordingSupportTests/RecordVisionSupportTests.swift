@@ -474,6 +474,7 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   for line in lines {
     let definition = try JSONDecoder().decode(
       ContactSheetDefinition.self, from: Data(line.utf8))
+    _ = try ContactSheetGenerator.validate(definition: definition)
     let scripts = definition.placements.compactMap { $0.drawText?.script?.return }
     #expect(scripts.count == 1)
     for script in scripts {

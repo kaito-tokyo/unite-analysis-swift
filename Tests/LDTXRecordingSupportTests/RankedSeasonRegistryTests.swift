@@ -31,10 +31,24 @@ private func skillReferenceURL(_ name: String) -> URL {
 
 @Test func rankedSeasonRegistryHasValidNonoverlappingPeriodsAndFolders() throws {
   let data = try Data(contentsOf: skillReferenceURL("ranked-seasons.json"))
+  let schemaData = try Data(contentsOf: skillReferenceURL("ranked-seasons.schema.json"))
+  let publishedSchemaURL = skillReferenceURL("ranked-seasons.schema.json")
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .appendingPathComponent("docs/ranked-seasons.schema.json")
+  let publishedSchemaData = try Data(contentsOf: publishedSchemaURL)
+  #expect(
+    (try JSONSerialization.jsonObject(with: schemaData) as AnyObject).isEqual(
+      try JSONSerialization.jsonObject(with: publishedSchemaData)))
   let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
   #expect(
     Set(root.keys) == Set(["$schema", "schemaVersion", "updatedAt", "timezone", "seasons"]))
-  #expect(root["$schema"] as? String == "ranked-seasons.schema.json")
+  #expect(
+    root["$schema"] as? String
+      == "https://kaito-tokyo.github.io/unite-analysis-swift/ranked-seasons.schema.json")
 
   let registry = try JSONDecoder().decode(RankedSeasonRegistry.self, from: data)
   #expect(registry.schemaVersion == 1)

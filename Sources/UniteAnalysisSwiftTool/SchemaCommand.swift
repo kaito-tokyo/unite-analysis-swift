@@ -56,6 +56,7 @@ package enum EmbeddedSchemas {
     "ocr.output.schema.json",
     "ocr-options.schema.json",
     "publication.schema.json",
+    "ranked-seasons.schema.json",
     "scan-result.output.schema.json",
   ]
 
@@ -66,6 +67,40 @@ package enum EmbeddedSchemas {
   package static var storedBasenames: [String] { schemas.keys.sorted() }
 
   private static let schemas = [
+    "ranked-seasons.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ranked-seasons.schema.json",
+      "title": "ポケモンユナイト ranked season registry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "schemaVersion", "updatedAt", "timezone", "seasons"],
+      "properties": {
+        "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ranked-seasons.schema.json" },
+        "schemaVersion": { "const": 1 },
+        "updatedAt": { "type": "string", "format": "date" },
+        "timezone": { "const": "Asia/Tokyo" },
+        "seasons": { "type": "array", "items": { "$ref": "#/$defs/season" } }
+      },
+      "$defs": {
+        "season": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["season", "startsAt", "endsAt", "mapFormat", "folderName"],
+          "properties": {
+            "season": { "type": "integer", "minimum": 1 },
+            "startsAt": { "type": "string", "format": "date-time" },
+            "endsAt": { "type": "string", "format": "date-time" },
+            "mapFormat": { "enum": ["groudon", "kyogre", "other"] },
+            "folderName": {
+              "type": "string",
+              "pattern": "^Season-[1-9][0-9]*-[A-Za-z][A-Za-z0-9-]*$"
+            }
+          }
+        }
+      }
+    }
+    """#,
     "event-detect.input.schema.json": #"""
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
