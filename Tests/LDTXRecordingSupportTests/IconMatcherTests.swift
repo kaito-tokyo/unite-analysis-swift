@@ -413,10 +413,34 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
     try validateDistinctLoadoutOutputs(
       outputURL: directory, diagnosticDirectory: directory, matchFormat: "draft")
   }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory.appendingPathComponent("ally-1-held-1.png/result.json"),
+      diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
   #expect(throws: Never.self) {
     try validateDistinctLoadoutOutputs(
       outputURL: directory.appendingPathComponent("loadout.json"),
       diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
+}
+
+@Test func loadoutOutputCollisionResolvesExistingSymlinks() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let realDirectory = root.appendingPathComponent("real", isDirectory: true)
+  let linkedDirectory = root.appendingPathComponent("link", isDirectory: true)
+  try FileManager.default.createDirectory(at: realDirectory, withIntermediateDirectories: true)
+  try FileManager.default.createSymbolicLink(
+    at: linkedDirectory, withDestinationURL: realDirectory)
+  defer { try? FileManager.default.removeItem(at: root) }
+
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: realDirectory.appendingPathComponent("ally-1-held-1.png"),
+      diagnosticDirectory: linkedDirectory,
       matchFormat: "draft")
   }
 }
