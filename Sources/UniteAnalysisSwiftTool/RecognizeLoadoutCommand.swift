@@ -284,6 +284,21 @@ private func diagnosticNames(matchFormat: String) -> [String] {
   return allyHeld + allyBattle + enemyBattle
 }
 
+package func validateDistinctLoadoutOutputs(
+  outputURL: URL, diagnosticDirectory: URL?, matchFormat: String
+) throws {
+  guard let diagnosticDirectory else { return }
+  let normalizedOutput = outputURL.standardizedFileURL
+  let diagnosticURLs = diagnosticNames(matchFormat: matchFormat).map {
+    diagnosticDirectory.appendingPathComponent($0).appendingPathExtension("png")
+      .standardizedFileURL
+  }
+  guard !diagnosticURLs.contains(normalizedOutput) else {
+    throw ValidationError(
+      "Output path overlaps an AKAZE diagnostic output: \(normalizedOutput.path)")
+  }
+}
+
 package func prepareDiagnosticDirectory(
   _ directory: URL?, matchFormat: String, force: Bool
 ) throws {
@@ -345,6 +360,8 @@ extension RecognizeDraftLoadout {
         defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
         output: command.output)
       let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      try validateDistinctLoadoutOutputs(
+        outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "draft")
       try validateOutputPath(outputURL, force: command.force)
       try prepareDiagnosticDirectory(
         diagnosticDirectory, matchFormat: "draft", force: command.force)
@@ -417,6 +434,8 @@ extension RecognizeBlindLoadout {
         defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
         output: command.output)
       let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      try validateDistinctLoadoutOutputs(
+        outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "blind")
       try validateOutputPath(outputURL, force: command.force)
       try prepareDiagnosticDirectory(
         diagnosticDirectory, matchFormat: "blind", force: command.force)

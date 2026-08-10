@@ -376,6 +376,23 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   }
 }
 
+@Test func loadoutOutputCannotOverlapDiagnosticOutput() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let output = directory.appendingPathComponent("ally-1-held-1.png")
+
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: output, diagnosticDirectory: directory, matchFormat: "draft")
+  }
+  #expect(throws: Never.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: directory.appendingPathComponent("loadout.json"),
+      diagnosticDirectory: directory,
+      matchFormat: "draft")
+  }
+}
+
 @Test func normalizesDeclaredGameScreenComponent() throws {
   let context = try #require(
     CGContext(
