@@ -64,6 +64,68 @@ import Testing
   #expect(!cells[0].inferred)
 }
 
+@Test func summaryNumericRowSeparatesAdjacentTwoDigitColumns() throws {
+  let context = try #require(
+    CGContext(
+      data: nil,
+      width: 1632,
+      height: 918,
+      bitsPerComponent: 8,
+      bytesPerRow: 0,
+      space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+  let image = try #require(context.makeImage())
+  let observation = TextObservation(
+    text: "212",
+    confidence: 0.9,
+    box: NormalizedRect(
+      x: 1250.0 / 1632.0,
+      y: 1 - 438.0 / 918.0,
+      width: 97.0 / 1632.0,
+      height: 36.0 / 918.0))
+
+  let cells = recognizedSummaryNumericRow(
+    observations: [observation],
+    image: image,
+    centers: [1191, 1270, 1326, 1422],
+    y: 420)
+
+  #expect(cells.map(\.text) == [nil, "2", "12", nil])
+}
+
+@Test func playerNameOCRPreservesMixedWritingSystems() {
+  let observations = [
+    TextObservation(
+      text: "うみれおん", confidence: 0.9,
+      box: .init(x: 0.1, y: 0.5, width: 0.2, height: 0.1)),
+    TextObservation(
+      text: "우알이", confidence: 0.8,
+      box: .init(x: 0.35, y: 0.5, width: 0.2, height: 0.1)),
+    TextObservation(
+      text: "KEIJI119", confidence: 0.85,
+      box: .init(x: 0.6, y: 0.5, width: 0.25, height: 0.1)),
+  ]
+
+  #expect(
+    OCRInput.interpreted(observations, type: .playerName).values
+      == ["うみれおん 우알이 KEIJI119"])
+}
+
+@Test func playerNameOCRPrefersHighestConfidenceLanguagePass() {
+  let combined = OCRCell(text: "9901", confidence: 0.3, alternatives: ["9901"])
+  let korean = OCRCell(text: "우알이", confidence: 1, alternatives: ["우알이"])
+  let english = OCRCell(text: "wooalli", confidence: 0.8, alternatives: ["wooalli"])
+
+  #expect(preferredPlayerNameCell([combined, korean, english]).text == "우알이")
+}
+
+@Test func playerNameOCRPreservesLanguageOrderOnConfidenceTies() {
+  let japanese = OCRCell(text: "ゆっぴーそば", confidence: 1, alternatives: ["ゆっぴーそば"])
+  let english = OCRCell(text: "Yuppie Soba", confidence: 1, alternatives: ["Yuppie Soba"])
+
+  #expect(preferredPlayerNameCell([japanese, english]).text == "ゆっぴーそば")
+}
+
 private func audioPeakTestBundle(info: [String: Any], files: [String]) throws -> URL {
   let bundle = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
