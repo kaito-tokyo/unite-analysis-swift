@@ -499,7 +499,7 @@ package enum EmbeddedSchemas {
               "type": "number",
               "minimum": 0,
               "maximum": 1,
-              "description": "Confidence of the selected OCR value, from 0 through 1; omitted when unavailable or when the value was inferred rather than observed."
+              "description": "Maximum Apple Vision recognition confidence across all observations in the cell crop, from 0 through 1; it may belong to a different observation than the selected text and is omitted when unavailable or inferred."
             },
             "alternatives": { "type": "array", "items": { "type": "string" } },
             "inferred": {
@@ -1405,7 +1405,6 @@ package enum EmbeddedSchemas {
       "$defs": {
         "options": {
           "type": "object",
-          "additionalProperties": false,
           "required": [
             "recognitionLanguages"
           ],

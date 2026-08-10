@@ -75,7 +75,6 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
     "contact-sheet.schema.json",
     "event-detect.input.schema.json",
     "frame-burst.schema.json",
-    "ocr-options.schema.json",
     "ocr.schema.json",
     "publication.schema.json",
   ]
@@ -83,6 +82,17 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
     let data = try Data(contentsOf: repositoryRoot.appendingPathComponent("docs/\(basename)"))
     #expect(objectSchemasAreClosed(try JSONSerialization.jsonObject(with: data)))
   }
+
+  let ocrOptionsData = try Data(
+    contentsOf: repositoryRoot.appendingPathComponent("docs/ocr-options.schema.json")
+  )
+  let ocrOptionsRoot = try #require(
+    JSONSerialization.jsonObject(with: ocrOptionsData) as? [String: Any]
+  )
+  #expect(ocrOptionsRoot["additionalProperties"] as? Bool == false)
+  let definitions = try #require(ocrOptionsRoot["$defs"] as? [String: Any])
+  let options = try #require(definitions["options"] as? [String: Any])
+  #expect(options["additionalProperties"] == nil)
 }
 
 @Test func schemasDescribeSemanticallyAmbiguousFields() throws {

@@ -20,7 +20,6 @@
   "$defs": {
     "options": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "recognitionLanguages"
       ],
