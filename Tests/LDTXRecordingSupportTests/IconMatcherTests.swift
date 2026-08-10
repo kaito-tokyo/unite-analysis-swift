@@ -12,6 +12,12 @@ import RecordVisionSupport
 import Testing
 import UniteAnalysisSwiftCommands
 
+private let descriptorFixtureURL = URL(fileURLWithPath: #filePath)
+  .deletingLastPathComponent()
+  .deletingLastPathComponent()
+  .deletingLastPathComponent()
+  .appendingPathComponent("Contents/Resources/descriptors.pb")
+
 @Test func openCV5AkazeIsAvailable() {
   #expect(unite_analysis.isAkazeAvailable())
 }
@@ -292,9 +298,7 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   let versus = try loadAndNormalizeFixtureImage(
     try #require(
       Bundle.module.url(forResource: "versus", withExtension: "jpg")))
-  let database = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    .appendingPathComponent("Contents/Resources/descriptors.pb")
-  let matcher = unite_analysis.IconMatcher(std.string(database.path))
+  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
   #expect(matcher.isValid())
 
   let result = try LoadoutRecognizer.recognizeDraft(
@@ -323,9 +327,7 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
 }
 
 @Test func preparedDiagnosticImagesUseDatabaseDimensions() throws {
-  let database = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    .appendingPathComponent("Contents/Resources/descriptors.pb")
-  let matcher = unite_analysis.IconMatcher(std.string(database.path))
+  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
   let pixels = [UInt8](repeating: 255, count: 48 * 48 * 3)
   let input = try BGRImage(width: 48, height: 48, bytesPerRow: 48 * 3, bytes: pixels)
 
@@ -345,9 +347,7 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
 }
 
 @Test func preparedDiagnosticImageFailuresUpdateAndClearMatcherError() throws {
-  let database = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    .appendingPathComponent("Contents/Resources/descriptors.pb")
-  let matcher = unite_analysis.IconMatcher(std.string(database.path))
+  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
 
   let invalid = matcher.prepareHeldBGR(nil, 0, 0, 0, 0, 0.40)
   #expect(!invalid.isValid())
@@ -441,6 +441,12 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
     try validateDistinctLoadoutOutputs(
       outputURL: realDirectory.appendingPathComponent("ally-1-held-1.png"),
       diagnosticDirectory: linkedDirectory,
+      matchFormat: "draft")
+  }
+  #expect(throws: Error.self) {
+    try validateDistinctLoadoutOutputs(
+      outputURL: linkedDirectory.appendingPathComponent("ally-1-held-1.png"),
+      diagnosticDirectory: realDirectory,
       matchFormat: "draft")
   }
 }

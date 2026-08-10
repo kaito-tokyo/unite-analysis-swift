@@ -284,13 +284,28 @@ private func diagnosticNames(matchFormat: String) -> [String] {
   return allyHeld + allyBattle + enemyBattle
 }
 
+private func resolvingExistingSymlinkComponents(in url: URL) -> URL {
+  var existingAncestor = url.standardizedFileURL
+  var missingComponents: [String] = []
+  while !FileManager.default.fileExists(atPath: existingAncestor.path) {
+    let parent = existingAncestor.deletingLastPathComponent()
+    guard parent != existingAncestor else { break }
+    missingComponents.append(existingAncestor.lastPathComponent)
+    existingAncestor = parent
+  }
+  var resolved = existingAncestor.resolvingSymlinksInPath()
+  for component in missingComponents.reversed() {
+    resolved.appendPathComponent(component)
+  }
+  return resolved.standardizedFileURL
+}
+
 package func validateDistinctLoadoutOutputs(
   outputURL: URL, diagnosticDirectory: URL?, matchFormat: String
 ) throws {
   guard let diagnosticDirectory else { return }
-  let normalizedOutput = outputURL.standardizedFileURL.resolvingSymlinksInPath()
-  let normalizedDirectory =
-    diagnosticDirectory.standardizedFileURL.resolvingSymlinksInPath()
+  let normalizedOutput = resolvingExistingSymlinkComponents(in: outputURL)
+  let normalizedDirectory = resolvingExistingSymlinkComponents(in: diagnosticDirectory)
   var existingAncestor = normalizedDirectory
   while !FileManager.default.fileExists(atPath: existingAncestor.path) {
     let parent = existingAncestor.deletingLastPathComponent()
