@@ -315,6 +315,8 @@ public enum ContactSheetGenerator {
   private static let cellSeparatorColor = CGColor(red: 1, green: 0, blue: 1, alpha: 1)
 
   package struct PreparedInput {
+    fileprivate let recordSpecURL: URL
+    fileprivate let isFinalized: Bool
     fileprivate let recordSpec: RecordVisionRecordSpec
     fileprivate let asset: AVURLAsset
     fileprivate let videoDuration: CMTime
@@ -330,8 +332,9 @@ public enum ContactSheetGenerator {
     }
     try validate(duration: recordSpec.duration)
     let bundleURL = try recordingBundle(above: recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
-    {
+    let isFinalized = FileManager.default.fileExists(
+      atPath: bundleURL.appendingPathComponent(".finalized").path)
+    if !isFinalized {
       RecordVisionInputLogger.unfinishedRecording(bundleURL)
     }
     let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
@@ -343,11 +346,17 @@ public enum ContactSheetGenerator {
     let naturalSize = try await track.load(.naturalSize)
     let videoDuration = try await asset.load(.duration)
     return PreparedInput(
-      recordSpec: recordSpec, asset: asset, videoDuration: videoDuration,
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, recordSpec: recordSpec, asset: asset,
+      videoDuration: videoDuration,
       video: VideoMetadata(
         width: Int(naturalSize.width), height: Int(naturalSize.height),
         frameRate: Double(try await track.load(.nominalFrameRate)),
         duration: videoDuration.seconds))
+  }
+
+  package static func refreshIfUnfinished(_ prepared: PreparedInput) async throws -> PreparedInput {
+    if prepared.isFinalized { return prepared }
+    return try await prepare(recordSpecURL: prepared.recordSpecURL)
   }
 
   public static func run(

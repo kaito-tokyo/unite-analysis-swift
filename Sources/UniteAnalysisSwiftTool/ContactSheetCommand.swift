@@ -82,10 +82,15 @@ extension ContactSheet {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
-      let prepared = try await ContactSheetGenerator.prepare(
+      var prepared = try await ContactSheetGenerator.prepare(
         recordSpecURL: resolveRecordSpec(command.recordSpec))
+      var hasReadJob = false
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
+        if hasReadJob {
+          prepared = try await ContactSheetGenerator.refreshIfUnfinished(prepared)
+        }
+        hasReadJob = true
         let recoveredJobId = jsonlJobID(in: line.data)
         do {
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {

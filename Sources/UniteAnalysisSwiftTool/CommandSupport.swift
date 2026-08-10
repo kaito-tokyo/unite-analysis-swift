@@ -466,6 +466,8 @@ func canonicalSeconds(_ value: Double) -> String {
 }
 
 struct RecordingMediaContext {
+  let recordSpecURL: URL
+  let isFinalized: Bool
   let spec: RecordSpec
   let recording: ResolvedRecordingInput
   let extractor: VideoFrameExtractor
@@ -478,14 +480,21 @@ struct RecordingMediaContext {
       throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
     }
     let bundleURL = try recordingBundle(above: recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
-    {
+    let isFinalized = FileManager.default.fileExists(
+      atPath: bundleURL.appendingPathComponent(".finalized").path)
+    if !isFinalized {
       RecordVisionInputLogger.unfinishedRecording(bundleURL)
     }
     let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
     RecordVisionInputLogger.sourceVideo(recording.videoURL)
     return try await Self(
-      spec: spec, recording: recording, extractor: VideoFrameExtractor(videoURL: recording.videoURL))
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, spec: spec, recording: recording,
+      extractor: VideoFrameExtractor(videoURL: recording.videoURL))
+  }
+
+  func refreshedIfUnfinished() async throws -> Self {
+    if isFinalized { return self }
+    return try await Self.prepare(recordSpecURL: recordSpecURL)
   }
 }
 

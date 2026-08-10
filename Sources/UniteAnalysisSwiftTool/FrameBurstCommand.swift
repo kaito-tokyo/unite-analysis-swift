@@ -176,10 +176,15 @@ extension FrameBurst {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
-      let media = try await RecordingMediaContext.prepare(
+      var media = try await RecordingMediaContext.prepare(
         recordSpecURL: resolveRecordSpec(command.recordSpec))
+      var hasReadJob = false
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
+        if hasReadJob {
+          media = try await media.refreshedIfUnfinished()
+        }
+        hasReadJob = true
         let recoveredJobId = jsonlJobID(in: line.data)
         do {
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
