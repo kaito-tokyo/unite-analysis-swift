@@ -46,7 +46,7 @@
 
 - **症状**: 結果行、バトルデータ、参加者、持ち物、バトルアイテム、宣言ルートが欠けている。
 - **使うツール**: 結果画面は`scan-result`、draftの最終準備画面とVS画面は`recognize-draft-loadout`、blind選択画面は`recognize-blind-loadout`を使う。
-- **再現例**: 先に対象画面を`_PokemonUniteAnalysis/matches/match-01/frames/result-summary.jpg`へフルサイズで抽出し、`unite-analysis-swift scan-result _PokemonUniteAnalysis/matches/match-01/frames/result-summary.jpg --type summary --ocr-options ocr-options.json --output _PokemonUniteAnalysis/matches/match-01/result-summary.json`を実行する。ロードアウトは必ず各コマンドの`--help`から現在の必須画像と引数を確認する。
+- **再現例**: 先に対象画面を`_PokemonUniteAnalysis/matches/match-01/frames/result-summary.jpg`へフルサイズで抽出し、OCR設定を`_PokemonUniteAnalysis/matches/match-01/ocr-options.json`へ保存する。`unite-analysis-swift scan-result _PokemonUniteAnalysis/matches/match-01/frames/result-summary.jpg --type summary --ocr-options _PokemonUniteAnalysis/matches/match-01/ocr-options.json --output _PokemonUniteAnalysis/matches/match-01/result-summary.json`を実行する。ロードアウトは必ず各コマンドの`--help`から現在の必須画像と引数を確認する。
 - **解釈と提示**: `scan-result`では出力JSONのconfidence、warnings、raw OCRを保持し、低confidenceの名前は入力画像で再確認する。ロードアウト認識では出力JSONの`score`、`candidates`、ルート測定値を保持し、選択候補とデコード済み入力フレームを対応させて再確認する。
 - **限界**: 縮小セル、余白を含む画像、異なる画面種別に`scan-result`を使わない。認識結果から録画時刻や操作プレイヤーを推測しない。
 - **次の調査**: 欠けた画面を`contact-sheet`で探し、`precise-frame`で抽出し直す。
