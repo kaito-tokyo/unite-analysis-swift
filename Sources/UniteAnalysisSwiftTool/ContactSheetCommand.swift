@@ -84,15 +84,11 @@ extension ContactSheet {
       let command = self
       var prepared = try await ContactSheetGenerator.prepare(
         recordSpecURL: resolveRecordSpec(command.recordSpec))
-      var hasReadJob = false
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
-        if hasReadJob {
-          prepared = try await ContactSheetGenerator.refreshIfUnfinished(prepared)
-        }
-        hasReadJob = true
         let recoveredJobId = jsonlJobID(in: line.data)
         do {
+          prepared = try await ContactSheetGenerator.refreshIfUnfinished(prepared)
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
             throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
           }
