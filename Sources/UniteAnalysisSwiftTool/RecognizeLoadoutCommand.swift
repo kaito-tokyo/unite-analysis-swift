@@ -365,6 +365,12 @@ package func prepareDiagnosticDirectory(
   guard let directory else { return }
   for name in diagnosticNames(matchFormat: matchFormat) {
     let outputURL = directory.appendingPathComponent(name).appendingPathExtension("png")
+    if let attributes = try? FileManager.default.attributesOfItem(atPath: outputURL.path),
+      attributes[.type] as? FileAttributeType == .typeSymbolicLink
+    {
+      throw ValidationError(
+        "AKAZE diagnostic output is a symbolic link: \(outputURL.path)")
+    }
     try validateOutputPath(outputURL, force: force)
     var isDirectory: ObjCBool = false
     if FileManager.default.fileExists(atPath: outputURL.path, isDirectory: &isDirectory),
