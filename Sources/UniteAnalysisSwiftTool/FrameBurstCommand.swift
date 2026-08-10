@@ -288,9 +288,13 @@ private func renderFrameBurst(
 private func drawFrameBurstLabel(
   sourceIndex: Int, actualInmatch: Double, in destination: CGRect, context: CGContext
 ) {
-  let fontSize = max(10, min(16, destination.width / 20))
+  context.saveGState()
+  defer { context.restoreGState() }
+  context.clip(to: destination)
+  let fontSize = max(6, min(16, destination.width / 20, destination.height - 4))
   let band = CGRect(
-    x: destination.minX, y: destination.minY, width: destination.width, height: fontSize + 8)
+    x: destination.minX, y: destination.minY, width: destination.width,
+    height: min(destination.height, fontSize + 8))
   context.setFillColor(CGColor(gray: 0, alpha: 0.8))
   context.fill(band)
   let font = CTFontCreateWithName("Menlo" as CFString, fontSize, nil)
