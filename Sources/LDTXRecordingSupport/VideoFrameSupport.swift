@@ -44,15 +44,6 @@ public final class VideoFrameExtractor {
     self.nominalFrameRate = try await track.load(.nominalFrameRate)
   }
 
-  public func extractFrame(at time: CMTime) throws -> CGImage {
-    var result: CGImage?
-    try extractFrames(at: [time]) { _, image in result = image }
-    guard let result else {
-      throw VideoFrameSupportError.message("No source-video frame at requested time")
-    }
-    return result
-  }
-
   /// Retrieves independent approximate frames without sequentially decoding the interval between requests.
   /// The returned presentation time is the generator's actual selected frame; callers must not treat it as exact.
   public func extractApproximateFrames(
@@ -258,10 +249,6 @@ public enum VideoFrameSupport {
       throw VideoFrameSupportError.message("Could not create a frame image")
     }
     return result
-  }
-
-  public static func extractFrame(from videoURL: URL, at time: CMTime) async throws -> CGImage {
-    try await VideoFrameExtractor(videoURL: videoURL).extractFrame(at: time)
   }
 
   public static func cropped(_ image: CGImage, rect: CGRect) throws -> CGImage {

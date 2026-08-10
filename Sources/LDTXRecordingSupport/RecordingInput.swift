@@ -25,14 +25,6 @@ public enum RecordingInputError: Error, CustomStringConvertible {
   }
 }
 
-public struct VisionIndexRecord: Sendable, Equatable {
-  public let visionID: String
-  public let recordingTimelineMilliseconds: Int64
-  public let output: String
-  public let jsonURL: URL
-  public let imageURL: URL?
-}
-
 public struct ResolvedRecordingInput: Sendable {
   public let inputURL: URL
   public let videoURL: URL
@@ -79,59 +71,4 @@ public struct ResolvedRecordingInput: Sendable {
     }
     return Self(inputURL: inputURL, videoURL: fallback, bundleURL: inputURL)
   }
-
-  public func visionIndexRecords() -> [VisionIndexRecord] {
-    guard let bundleURL else { return [] }
-    let visionsURL = bundleURL.appendingPathComponent("Visions", isDirectory: true)
-    guard
-      let enumerator = FileManager.default.enumerator(
-        at: visionsURL,
-        includingPropertiesForKeys: [.isRegularFileKey],
-        options: [.skipsHiddenFiles]
-      )
-    else { return [] }
-
-    var records: [VisionIndexRecord] = []
-    for case let jsonURL as URL in enumerator where jsonURL.pathExtension.lowercased() == "json" {
-      guard let data = try? Data(contentsOf: jsonURL),
-        let object = try? JSONSerialization.jsonObject(with: data),
-        let dictionary = object as? [String: Any],
-        let milliseconds = (dictionary["recordingTimelineMilliseconds"] as? NSNumber)?.int64Value,
-        let output = dictionary["output"] as? String
-      else { continue }
-      let visionID =
-        (dictionary["visionID"] as? String) ?? jsonURL.deletingLastPathComponent().lastPathComponent
-      let imageName = dictionary["imageFileName"] as? String
-      let imageURL = imageName.map {
-        jsonURL.deletingLastPathComponent().appendingPathComponent($0)
-      }
-      records.append(
-        VisionIndexRecord(
-          visionID: visionID,
-          recordingTimelineMilliseconds: milliseconds,
-          output: output,
-          jsonURL: jsonURL,
-          imageURL: imageURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
-        ))
-    }
-    return records.sorted {
-      if $0.recordingTimelineMilliseconds != $1.recordingTimelineMilliseconds {
-        return $0.recordingTimelineMilliseconds < $1.recordingTimelineMilliseconds
-      }
-      return $0.visionID < $1.visionID
-    }
-  }
-}
-
-public func findExecutable(_ name: String) -> URL? {
-  let searchPath =
-    ProcessInfo.processInfo.environment["PATH"]
-    ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-  for directory in searchPath.split(separator: ":") {
-    let candidate = URL(fileURLWithPath: String(directory)).appendingPathComponent(name)
-    if FileManager.default.isExecutableFile(atPath: candidate.path) {
-      return candidate
-    }
-  }
-  return nil
 }
