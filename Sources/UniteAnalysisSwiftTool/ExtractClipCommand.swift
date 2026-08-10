@@ -24,10 +24,11 @@ struct ExtractClip: ParsableCommand {
 
       COPYING. AVAssetExportPresetPassthrough copies compatible compressed audio and video samples
       without decoding and re-encoding them. The requested start does not create a new video
-      keyframe, so a player may begin decoding from an adjacent sync sample. Use re-encoding when a
-      frame-exact independently decodable start is required.
+      keyframe. A non-keyframe start can retain negative-timestamp synchronization-sample preroll
+      and edit-list handling even though the visible interval starts at the requested time. Use
+      re-encoding when a frame-exact independently decodable start without preroll is required.
 
-      OUTPUT. The output must have the .mp4 extension. An existing output is an error unless --force is supplied. Export first writes a temporary sibling and only replaces the destination after a successful export. The generated absolute output path is printed to stdout.
+      OUTPUT. The output must have the .mp4 extension. An existing output is an error unless --force is supplied. Export first writes a temporary sibling, requests network-optimized layout, verifies that the top-level moov atom precedes mdat, and only replaces the destination after successful export and verification. The generated absolute output path is printed to stdout.
 
       DIAGNOSTICS. The resolved record-spec.json and main video, unfinished-recording warnings, and requested source PTS interval are written to stderr.
       """.reflowedHelp()
@@ -122,6 +123,7 @@ func extractClip(
     throw UniteAnalysisSwiftToolError.message("Source media cannot be passed through to MP4")
   }
   session.timeRange = CMTimeRange(start: clipStart, end: clipEnd)
+  session.shouldOptimizeForNetworkUse = true
 
   try FileManager.default.createDirectory(
     at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -133,12 +135,81 @@ func extractClip(
       "unite-analysis-swift: clip requested PTS [\(canonicalSeconds(clipStart.seconds)), \(canonicalSeconds(clipEnd.seconds)))s\n"
         .utf8))
   try await session.export(to: temporaryURL, as: .mp4)
+  try validateNetworkOptimizedMP4(at: temporaryURL)
   if FileManager.default.fileExists(atPath: outputURL.path) {
     _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
   } else {
     try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
   }
   return outputURL.path
+}
+
+package struct MP4TopLevelAtom: Equatable, Sendable {
+  package let type: String
+  package let offset: UInt64
+  package let size: UInt64
+}
+
+package func parseTopLevelMP4Atoms(
+  fileSize: UInt64,
+  read: (UInt64, Int) throws -> Data
+) throws -> [MP4TopLevelAtom] {
+  var atoms: [MP4TopLevelAtom] = []
+  var offset: UInt64 = 0
+  while offset < fileSize {
+    guard fileSize - offset >= 8 else {
+      throw UniteAnalysisSwiftToolError.message("Truncated MP4 top-level atom header")
+    }
+    let header = try read(offset, 8)
+    guard header.count == 8 else {
+      throw UniteAnalysisSwiftToolError.message("Could not read MP4 top-level atom header")
+    }
+    let size32 = UInt64(header.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) })
+    let type = String(decoding: header.dropFirst(4), as: UTF8.self)
+    let headerSize: UInt64
+    let atomSize: UInt64
+    if size32 == 1 {
+      let extended = try read(offset + 8, 8)
+      guard extended.count == 8 else {
+        throw UniteAnalysisSwiftToolError.message("Truncated MP4 extended atom size")
+      }
+      headerSize = 16
+      atomSize = extended.reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+    } else if size32 == 0 {
+      headerSize = 8
+      atomSize = fileSize - offset
+    } else {
+      headerSize = 8
+      atomSize = size32
+    }
+    guard atomSize >= headerSize, atomSize <= fileSize - offset else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Invalid MP4 top-level atom size for \(type) at offset \(offset)")
+    }
+    atoms.append(.init(type: type, offset: offset, size: atomSize))
+    offset += atomSize
+  }
+  return atoms
+}
+
+package func validateNetworkOptimizedMP4(at url: URL) throws {
+  let handle = try FileHandle(forReadingFrom: url)
+  defer { try? handle.close() }
+  let fileSize = try handle.seekToEnd()
+  let atoms = try parseTopLevelMP4Atoms(fileSize: fileSize) { offset, count in
+    try handle.seek(toOffset: offset)
+    return try handle.read(upToCount: count) ?? Data()
+  }
+  guard let moov = atoms.first(where: { $0.type == "moov" }),
+    let mdat = atoms.first(where: { $0.type == "mdat" })
+  else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Exported MP4 must contain top-level moov and mdat atoms")
+  }
+  guard moov.offset < mdat.offset else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Exported MP4 is not network optimized: top-level moov follows mdat")
+  }
 }
 
 package func extractClipVideoURL(in bundleURL: URL) throws -> URL {
