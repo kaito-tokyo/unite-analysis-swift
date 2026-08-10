@@ -41,7 +41,12 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
   var records: [Any] = []
   switch parsed {
   case let command as AudioPeaks:
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
+      if let output = command.output {
+        try writeOutputData(
+          try prettyPrintedJSONData(record), to: resolvePath(output), force: command.force)
+      }
       records.append(try encodedObject(record))
     }
   case let command as BatchFrame:
@@ -94,10 +99,7 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       if let output = command.output {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        var data = try encoder.encode(record)
-        data.append(0x0A)
+        let data = try prettyPrintedJSONData(record)
         try writeOutputData(data, to: resolvePath(output), force: command.force)
       }
       records.append(try encodedObject(record))
