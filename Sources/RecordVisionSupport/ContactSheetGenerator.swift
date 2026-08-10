@@ -337,37 +337,7 @@ public enum ContactSheetGenerator {
       throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
     }
     try validate(duration: recordSpec.duration)
-    guard definition.cell.width > 0, definition.cell.height > 0, definition.columns > 0,
-      !definition.placements.isEmpty, !definition.matchTimestamps.isEmpty
-    else {
-      throw ContactSheetGeneratorError.message(
-        "cell, columns, placements, and matchTimestamps must not be empty or non-positive")
-    }
-    for placement in definition.placements {
-      if let source = placement.source, let destination = placement.destination,
-        placement.drawText == nil
-      {
-        guard valid(source), valid(destination),
-          destination.x + destination.width <= definition.cell.width,
-          destination.y + destination.height <= definition.cell.height
-        else {
-          throw ContactSheetGeneratorError.message(
-            "Image placement must be positive and fit inside cell")
-        }
-      } else if let text = placement.drawText, placement.source == nil, placement.destination == nil
-      {
-        guard text.x >= 0, text.y >= 0, text.fontSize > 0, text.fontSize.isFinite,
-          (text.text == nil ? 0 : 1) + (text.script == nil ? 0 : 1) == 1
-        else {
-          throw ContactSheetGeneratorError.message(
-            "drawText requires valid position, fontSize, and exactly one of text or script")
-        }
-      } else {
-        throw ContactSheetGeneratorError.message(
-          "Each placement must be exactly one image placement or drawText placement")
-      }
-    }
-    let frameOffsets = try validatedOffsets(matchTimestamps: definition.matchTimestamps)
+    let frameOffsets = try validate(definition: definition)
     let rows = Int(ceil(Double(definition.matchTimestamps.count) / Double(definition.columns)))
     let width =
       definition.columns * definition.cell.width + max(0, definition.columns - 1) * cellSeparator
@@ -476,6 +446,40 @@ public enum ContactSheetGenerator {
     try FileManager.default.createDirectory(
       at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
+  }
+
+  package static func validate(definition: ContactSheetDefinition) throws -> [Double] {
+    guard definition.cell.width > 0, definition.cell.height > 0, definition.columns > 0,
+      !definition.placements.isEmpty, !definition.matchTimestamps.isEmpty
+    else {
+      throw ContactSheetGeneratorError.message(
+        "cell, columns, placements, and matchTimestamps must not be empty or non-positive")
+    }
+    for placement in definition.placements {
+      if let source = placement.source, let destination = placement.destination,
+        placement.drawText == nil
+      {
+        guard valid(source), valid(destination),
+          destination.x + destination.width <= definition.cell.width,
+          destination.y + destination.height <= definition.cell.height
+        else {
+          throw ContactSheetGeneratorError.message(
+            "Image placement must be positive and fit inside cell")
+        }
+      } else if let text = placement.drawText, placement.source == nil, placement.destination == nil
+      {
+        guard text.x >= 0, text.y >= 0, text.fontSize > 0, text.fontSize.isFinite,
+          (text.text == nil ? 0 : 1) + (text.script == nil ? 0 : 1) == 1
+        else {
+          throw ContactSheetGeneratorError.message(
+            "drawText requires valid position, fontSize, and exactly one of text or script")
+        }
+      } else {
+        throw ContactSheetGeneratorError.message(
+          "Each placement must be exactly one image placement or drawText placement")
+      }
+    }
+    return try validatedOffsets(matchTimestamps: definition.matchTimestamps)
   }
 
   package static func validatedOffsets(matchTimestamps: [Double]) throws -> [Double] {

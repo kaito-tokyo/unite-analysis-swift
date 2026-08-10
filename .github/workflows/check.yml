@@ -49,7 +49,7 @@ jobs:
       - name: Check JSON format
         shell: bash --noprofile --norc -euo pipefail {0}
         run: |
-          for file in Package.resolved docs/*.json; do
+          for file in Package.resolved docs/*.json .apm/skills/review-unite-matches-ja/references/*.json; do
             jq --indent 2 . "$file" | cmp --silent "$file" -
           done
 
@@ -74,7 +74,7 @@ jobs:
 
       - name: Check REUSE compliance
         shell: bash --noprofile --norc -euo pipefail {0}
-        run: reuse lint
+        run: reuse --no-multiprocessing lint
 
   accept-check:
     name: Accept Check CI
