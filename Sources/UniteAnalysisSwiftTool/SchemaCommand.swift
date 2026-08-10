@@ -45,6 +45,8 @@ package enum EmbeddedSchemas {
     "batch-frame.schema.json",
     "batch-frame.output.schema.json",
     "chroma-events.output.schema.json",
+    "event-detect.input.schema.json",
+    "event-detect.output.schema.json",
     "contact-sheet.schema.json",
     "contact-sheet.output.schema.json",
     "frame-burst.schema.json",
@@ -64,6 +66,88 @@ package enum EmbeddedSchemas {
   package static var storedBasenames: [String] { schemas.keys.sorted() }
 
   private static let schemas = [
+    "event-detect.input.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json",
+      "title": "unite-analysis-swift event-detect input",
+      "type": "object",
+      "required": ["audioPeaks", "chromaEvents", "ocrCandidates", "scheduledCandidates"],
+      "properties": {
+        "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json" },
+        "audioPeaks": { "type": "string", "minLength": 1 },
+        "chromaEvents": { "type": "array", "items": { "$ref": "#/$defs/chromaInput" } },
+        "ocrCandidates": { "type": "array", "items": { "$ref": "#/$defs/ocrCandidate" } },
+        "scheduledCandidates": { "type": "array", "items": { "$ref": "#/$defs/scheduledCandidate" } }
+      },
+      "$defs": {
+        "chromaInput": {
+          "type": "object",
+          "required": ["region", "path"],
+          "properties": {
+            "region": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        "ocrCandidate": {
+          "type": "object",
+          "required": ["region", "inmatch", "value", "confidence"],
+          "properties": {
+            "region": { "type": "string", "minLength": 1 },
+            "inmatch": { "type": "number", "minimum": 0 },
+            "value": { "type": "string" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "scheduledCandidate": {
+          "type": "object",
+          "required": ["inmatch", "label"],
+          "properties": {
+            "inmatch": { "type": "number", "minimum": 0 },
+            "label": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+    """#,
+    "event-detect.output.schema.json": #"""
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.output.schema.json",
+      "title": "unite-analysis-swift event-detect output",
+      "type": "object",
+      "required": ["$schema", "matchId", "duration", "candidates"],
+      "properties": {
+        "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.output.schema.json" },
+        "matchId": { "type": "string", "minLength": 1 },
+        "duration": { "type": "number", "exclusiveMinimum": 0 },
+        "candidates": { "type": "array", "items": { "$ref": "#/$defs/candidate" } }
+      },
+      "$defs": {
+        "candidate": {
+          "type": "object",
+          "required": ["startInmatch", "endInmatch", "representativeInmatch", "constituents"],
+          "properties": {
+            "startInmatch": { "type": "number", "minimum": 0 },
+            "endInmatch": { "type": "number", "minimum": 0 },
+            "representativeInmatch": { "type": "number", "minimum": 0 },
+            "constituents": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/constituent" } }
+          }
+        },
+        "constituent": {
+          "type": "object",
+          "required": ["source", "inmatch"],
+          "properties": {
+            "source": { "type": "string", "pattern": "^(audio|scheduled|chroma:.+|ocr:.+)$" },
+            "inmatch": { "type": "number", "minimum": 0 },
+            "score": { "type": "number", "minimum": 0 },
+            "value": { "type": "string" },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    }
+    """#,
     "frame-burst.schema.json": #"""
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

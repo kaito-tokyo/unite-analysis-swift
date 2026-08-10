@@ -36,6 +36,7 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["frame-burst"]: FrameBurst.self
     case ["detect-chroma-events"]: DetectChromaEvents.self
     case ["audio-peaks"]: AudioPeaks.self
+    case ["event-detect"]: EventDetect.self
     case ["extract-clip"]: ExtractClip.self
     case ["ocr"]: OCRCommand.self
     case ["scan-result"]: ScanResultCommand.self
@@ -114,6 +115,11 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as DetectChromaEvents:
+    for try await record in command.outputRecords() {
+      try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
+    }
+
+  case let command as EventDetect:
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }

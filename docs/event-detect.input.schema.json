@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json",
+  "title": "unite-analysis-swift event-detect input",
+  "type": "object",
+  "required": [
+    "audioPeaks",
+    "chromaEvents",
+    "ocrCandidates",
+    "scheduledCandidates"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json"
+    },
+    "audioPeaks": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chromaEvents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chromaInput"
+      }
+    },
+    "ocrCandidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ocrCandidate"
+      }
+    },
+    "scheduledCandidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scheduledCandidate"
+      }
+    }
+  },
+  "$defs": {
+    "chromaInput": {
+      "type": "object",
+      "required": [
+        "region",
+        "path"
+      ],
+      "properties": {
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ocrCandidate": {
+      "type": "object",
+      "required": [
+        "region",
+        "inmatch",
+        "value",
+        "confidence"
+      ],
+      "properties": {
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inmatch": {
+          "type": "number",
+          "minimum": 0
+        },
+        "value": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "scheduledCandidate": {
+      "type": "object",
+      "required": [
+        "inmatch",
+        "label"
+      ],
+      "properties": {
+        "inmatch": {
+          "type": "number",
+          "minimum": 0
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
