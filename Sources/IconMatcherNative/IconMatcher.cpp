@@ -189,10 +189,12 @@ cv::Mat inputBGR(
     const std::uint32_t width,
     const std::uint32_t height,
     const std::size_t bytesPerRow) {
+  constexpr auto kMaximumInt = std::numeric_limits<int>::max();
   if (bytes == nullptr || width == 0 || height == 0 ||
       bytesPerRow < static_cast<std::size_t>(width) * 3 ||
-      byteCount < bytesPerRow * height || width > INT_MAX || height > INT_MAX ||
-      bytesPerRow > static_cast<std::size_t>(INT_MAX)) {
+      byteCount < bytesPerRow * height || width > kMaximumInt ||
+      height > kMaximumInt ||
+      bytesPerRow > static_cast<std::size_t>(kMaximumInt)) {
     return {};
   }
   return cv::Mat(
