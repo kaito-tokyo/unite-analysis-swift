@@ -36,7 +36,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       `eval-draw-text-script --help`, `schema --help`, or `config --help`
       for their JSON and output contracts.
       """.reflowedHelp(),
-    version: "0.1.6",
+    version: "0.2.0",
     subcommands: [
       BatchFrame.self, SampleFrames.self, PreciseFrame.self, ContactSheet.self,
       FrameBurst.self,
