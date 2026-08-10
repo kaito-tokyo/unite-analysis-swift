@@ -71,6 +71,17 @@ package func supplementMissingScore(_ numbers: inout [OCRCell]) {
   }
 }
 
+package func preferredPlayerNameCell(_ cells: [OCRCell]) -> OCRCell {
+  guard var preferred = cells.first else {
+    return OCRCell(text: nil, confidence: nil, alternatives: [])
+  }
+  for cell in cells.dropFirst()
+  where (cell.confidence ?? -1) >= (preferred.confidence ?? -1) {
+    preferred = cell
+  }
+  return preferred
+}
+
 package struct BattleDataRow: Codable {
   let side: String
   let row: Int
@@ -342,6 +353,32 @@ enum OCR {
       alternatives: candidates.map { numeric ? $0 : cleanName($0) })
   }
 
+  static func playerNameCell(
+    _ image: CGImage,
+    rect: CGRect,
+    languages: [String],
+    customWords: [String]
+  ) throws -> OCRCell {
+    var cells = try languages.map { language in
+      try cell(
+        image,
+        rect: rect,
+        numeric: false,
+        languages: [language],
+        customWords: customWords)
+    }
+    if languages.count > 1 {
+      cells.append(
+        try cell(
+          image,
+          rect: rect,
+          numeric: false,
+          languages: languages,
+          customWords: customWords))
+    }
+    return preferredPlayerNameCell(cells)
+  }
+
   static func numericCells(
     _ image: CGImage,
     rect: CGRect,
@@ -488,6 +525,15 @@ enum OCR {
   }
 }
 
+package func recognizedSummaryNumericRow(
+  observations: [TextObservation],
+  image: CGImage,
+  centers: [CGFloat],
+  y: CGFloat
+) -> [OCRCell] {
+  OCR.numericRow(observations: observations, image: image, centers: centers, y: y)
+}
+
 struct Layout {
   // OCR geometry uses a canonical 16:9 coordinate space. The conversion preserves the
   // existing calibrated regions while avoiding a capture-device-specific canvas size.
@@ -495,7 +541,7 @@ struct Layout {
   static let gameWidth: CGFloat = CGFloat(GameScreenInput.width)
   static let gameHeight: CGFloat = CGFloat(GameScreenInput.height)
   static let battleRowTops: [CGFloat] = [200, 304, 408, 510, 610].map(canonical)
-  static let summaryRowTops: [CGFloat] = [205, 307, 409, 510, 612].map(canonical)
+  static let summaryRowTops: [CGFloat] = [290, 378, 466, 555, 644].map(canonical)
 
   static func canonicalRect(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> CGRect {
     CGRect(
@@ -528,18 +574,18 @@ struct Layout {
     fourth: nil
   )
   static let summaryLeft = Columns(
-    name: canonicalRect(x: 190, y: 2, width: 240, height: 70),
-    first: canonicalRect(x: 430, y: 2, width: 64, height: 70),
-    second: canonicalRect(x: 535, y: 2, width: 62, height: 70),
-    third: canonicalRect(x: 615, y: 2, width: 65, height: 70),
-    fourth: canonicalRect(x: 696, y: 2, width: 95, height: 70)
+    name: canonicalRect(x: 220, y: 2, width: 210, height: 70),
+    first: canonicalRect(x: 435, y: 2, width: 70, height: 70),
+    second: canonicalRect(x: 520, y: 2, width: 60, height: 70),
+    third: canonicalRect(x: 590, y: 2, width: 52, height: 70),
+    fourth: canonicalRect(x: 675, y: 2, width: 62, height: 70)
   )
   static let summaryRight = Columns(
     name: canonicalRect(x: 935, y: 2, width: 220, height: 70),
-    first: canonicalRect(x: 1141, y: 2, width: 64, height: 70),
-    second: canonicalRect(x: 1259, y: 2, width: 62, height: 70),
-    third: canonicalRect(x: 1341, y: 2, width: 65, height: 70),
-    fourth: canonicalRect(x: 1413, y: 2, width: 96, height: 70)
+    first: canonicalRect(x: 1155, y: 2, width: 72, height: 70),
+    second: canonicalRect(x: 1240, y: 2, width: 60, height: 70),
+    third: canonicalRect(x: 1298, y: 2, width: 56, height: 70),
+    fourth: canonicalRect(x: 1388, y: 2, width: 68, height: 70)
   )
 
   static func rect(_ base: CGRect, row: Int, rowTops: [CGFloat], image: CGImage) -> CGRect {
@@ -663,10 +709,9 @@ func summaryRows(
         SummaryRow(
           side: side,
           row: row,
-          name: try OCR.cell(
+          name: try OCR.playerNameCell(
             image,
             rect: Layout.rect(columns.name, row: row, rowTops: Layout.summaryRowTops, image: image),
-            numeric: false,
             languages: nameOptions.recognitionLanguages,
             customWords: nameOptions.customWords ?? []),
           scored: numbers[0],
