@@ -91,10 +91,10 @@ extension BatchFrame {
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
         do {
-          media = try await media.refreshedIfUnfinished()
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
             throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
           }
+          media = try await media.refreshedIfUnfinished()
           let job = try JSONDecoder().decode(BatchFrameJob.self, from: line.data)
           _ = try job.validatedMatchTimestamps()
           let prefixURL = resolvePath(job.outputPrefix)

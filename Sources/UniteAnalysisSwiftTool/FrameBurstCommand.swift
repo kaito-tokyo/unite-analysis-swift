@@ -182,10 +182,10 @@ extension FrameBurst {
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
         do {
-          media = try await media.refreshedIfUnfinished()
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
             throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
           }
+          media = try await media.refreshedIfUnfinished()
           let job = try JSONDecoder().decode(FrameBurstJob.self, from: line.data)
           try job.validate()
           let outputURL = resolvePath(job.output)

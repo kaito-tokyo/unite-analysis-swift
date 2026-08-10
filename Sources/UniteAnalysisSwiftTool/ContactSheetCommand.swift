@@ -88,10 +88,10 @@ extension ContactSheet {
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
         do {
-          prepared = try await ContactSheetGenerator.refreshIfUnfinished(prepared)
           if let recoveredJobId, !jobIds.insert(recoveredJobId).inserted {
             throw UniteAnalysisSwiftToolError.message("Duplicate jobId '\(recoveredJobId)'")
           }
+          prepared = try await ContactSheetGenerator.refreshIfUnfinished(prepared)
           let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: line.data)
           guard let jobId = definition.jobId,
             !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
