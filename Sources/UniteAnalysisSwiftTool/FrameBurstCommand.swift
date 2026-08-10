@@ -176,6 +176,8 @@ extension FrameBurst {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
+      let media = try await RecordingMediaContext.prepare(
+        recordSpecURL: resolveRecordSpec(command.recordSpec))
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
@@ -187,7 +189,7 @@ extension FrameBurst {
           try job.validate()
           let outputURL = resolvePath(job.output)
           try await renderFrameBurst(
-            job: job, recordSpecURL: resolveRecordSpec(command.recordSpec), outputURL: outputURL,
+            job: job, media: media, outputURL: outputURL,
             quality: command.quality, force: command.force)
           continuation.yield(
             .success(FrameBurstJobOutput(jobId: job.jobId, result: .init(output: outputURL.path))))
@@ -202,24 +204,14 @@ extension FrameBurst {
 }
 
 private func renderFrameBurst(
-  job: FrameBurstJob, recordSpecURL: URL, outputURL: URL, quality: Double, force: Bool
+  job: FrameBurstJob, media: RecordingMediaContext, outputURL: URL, quality: Double, force: Bool
 ) async throws {
   guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
     throw UniteAnalysisSwiftToolError.message(
       "Output collision: \(outputURL.path). Pass --force to overwrite.")
   }
-  let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
-  RecordVisionInputLogger.recordSpec(recordSpecURL)
-  guard spec.startPTS.timescale > 0 else {
-    throw UniteAnalysisSwiftToolError.message("record-spec.json has no usable startPTS")
-  }
-  let bundleURL = try recordingBundle(above: recordSpecURL)
-  if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
-    RecordVisionInputLogger.unfinishedRecording(bundleURL)
-  }
-  let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
-  RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
+  let spec = media.spec
+  let extractor = media.extractor
   let requestedTime = CMTimeAdd(
     CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale),
     CMTime(seconds: job.matchTimestamp, preferredTimescale: spec.startPTS.timescale))

@@ -82,6 +82,8 @@ extension ContactSheet {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
+      let prepared = try await ContactSheetGenerator.prepare(
+        recordSpecURL: resolveRecordSpec(command.recordSpec))
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
@@ -102,7 +104,7 @@ extension ContactSheet {
           let outputURL = resolvePath(output)
           try await ContactSheetGenerator.run(
             definitionData: try JSONEncoder().encode(definition),
-            recordSpecURL: resolveRecordSpec(command.recordSpec),
+            prepared: prepared,
             outputURL: outputURL,
             quality: command.quality,
             force: command.force

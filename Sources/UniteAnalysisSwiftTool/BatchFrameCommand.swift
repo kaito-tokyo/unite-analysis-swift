@@ -85,6 +85,8 @@ extension BatchFrame {
   func outputRecords() -> AsyncThrowingStream<OutputRecord, Error> {
     commandOutputStream { continuation in
       let command = self
+      let media = try await RecordingMediaContext.prepare(
+        recordSpecURL: resolveRecordSpec(command.recordSpec))
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)
@@ -103,7 +105,7 @@ extension BatchFrame {
               outputURL: URL(fileURLWithPath: prefixURL.path + suffix).standardizedFileURL)
           }
           let outputs = try await renderFrames(
-            recordSpecURL: resolveRecordSpec(command.recordSpec),
+            context: media,
             requests: requests,
             quality: command.quality,
             force: command.force
