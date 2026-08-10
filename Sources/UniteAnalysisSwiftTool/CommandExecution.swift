@@ -5,6 +5,14 @@
 import ArgumentParser
 import Foundation
 
+package func prettyPrintedJSONData<T: Encodable>(_ value: T) throws -> Data {
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+  var data = try encoder.encode(value)
+  data.append(0x0A)
+  return data
+}
+
 package func builtInCLIOutput(arguments: [String]) -> String? {
   if arguments.last == "--version" || arguments == ["-v"] {
     return UniteAnalysisSwiftCommand.configuration.version
@@ -53,11 +61,12 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
 package func executeCLI(_ parsed: any ParsableCommand) async throws {
   switch parsed {
   case let command as AudioPeaks:
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
-      let encoder = JSONEncoder()
-      encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-      var data = try encoder.encode(record)
-      data.append(0x0A)
+      let data = try prettyPrintedJSONData(record)
+      if let output = command.output {
+        try writeOutputData(data, to: resolvePath(output), force: command.force)
+      }
       try FileHandle.standardOutput.write(contentsOf: data)
     }
 
@@ -129,10 +138,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
   case let command as ScanResultCommand:
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
-      let encoder = JSONEncoder()
-      encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-      var data = try encoder.encode(record)
-      data.append(0x0A)
+      let data = try prettyPrintedJSONData(record)
       if let output = command.output {
         try writeOutputData(data, to: resolvePath(output), force: command.force)
       } else {

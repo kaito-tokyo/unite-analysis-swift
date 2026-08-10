@@ -23,7 +23,7 @@ struct AudioPeaks: ParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift audio-peaks --record-spec _PokemonUniteMatches/match-01/record-spec.json --gain 1.0
+      unite-analysis-swift audio-peaks --record-spec _PokemonUniteMatches/match-01/record-spec.json --gain 1.0 --output _PokemonUniteAnalysis/matches/match-01/candidates/audio-peaks.json
 
       RANGE. The full record-spec match is always analyzed. There are no start or duration options. The detector reads 200ms before match start to preserve FIR history and 20ms after match end for local-maximum detection, but reports only peaks inside the match.
 
@@ -31,7 +31,7 @@ struct AudioPeaks: ParsableCommand {
 
       CANDIDATES. Each detected peak is expanded by 0.5 seconds in both directions. Overlapping expanded ranges are united and clipped to the match. Peaks and merged ranges are only seek candidates for later source-video or contact-sheet analysis; they are never classified as KO, ping, announcement, or another event.
 
-      OUTPUT. Pretty-printed JSON containing the original peaks and merged candidate ranges is written to stdout.
+      OUTPUT. Pretty-printed JSON containing the original peaks and merged candidate ranges is always written to stdout. With --output, the identical complete JSON is also written atomically to the specified path after successful analysis. Existing output is rejected unless --force is supplied. Relative paths use the current working directory.
 
       COMPLETE OUTPUT EXAMPLE.
 
@@ -78,6 +78,12 @@ struct AudioPeaks: ParsableCommand {
 
   @Option(help: "Fixed linear input gain applied before power calculation.")
   var gain = 1.0
+
+  @Option(help: "JSON output path. The complete result is also written to stdout.")
+  var output: String?
+
+  @Flag(help: "Allow --output to replace an existing file atomically.")
+  var force = false
 
   func validate() throws {
     guard gain.isFinite, gain > 0 else {

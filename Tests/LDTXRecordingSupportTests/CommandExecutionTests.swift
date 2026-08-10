@@ -78,6 +78,61 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   }
 }
 
+@Test func audioPeaksParsesPersistentOutputOptions() throws {
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "audio-peaks", "--record-spec", "record-spec.json", "--output", "audio-peaks.json",
+    "--force",
+  ])
+  let command = try #require(parsed as? AudioPeaks)
+
+  #expect(command.output == "audio-peaks.json")
+  #expect(command.force)
+}
+
+@Test func prettyJSONOutputPreservesLargeArraysAndZeroResults() throws {
+  struct Output: Encodable {
+    let peaks: [Int]
+    let intervals: [Int]
+  }
+  let data = try prettyPrintedJSONData(
+    Output(peaks: Array(0..<10_000), intervals: []))
+  let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: [Int]])
+
+  #expect(object["peaks"] == Array(0..<10_000))
+  #expect(object["intervals"] == [])
+  #expect(data.last == 0x0A)
+}
+
+@Test func audioPeaksRejectsExistingOutputBeforeDecoding() async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "audio-peaks", "--record-spec", "missing.json", "--output", output.path,
+  ])
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try await executeCLI(parsed)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
+
+@Test func mcpAudioPeaksRejectsExistingOutputBeforeDecoding() async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "audio-peaks", "--record-spec", "missing.json", "--output", output.path,
+  ])
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try await executeForMCP(parsed)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
+
 @Test func jsonlOutputRequiresForceBeforeReplacingExistingFile() throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -122,6 +177,18 @@ func writingCommandsParseForceFlag(commandName: String) throws {
     try writeOutputData(Data("replacement\n".utf8), to: output, force: false)
   }
   #expect(try Data(contentsOf: output) == Data("raced\n".utf8))
+}
+
+@Test func dataOutputCreatesMissingParentDirectories() throws {
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("candidates/audio-peaks.json")
+  let expected = Data("complete\n".utf8)
+
+  try writeOutputData(expected, to: output, force: false)
+
+  #expect(try Data(contentsOf: output) == expected)
 }
 
 @Test(arguments: ["ocr", "scan-result"])
