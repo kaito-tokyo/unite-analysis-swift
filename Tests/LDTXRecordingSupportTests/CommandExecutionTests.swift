@@ -4,6 +4,7 @@
 
 import ArgumentParser
 import Foundation
+import MCP
 import Testing
 
 @testable import UniteAnalysisModelCommands
@@ -41,6 +42,43 @@ import Testing
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(["mcp"])
   #expect(parsed is MCPCommand)
   #expect(!(parsed is any AsyncParsableCommand))
+}
+
+@Test func mcpClipResultIncludesPlayableResourceLink() throws {
+  let clipURL = URL(fileURLWithPath: "/tmp/highlight clip.mp4")
+  let result = mcpToolResult("{\"records\":[]}", mediaURLs: [clipURL])
+  let data = try JSONEncoder().encode(result)
+  let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+  let content = try #require(object["content"] as? [[String: Any]])
+
+  #expect(content.count == 2)
+  #expect(content[0]["type"] as? String == "text")
+  #expect(content[1]["type"] as? String == "resource_link")
+  #expect(content[1]["uri"] as? String == clipURL.absoluteString)
+  #expect(content[1]["name"] as? String == "highlight clip.mp4")
+  #expect(content[1]["mimeType"] as? String == "video/mp4")
+}
+
+@Test func mcpMediaResourceStoreServesRegisteredClip() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+    UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let clipURL = directory.appendingPathComponent("highlight.mp4")
+  let clipData = Data([0, 1, 2, 3])
+  try clipData.write(to: clipURL)
+
+  let store = MCPMediaResourceStore()
+  await store.register([clipURL])
+  let resources = await store.resources()
+  let content = try await store.content(for: clipURL.absoluteString)
+
+  #expect(resources.count == 1)
+  #expect(resources[0].uri == clipURL.absoluteString)
+  #expect(resources[0].mimeType == "video/mp4")
+  #expect(content.uri == clipURL.absoluteString)
+  #expect(content.mimeType == "video/mp4")
+  #expect(content.blob == clipData.base64EncodedString())
 }
 
 @Test func mcpInterpretsBuiltInCLIOptionsBeforeParsingCommands() throws {

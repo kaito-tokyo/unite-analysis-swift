@@ -12,8 +12,19 @@ struct MCPCommand: ParsableCommand {
     abstract: "Run the native stdio MCP server.")
 }
 
-private func mcpToolResult(_ text: String, isError: Bool = false) -> CallTool.Result {
-  .init(content: [.text(text: text, annotations: nil, _meta: nil)], isError: isError)
+package func mcpToolResult(
+  _ text: String, mediaURLs: [URL] = [], isError: Bool = false
+) -> CallTool.Result {
+  let media = mediaURLs.map { url in
+    Tool.Content.resourceLink(
+      uri: url.absoluteString,
+      name: url.lastPathComponent,
+      description: "Generated playable video clip",
+      mimeType: "video/mp4")
+  }
+  return .init(
+    content: [.text(text: text, annotations: nil, _meta: nil)] + media,
+    isError: isError)
 }
 
 private func encodedObject<T: Encodable>(_ value: T) throws -> Any {
@@ -153,12 +164,48 @@ private actor MCPExecutionGate {
   }
 }
 
+private struct MCPCommandRunnerOutput: Sendable {
+  let text: String
+  let mediaURLs: [URL]
+}
+
+package actor MCPMediaResourceStore {
+  private var urlsByURI: [String: URL] = [:]
+
+  func register(_ urls: [URL]) {
+    for url in urls {
+      urlsByURI[url.absoluteString] = url
+    }
+  }
+
+  func resources() -> [Resource] {
+    urlsByURI.sorted { $0.key < $1.key }.map { uri, url in
+      Resource(
+        name: url.lastPathComponent,
+        uri: uri,
+        description: "Generated playable video clip",
+        mimeType: "video/mp4")
+    }
+  }
+
+  func content(for uri: String) throws -> Resource.Content {
+    guard let url = urlsByURI[uri] else {
+      throw MCPError.invalidParams("Unknown media resource: \(uri)")
+    }
+    do {
+      return try .binary(Data(contentsOf: url), uri: uri, mimeType: "video/mp4")
+    } catch {
+      throw MCPError.internalError("Could not read media resource: \(uri)")
+    }
+  }
+}
+
 private actor MCPCommandRunner {
   private let executionGate = MCPExecutionGate()
 
   func run(
     arguments: [String], currentDirectory: String?, standardInput: String?
-  ) async throws -> String {
+  ) async throws -> MCPCommandRunnerOutput {
     await executionGate.acquire()
     do {
       let result = try await runExclusively(
@@ -173,7 +220,7 @@ private actor MCPCommandRunner {
 
   private func runExclusively(
     arguments: [String], currentDirectory: String?, standardInput: String?
-  ) async throws -> String {
+  ) async throws -> MCPCommandRunnerOutput {
     let originalDirectory = FileManager.default.currentDirectoryPath
     if let currentDirectory {
       var isDirectory: ObjCBool = false
@@ -187,7 +234,7 @@ private actor MCPCommandRunner {
     defer { _ = FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
 
     if let output = try builtInMCPOutput(arguments: arguments) {
-      return output
+      return MCPCommandRunnerOutput(text: output, mediaURLs: [])
     }
 
     var parsedArguments = arguments
@@ -224,16 +271,24 @@ private actor MCPCommandRunner {
     let records = try await executeForMCP(command)
     let data = try JSONSerialization.data(
       withJSONObject: ["records": records], options: [.sortedKeys])
-    return String(decoding: data, as: UTF8.self)
+    let mediaURLs: [URL]
+    if let extractClip = command as? ExtractClip {
+      mediaURLs = [resolvePath(extractClip.output)]
+    } else {
+      mediaURLs = []
+    }
+    return MCPCommandRunnerOutput(
+      text: String(decoding: data, as: UTF8.self), mediaURLs: mediaURLs)
   }
 }
 
 func executeMCPServer() async throws {
   let runner = MCPCommandRunner()
+  let mediaResources = MCPMediaResourceStore()
   let server = Server(
     name: "unite-analysis-swift",
     version: UniteAnalysisSwiftCommand.configuration.version,
-    capabilities: .init(tools: .init()))
+    capabilities: .init(resources: .init(), tools: .init()))
 
   await server.withMethodHandler(ListTools.self) { _ in
     .init(tools: [
@@ -270,10 +325,19 @@ func executeMCPServer() async throws {
         arguments: values.compactMap(\.stringValue),
         currentDirectory: request.arguments?["currentDirectory"]?.stringValue,
         standardInput: request.arguments?["standardInput"]?.stringValue)
-      return mcpToolResult(result)
+      await mediaResources.register(result.mediaURLs)
+      return mcpToolResult(result.text, mediaURLs: result.mediaURLs)
     } catch {
       return mcpToolResult(String(describing: error), isError: true)
     }
+  }
+
+  await server.withMethodHandler(ListResources.self) { _ in
+    .init(resources: await mediaResources.resources())
+  }
+
+  await server.withMethodHandler(ReadResource.self) { request in
+    .init(contents: [try await mediaResources.content(for: request.uri)])
   }
 
   let transport = StdioTransport()
