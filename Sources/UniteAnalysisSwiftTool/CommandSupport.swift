@@ -52,7 +52,7 @@ enum Scene {
   case afterEnd(Double)
 }
 
-private struct AnyCodingKey: CodingKey {
+struct AnyCodingKey: CodingKey {
   let stringValue: String
   let intValue: Int?
 
@@ -67,7 +67,7 @@ private struct AnyCodingKey: CodingKey {
   }
 }
 
-private func rejectUnknownKeys(
+func rejectUnknownKeys(
   from decoder: Decoder, allowedKeys: Set<String>, context: String
 ) throws {
   let container = try decoder.container(keyedBy: AnyCodingKey.self)
