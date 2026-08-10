@@ -45,3 +45,20 @@ private func reviewSkillText(_ relativePath: String) throws -> String {
   #expect(skill.contains("押し出し、行動不能、瞬間火力、進入阻止"))
   #expect(skill.contains("### この対話契約の非目標"))
 }
+
+@Test func allyReactionWindowsRequireFeasibilityAndRevision() throws {
+  let skill = try reviewSkillText("SKILL.md")
+  let model = try reviewSkillText("references/reaction-windows.md")
+
+  #expect(skill.contains("任意の[味方の反応窓]"))
+  #expect(model.contains("使わなかった"))
+  #expect(model.contains("使えなかった"))
+  #expect(model.contains("視覚的に明瞭な形で使った"))
+  #expect(model.contains("視覚的に不明瞭な形で使った"))
+  #expect(model.contains("決定的な制約が確認できる"))
+  #expect(model.contains("対応行動を取らなかったことを継続して観察できる"))
+  #expect(model.contains("行動の可視性が不足"))
+  #expect(model.contains("責任、消極性、判断ミスを味方へ帰属させない"))
+  #expect(model.contains("最初の視覚分類と因果説明を更新する"))
+  #expect(model.contains("通常の試合振り返りに必須とせず"))
+}
