@@ -344,6 +344,38 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(battleMask.bytes[centerOffset] == 255)
 }
 
+@Test func preparedDiagnosticImageFailuresUpdateAndClearMatcherError() throws {
+  let database = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    .appendingPathComponent("Contents/Resources/descriptors.pb")
+  let matcher = unite_analysis.IconMatcher(std.string(database.path))
+
+  let invalid = matcher.prepareHeldBGR(nil, 0, 0, 0, 0, 0.40)
+  #expect(!invalid.isValid())
+  #expect(swiftString(from: matcher.errorMessage()) == "invalid held-item preparation input")
+
+  let pixels = [UInt8](repeating: 255, count: 48 * 48 * 3)
+  let input = try BGRImage(width: 48, height: 48, bytesPerRow: 48 * 3, bytes: pixels)
+  _ = try matcher.preparedHeldImage(input)
+  #expect(swiftString(from: matcher.errorMessage()).isEmpty)
+}
+
+@Test func diagnosticOutputsPreflightEveryGeneratedPath() throws {
+  let directory = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let collision = directory.appendingPathComponent("ally-3-battle-mask.png")
+  try Data("existing".utf8).write(to: collision)
+
+  #expect(throws: Error.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: false)
+  }
+  #expect(try Data(contentsOf: collision) == Data("existing".utf8))
+  #expect(throws: Never.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: true)
+  }
+}
+
 @Test func normalizesDeclaredGameScreenComponent() throws {
   let context = try #require(
     CGContext(

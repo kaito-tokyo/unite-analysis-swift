@@ -200,17 +200,10 @@ package func normalizedGameScreen(
 
 private func writeLoadout(
   _ document: LoadoutOutputDocument,
-  defaultName: String,
-  outputDirectory: URL,
-  output: String?,
+  to outputURL: URL,
   force: Bool
 ) throws -> String {
-  let outputURL =
-    output.map(resolvePath)
-    ?? outputDirectory.appendingPathComponent(defaultName)
-  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw ValidationError("Output exists: \(outputURL.path). Pass --force to overwrite")
-  }
+  try validateOutputPath(outputURL, force: force)
   try FileManager.default.createDirectory(
     at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
   let encoder = JSONEncoder()
@@ -223,16 +216,17 @@ private func writeLoadout(
 }
 
 private func writeAKAZEInput(
-  _ input: PreparedAKAZEInput, named name: String, to directory: URL
+  _ input: PreparedAKAZEInput, named name: String, to directory: URL, force: Bool
 ) throws {
-  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-  try writeDiagnosticPNG(input.image, to: directory.appendingPathComponent(name))
+  try writeDiagnosticPNG(
+    input.image, to: directory.appendingPathComponent(name), force: force)
   if let mask = input.mask {
-    try writeDiagnosticPNG(mask, to: directory.appendingPathComponent("\(name)-mask"))
+    try writeDiagnosticPNG(
+      mask, to: directory.appendingPathComponent("\(name)-mask"), force: force)
   }
 }
 
-private func writeDiagnosticPNG(_ image: BGRImage, to path: URL) throws {
+private func writeDiagnosticPNG(_ image: BGRImage, to path: URL, force: Bool) throws {
   var rgba = [UInt8]()
   rgba.reserveCapacity(image.width * image.height * 4)
   for y in 0..<image.height {
@@ -255,9 +249,10 @@ private func writeDiagnosticPNG(_ image: BGRImage, to path: URL) throws {
     throw ValidationError("Could not create AKAZE diagnostic image")
   }
   let url = path.appendingPathExtension("png")
+  let encoded = NSMutableData()
   guard
-    let destination = CGImageDestinationCreateWithURL(
-      url as CFURL, UTType.png.identifier as CFString, 1, nil)
+    let destination = CGImageDestinationCreateWithData(
+      encoded, UTType.png.identifier as CFString, 1, nil)
   else {
     throw ValidationError("Could not create AKAZE diagnostic output: \(url.path)")
   }
@@ -265,6 +260,40 @@ private func writeDiagnosticPNG(_ image: BGRImage, to path: URL) throws {
   guard CGImageDestinationFinalize(destination) else {
     throw ValidationError("Could not write AKAZE diagnostic output: \(url.path)")
   }
+  try writeOutputData(encoded as Data, to: url, force: force)
+}
+
+private func loadoutOutputURL(
+  defaultName: String, outputDirectory: URL, output: String?
+) -> URL {
+  output.map(resolvePath) ?? outputDirectory.appendingPathComponent(defaultName)
+}
+
+private func diagnosticNames(matchFormat: String) -> [String] {
+  let allyHeld = (1...5).flatMap { player in
+    (1...3).map { item in "ally-\(player)-held-\(item)" }
+  }
+  let allyBattle = (1...5).flatMap { player in
+    ["ally-\(player)-battle", "ally-\(player)-battle-mask"]
+  }
+  let enemyBattle =
+    matchFormat == "draft"
+    ? (1...5).flatMap { player in
+      ["enemy-\(player)-battle", "enemy-\(player)-battle-mask"]
+    } : []
+  return allyHeld + allyBattle + enemyBattle
+}
+
+package func prepareDiagnosticDirectory(
+  _ directory: URL?, matchFormat: String, force: Bool
+) throws {
+  guard let directory else { return }
+  for name in diagnosticNames(matchFormat: matchFormat) {
+    try validateOutputPath(
+      directory.appendingPathComponent(name).appendingPathExtension("png"),
+      force: force)
+  }
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 }
 
 struct RecognizeDraftLoadout: ParsableCommand {
@@ -276,7 +305,7 @@ struct RecognizeDraftLoadout: ParsableCommand {
 
       Select draft mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, times are relative to match start. With --input for a v1 .ldtxrecord, times use the recording timeline. Use the last stable final-preparation frame, not an intermediate edited loadout. The versus frame supplies enemy battle items; enemy held items are never inferred.
 
-      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score; candidates and the top score remain available when recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
+      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score. A player's held-item names also become null when independently accepted slots select the same item, because duplicate held items are invalid. Candidates and the top score remain available whenever recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
   @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
@@ -312,13 +341,20 @@ extension RecognizeDraftLoadout {
         matchTimes: [command.finalPreparationTime, command.versusTime])
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
+      let outputURL = loadoutOutputURL(
+        defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
+        output: command.output)
+      let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      try validateOutputPath(outputURL, force: command.force)
+      try prepareDiagnosticDirectory(
+        diagnosticDirectory, matchFormat: "draft", force: command.force)
       let result = try LoadoutRecognizer.recognizeDraft(
         finalPreparation: inputs.frames[0].image, versus: inputs.frames[1].image,
         matcher: matcher,
-        akazeInputObserver: command.dumpAKAZEInputs.map { path in
-          let directory = resolvePath(path)
-          return { name, image in
-            try writeAKAZEInput(image, named: name, to: directory)
+        akazeInputObserver: diagnosticDirectory.map { directory in
+          return { name, input in
+            try writeAKAZEInput(
+              input, named: name, to: directory, force: command.force)
           }
         })
       let output = try writeLoadout(
@@ -331,8 +367,7 @@ extension RecognizeDraftLoadout {
           prepPresentationTime: nil,
           timeBasis: command.recordSpec == nil ? "recording-timeline" : "match-relative",
           recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
-        defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
-        output: command.output, force: command.force)
+        to: outputURL, force: command.force)
       continuation.yield(.init(output: output))
     }
   }
@@ -348,7 +383,7 @@ struct RecognizeBlindLoadout: ParsableCommand {
 
       Select blind mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, --prep-time is relative to match start. With --input for a v1 .ldtxrecord, it uses the recording timeline. The time must identify the stable five-card selection screen. Enemy loadouts are absent because this screen does not expose them.
 
-      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score; candidates and the top score remain available when recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
+      RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score. A player's held-item names also become null when independently accepted slots select the same item, because duplicate held items are invalid. Candidates and the top score remain available whenever recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
   @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
@@ -378,12 +413,19 @@ extension RecognizeBlindLoadout {
         recordSpec: command.recordSpec, input: command.input, matchTimes: [command.prepTime])
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
+      let outputURL = loadoutOutputURL(
+        defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
+        output: command.output)
+      let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      try validateOutputPath(outputURL, force: command.force)
+      try prepareDiagnosticDirectory(
+        diagnosticDirectory, matchFormat: "blind", force: command.force)
       let result = try LoadoutRecognizer.recognizeBlind(
         preparation: inputs.frames[0].image, matcher: matcher,
-        akazeInputObserver: command.dumpAKAZEInputs.map { path in
-          let directory = resolvePath(path)
-          return { name, image in
-            try writeAKAZEInput(image, named: name, to: directory)
+        akazeInputObserver: diagnosticDirectory.map { directory in
+          return { name, input in
+            try writeAKAZEInput(
+              input, named: name, to: directory, force: command.force)
           }
         })
       let output = try writeLoadout(
@@ -394,8 +436,7 @@ extension RecognizeBlindLoadout {
           prepPresentationTime: inputs.frames[0].presentationTime,
           timeBasis: command.recordSpec == nil ? "recording-timeline" : "match-relative",
           recognizer: .init(matcher: matcher), allies: result.allies, enemies: result.enemies),
-        defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
-        output: command.output, force: command.force)
+        to: outputURL, force: command.force)
       continuation.yield(.init(output: output))
     }
   }

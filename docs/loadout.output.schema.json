@@ -152,7 +152,7 @@
             "string",
             "null"
           ],
-          "description": "Top candidate name, or null when evidence is below one vote or the top score is less than twice the runner-up score."
+          "description": "Top candidate name, or null when evidence is below one vote, the top score is less than twice the runner-up score, or an allied player's independently accepted held-item slots select the same item."
         },
         "score": {
           "type": [

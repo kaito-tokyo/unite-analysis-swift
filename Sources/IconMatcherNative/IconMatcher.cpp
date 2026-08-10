@@ -951,12 +951,14 @@ PreparedIconImage IconMatcher::prepareHeldBGR(
     if (!isValid()) {
       return PreparedIconImage(std::move(value));
     }
+    implementation_->operationError.clear();
     const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
     const auto prepared = prepareHeldImage(
         source,
         static_cast<int>(implementation_->message.akaze.imageHeight),
         radiusFraction);
     if (prepared.empty() || !prepared.isContinuous()) {
+      implementation_->operationError = "invalid held-item preparation input";
       return PreparedIconImage(std::move(value));
     }
     value->width = static_cast<std::uint32_t>(prepared.cols);
@@ -965,9 +967,16 @@ PreparedIconImage IconMatcher::prepareHeldBGR(
         prepared.ptr<std::uint8_t>(),
         prepared.ptr<std::uint8_t>() + prepared.total() * prepared.elemSize());
     return PreparedIconImage(std::move(value));
+  } catch (const std::exception &error) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, error.what());
+    }
   } catch (...) {
-    return PreparedIconImage(nullptr);
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, "unknown held-item preparation error");
+    }
   }
+  return PreparedIconImage(nullptr);
 }
 
 PreparedIconImage IconMatcher::prepareBattleBGR(
@@ -981,10 +990,12 @@ PreparedIconImage IconMatcher::prepareBattleBGR(
     if (!isValid()) {
       return PreparedIconImage(std::move(value));
     }
+    implementation_->operationError.clear();
     const auto source = inputBGR(bytes, byteCount, width, height, bytesPerRow);
     const auto prepared = prepareBattleImage(
         source, static_cast<int>(implementation_->message.akaze.imageHeight));
     if (prepared.empty() || !prepared.isContinuous()) {
+      implementation_->operationError = "invalid battle-item preparation input";
       return PreparedIconImage(std::move(value));
     }
     value->width = static_cast<std::uint32_t>(prepared.cols);
@@ -996,9 +1007,16 @@ PreparedIconImage IconMatcher::prepareBattleBGR(
     value->mask.assign(
         mask.ptr<std::uint8_t>(), mask.ptr<std::uint8_t>() + mask.total());
     return PreparedIconImage(std::move(value));
+  } catch (const std::exception &error) {
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, error.what());
+    }
   } catch (...) {
-    return PreparedIconImage(nullptr);
+    if (implementation_ != nullptr) {
+      setError(implementation_->operationError, "unknown battle-item preparation error");
+    }
   }
+  return PreparedIconImage(nullptr);
 }
 
 }  // namespace unite_analysis
