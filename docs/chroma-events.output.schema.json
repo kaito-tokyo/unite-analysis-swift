@@ -81,7 +81,8 @@
         },
         "score": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Maximum of the independently computed Cb and Cr Otsu thresholds for this adjacent JPEG pair; it is comparable only within the same sampled region and run."
         },
         "cbThreshold": {
           "type": "integer",

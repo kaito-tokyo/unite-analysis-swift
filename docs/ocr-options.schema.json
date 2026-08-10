@@ -3,6 +3,7 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json",
   "title": "unite-analysis-swift named OCR region options",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "$schema"
   ],

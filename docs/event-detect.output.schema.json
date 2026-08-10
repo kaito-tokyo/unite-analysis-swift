@@ -76,7 +76,8 @@
         },
         "score": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Source-native nonnegative ranking score for audio or chroma constituents; omitted for OCR and scheduled constituents. Scores from different sources or chroma regions are not comparable."
         },
         "value": {
           "type": "string"
@@ -84,7 +85,8 @@
         "confidence": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "Apple Vision recognition confidence for OCR constituents, from 0 through 1; omitted for audio, chroma, and scheduled constituents."
         }
       }
     }

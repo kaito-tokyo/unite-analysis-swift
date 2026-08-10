@@ -7,12 +7,27 @@ import CoreGraphics
 import Foundation
 import ResultScannerSupport
 
-private struct OCRJob: Decodable {
+struct OCRJob: Decodable {
   let jobId: String
   let input: String
   let source: FrameSource
   let region: String
   let type: OCRInputType
+
+  private enum CodingKeys: String, CodingKey, CaseIterable {
+    case jobId, input, source, region, type
+  }
+
+  init(from decoder: Decoder) throws {
+    try rejectUnknownKeys(
+      from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)), context: "OCR job")
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    jobId = try container.decode(String.self, forKey: .jobId)
+    input = try container.decode(String.self, forKey: .input)
+    source = try container.decode(FrameSource.self, forKey: .source)
+    region = try container.decode(String.self, forKey: .region)
+    type = try container.decode(OCRInputType.self, forKey: .type)
+  }
 
   func validate() throws {
     guard !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

@@ -46,19 +46,83 @@ public enum RecordVisionInputLogger {
   }
 }
 
+private struct ContactSheetAnyCodingKey: CodingKey {
+  let stringValue: String
+  let intValue: Int?
+
+  init?(stringValue: String) {
+    self.stringValue = stringValue
+    intValue = nil
+  }
+
+  init?(intValue: Int) {
+    stringValue = String(intValue)
+    self.intValue = intValue
+  }
+}
+
+private func rejectUnknownContactSheetKeys(
+  from decoder: Decoder, allowedKeys: Set<String>, context: String
+) throws {
+  let container = try decoder.container(keyedBy: ContactSheetAnyCodingKey.self)
+  let unknownKeys = Set(container.allKeys.map(\.stringValue)).subtracting(allowedKeys)
+  guard unknownKeys.isEmpty else {
+    throw DecodingError.dataCorrupted(
+      .init(
+        codingPath: decoder.codingPath,
+        debugDescription: "Unknown \(context) keys: \(unknownKeys.sorted().joined(separator: ", "))"
+      ))
+  }
+}
+
 public struct ContactSheetDefinition: Codable {
   public struct Size: Codable {
     public let width: Int
     public let height: Int
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case width, height }
+
+    public init(from decoder: Decoder) throws {
+      try rejectUnknownContactSheetKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)), context: "size")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      width = try container.decode(Int.self, forKey: .width)
+      height = try container.decode(Int.self, forKey: .height)
+    }
   }
   public struct Rectangle: Codable {
     public let x: Int
     public let y: Int
     public let width: Int
     public let height: Int
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case x, y, width, height }
+
+    public init(from decoder: Decoder) throws {
+      try rejectUnknownContactSheetKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+        context: "rectangle")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      x = try container.decode(Int.self, forKey: .x)
+      y = try container.decode(Int.self, forKey: .y)
+      width = try container.decode(Int.self, forKey: .width)
+      height = try container.decode(Int.self, forKey: .height)
+    }
   }
   public struct Text: Codable {
-    public struct Script: Codable { public let `return`: String }
+    public struct Script: Codable {
+      public let `return`: String
+
+      private enum CodingKeys: String, CodingKey, CaseIterable { case `return` }
+
+      public init(from decoder: Decoder) throws {
+        try rejectUnknownContactSheetKeys(
+          from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+          context: "draw-text script")
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        `return` = try container.decode(String.self, forKey: .return)
+      }
+    }
     public let text: String?
     public let script: Script?
     public let x: Int
@@ -68,11 +132,43 @@ public struct ContactSheetDefinition: Codable {
     public let backgroundColor: String?
     public let borderColor: String?
     public let fontName: String?
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+      case text, script, x, y, fontSize, color, backgroundColor, borderColor, fontName
+    }
+
+    public init(from decoder: Decoder) throws {
+      try rejectUnknownContactSheetKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+        context: "draw-text")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      text = try container.decodeIfPresent(String.self, forKey: .text)
+      script = try container.decodeIfPresent(Script.self, forKey: .script)
+      x = try container.decode(Int.self, forKey: .x)
+      y = try container.decode(Int.self, forKey: .y)
+      fontSize = try container.decode(Double.self, forKey: .fontSize)
+      color = try container.decodeIfPresent(String.self, forKey: .color)
+      backgroundColor = try container.decodeIfPresent(String.self, forKey: .backgroundColor)
+      borderColor = try container.decodeIfPresent(String.self, forKey: .borderColor)
+      fontName = try container.decodeIfPresent(String.self, forKey: .fontName)
+    }
   }
   public struct Placement: Codable {
     public let source: Rectangle?
     public let destination: Rectangle?
     public let drawText: Text?
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case source, destination, drawText }
+
+    public init(from decoder: Decoder) throws {
+      try rejectUnknownContactSheetKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+        context: "placement")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      source = try container.decodeIfPresent(Rectangle.self, forKey: .source)
+      destination = try container.decodeIfPresent(Rectangle.self, forKey: .destination)
+      drawText = try container.decodeIfPresent(Text.self, forKey: .drawText)
+    }
   }
   public let cell: Size
   public let columns: Int
@@ -84,11 +180,14 @@ public struct ContactSheetDefinition: Codable {
   /// Required by the command-line jobs interface; ignored by the renderer itself.
   public let output: String?
 
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case jobId, cell, columns, backgroundColor, placements, matchTimestamps, output, frames
   }
 
   public init(from decoder: Decoder) throws {
+    try rejectUnknownContactSheetKeys(
+      from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+      context: "contact-sheet")
     let container = try decoder.container(keyedBy: CodingKeys.self)
     if container.contains(.frames) {
       throw DecodingError.dataCorruptedError(

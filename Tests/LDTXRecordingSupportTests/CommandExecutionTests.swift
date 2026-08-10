@@ -5,6 +5,7 @@
 import ArgumentParser
 import Foundation
 import MCP
+import RecordVisionSupport
 import Testing
 
 @testable import UniteAnalysisModelCommands
@@ -29,6 +30,75 @@ import Testing
   let record = try #require(records.first)
   #expect(records.count == 1)
   #expect(String(decoding: record.data, as: UTF8.self).contains("publication.schema.json"))
+}
+
+@Test(arguments: [
+  #"{"jobId":"job","matchTimestamps":[0],"source":{"x":0,"y":0,"width":1,"height":1},"outputPrefix":"frame","extra":true}"#,
+  #"{"jobId":"job","matchTimestamps":[0],"source":{"x":0,"y":0,"width":1,"height":1,"extra":true},"outputPrefix":"frame"}"#,
+])
+func batchFrameJobRejectsUnknownKeys(json: String) {
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(BatchFrameJob.self, from: Data(json.utf8))
+  }
+}
+
+@Test func contactSheetDefinitionRejectsUnknownKeys() {
+  let documents = [
+    #"{"cell":{"width":1,"height":1},"columns":1,"placements":[],"matchTimestamps":[0],"extra":true}"#,
+    #"{"cell":{"width":1,"height":1,"extra":true},"columns":1,"placements":[],"matchTimestamps":[0]}"#,
+    #"{"cell":{"width":1,"height":1},"columns":1,"placements":[{"drawText":{"text":"x","x":0,"y":0,"fontSize":1,"extra":true}}],"matchTimestamps":[0]}"#,
+  ]
+  for document in documents {
+    #expect(throws: DecodingError.self) {
+      _ = try JSONDecoder().decode(ContactSheetDefinition.self, from: Data(document.utf8))
+    }
+  }
+}
+
+@Test func frameBurstJobRejectsUnknownTopLevelKey() {
+  let data = Data(
+    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"columns":1,"cellWidth":1,"output":"out.jpg","extra":true}"#
+      .utf8
+  )
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(FrameBurstJob.self, from: data)
+  }
+}
+
+@Test func ocrJobRejectsUnknownTopLevelKey() {
+  let data = Data(
+    #"{"jobId":"job","input":"in.jpg","source":{"x":0,"y":0,"width":1,"height":1},"region":"test","type":"generic","extra":true}"#
+      .utf8
+  )
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(OCRJob.self, from: data)
+  }
+}
+
+@Test func eventDetectManifestRejectsUnknownKeys() {
+  let documents = [
+    #"{"audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[],"extra":true}"#,
+    #"{"audioPeaks":"audio.json","chromaEvents":[{"region":"top","path":"chroma.json","extra":true}],"ocrCandidates":[],"scheduledCandidates":[]}"#,
+    #"{"audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[{"region":"score","inmatch":1,"value":"1","confidence":1,"extra":true}],"scheduledCandidates":[]}"#,
+    #"{"audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[{"inmatch":1,"label":"goal","extra":true}]}"#,
+  ]
+  for document in documents {
+    #expect(throws: DecodingError.self) {
+      _ = try JSONDecoder().decode(EventDetectManifest.self, from: Data(document.utf8))
+    }
+  }
+}
+
+@Test func eventDetectManifestAcceptsAndValidatesSchemaURL() throws {
+  let valid =
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json","audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[]}"#
+  _ = try JSONDecoder().decode(EventDetectManifest.self, from: Data(valid.utf8))
+
+  let invalid =
+    #"{"$schema":"https://example.com/wrong.json","audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[]}"#
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(EventDetectManifest.self, from: Data(invalid.utf8))
+  }
 }
 
 @Test func modelParserReturnsTypedCommandWithoutRunningIt() throws {

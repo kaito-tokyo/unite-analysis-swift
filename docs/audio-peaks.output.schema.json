@@ -66,7 +66,8 @@
         },
         "score": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Nonnegative fixed-window audio power-rise score after applying gain; it ranks peaks within this analysis and is not an event probability."
         }
       }
     },

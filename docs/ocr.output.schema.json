@@ -84,7 +84,8 @@
         "confidence": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "Apple Vision recognition confidence for the raw text observation, from 0 through 1."
         },
         "box": {
           "$ref": "#/$defs/box"

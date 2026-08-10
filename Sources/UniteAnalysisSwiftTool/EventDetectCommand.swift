@@ -49,14 +49,75 @@ struct EventDetect: ParsableCommand {
 }
 
 struct EventDetectManifest: Codable, Equatable, Sendable {
+  static let schemaURL =
+    "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json"
+
   let audioPeaks: String
   let chromaEvents: [ChromaInput]
   let ocrCandidates: [OCRCandidate]
   let scheduledCandidates: [ScheduledCandidate]
 
+  private enum CodingKeys: String, CodingKey, CaseIterable {
+    case schema = "$schema"
+    case audioPeaks, chromaEvents, ocrCandidates, scheduledCandidates
+  }
+
+  init(
+    audioPeaks: String, chromaEvents: [ChromaInput], ocrCandidates: [OCRCandidate],
+    scheduledCandidates: [ScheduledCandidate]
+  ) {
+    self.audioPeaks = audioPeaks
+    self.chromaEvents = chromaEvents
+    self.ocrCandidates = ocrCandidates
+    self.scheduledCandidates = scheduledCandidates
+  }
+
+  init(from decoder: Decoder) throws {
+    try rejectUnknownKeys(
+      from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+      context: "event-detect manifest")
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    if let schema = try container.decodeIfPresent(String.self, forKey: .schema),
+      schema != Self.schemaURL
+    {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schema, in: container,
+        debugDescription: "$schema must equal \(Self.schemaURL)")
+    }
+    audioPeaks = try container.decode(String.self, forKey: .audioPeaks)
+    chromaEvents = try container.decode([ChromaInput].self, forKey: .chromaEvents)
+    ocrCandidates = try container.decode([OCRCandidate].self, forKey: .ocrCandidates)
+    scheduledCandidates = try container.decode(
+      [ScheduledCandidate].self, forKey: .scheduledCandidates)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(audioPeaks, forKey: .audioPeaks)
+    try container.encode(chromaEvents, forKey: .chromaEvents)
+    try container.encode(ocrCandidates, forKey: .ocrCandidates)
+    try container.encode(scheduledCandidates, forKey: .scheduledCandidates)
+  }
+
   struct ChromaInput: Codable, Equatable, Sendable {
     let region: String
     let path: String
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case region, path }
+
+    init(region: String, path: String) {
+      self.region = region
+      self.path = path
+    }
+
+    init(from decoder: Decoder) throws {
+      try rejectUnknownKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+        context: "event-detect chroma input")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      region = try container.decode(String.self, forKey: .region)
+      path = try container.decode(String.self, forKey: .path)
+    }
   }
 
   struct OCRCandidate: Codable, Equatable, Sendable {
@@ -64,11 +125,49 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
     let inmatch: Double
     let value: String
     let confidence: Double
+
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+      case region, inmatch, value, confidence
+    }
+
+    init(region: String, inmatch: Double, value: String, confidence: Double) {
+      self.region = region
+      self.inmatch = inmatch
+      self.value = value
+      self.confidence = confidence
+    }
+
+    init(from decoder: Decoder) throws {
+      try rejectUnknownKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+        context: "event-detect OCR candidate")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      region = try container.decode(String.self, forKey: .region)
+      inmatch = try container.decode(Double.self, forKey: .inmatch)
+      value = try container.decode(String.self, forKey: .value)
+      confidence = try container.decode(Double.self, forKey: .confidence)
+    }
   }
 
   struct ScheduledCandidate: Codable, Equatable, Sendable {
     let inmatch: Double
     let label: String
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case inmatch, label }
+
+    init(inmatch: Double, label: String) {
+      self.inmatch = inmatch
+      self.label = label
+    }
+
+    init(from decoder: Decoder) throws {
+      try rejectUnknownKeys(
+        from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+        context: "event-detect scheduled candidate")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      inmatch = try container.decode(Double.self, forKey: .inmatch)
+      label = try container.decode(String.self, forKey: .label)
+    }
   }
 }
 

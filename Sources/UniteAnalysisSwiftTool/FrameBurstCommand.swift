@@ -9,7 +9,7 @@ import Foundation
 import LDTXRecordingSupport
 import RecordVisionSupport
 
-private struct FrameBurstJob: Decodable {
+struct FrameBurstJob: Decodable {
   static let maximumOutputDimension = 32_768
   static let maximumOutputPixels = 64_000_000
   static let maximumFrameCount = 600
@@ -22,6 +22,25 @@ private struct FrameBurstJob: Decodable {
   let columns: Int
   let cellWidth: Int
   let output: String
+
+  private enum CodingKeys: String, CodingKey, CaseIterable {
+    case jobId, matchTimestamp, source, frameCount, decimate, columns, cellWidth, output
+  }
+
+  init(from decoder: Decoder) throws {
+    try rejectUnknownKeys(
+      from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
+      context: "frame-burst")
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    jobId = try container.decode(String.self, forKey: .jobId)
+    matchTimestamp = try container.decode(Double.self, forKey: .matchTimestamp)
+    source = try container.decode(FrameSource.self, forKey: .source)
+    frameCount = try container.decode(Int.self, forKey: .frameCount)
+    decimate = try container.decodeIfPresent(Int.self, forKey: .decimate)
+    columns = try container.decode(Int.self, forKey: .columns)
+    cellWidth = try container.decode(Int.self, forKey: .cellWidth)
+    output = try container.decode(String.self, forKey: .output)
+  }
 
   var decimation: Int { decimate ?? 1 }
 

@@ -3,6 +3,7 @@
   "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
   "title": "ポケモンユナイト match publication state",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "$schema",
     "schemaVersion",
@@ -29,6 +30,7 @@
   "$defs": {
     "filePublication": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "lastRelativePath",
         "syncedAt",
@@ -51,6 +53,7 @@
     },
     "googleDrivePublication": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "documentId",
         "lastRelativePath",

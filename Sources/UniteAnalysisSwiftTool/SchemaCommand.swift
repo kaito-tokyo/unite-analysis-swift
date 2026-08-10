@@ -72,6 +72,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json",
       "title": "unite-analysis-swift event-detect input",
       "type": "object",
+      "additionalProperties": false,
       "required": ["audioPeaks", "chromaEvents", "ocrCandidates", "scheduledCandidates"],
       "properties": {
         "$schema": { "const": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json" },
@@ -83,6 +84,7 @@ package enum EmbeddedSchemas {
       "$defs": {
         "chromaInput": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["region", "path"],
           "properties": {
             "region": { "type": "string", "minLength": 1 },
@@ -91,16 +93,23 @@ package enum EmbeddedSchemas {
         },
         "ocrCandidate": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["region", "inmatch", "value", "confidence"],
           "properties": {
             "region": { "type": "string", "minLength": 1 },
             "inmatch": { "type": "number", "minimum": 0 },
             "value": { "type": "string" },
-            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Apple Vision recognition confidence for this OCR observation, from 0 through 1."
+            }
           }
         },
         "scheduledCandidate": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["inmatch", "label"],
           "properties": {
             "inmatch": { "type": "number", "minimum": 0 },
@@ -140,9 +149,18 @@ package enum EmbeddedSchemas {
           "properties": {
             "source": { "type": "string", "pattern": "^(audio|scheduled|chroma:.+|ocr:.+)$" },
             "inmatch": { "type": "number", "minimum": 0 },
-            "score": { "type": "number", "minimum": 0 },
+            "score": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Source-native nonnegative ranking score for audio or chroma constituents; omitted for OCR and scheduled constituents. Scores from different sources or chroma regions are not comparable."
+            },
             "value": { "type": "string" },
-            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Apple Vision recognition confidence for OCR constituents, from 0 through 1; omitted for audio, chroma, and scheduled constituents."
+            }
           }
         }
       }
@@ -154,6 +172,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.schema.json",
       "title": "unite-analysis-swift frame burst job",
       "type": "object",
+      "additionalProperties": false,
       "required": ["jobId", "matchTimestamp", "source", "frameCount", "columns", "cellWidth", "output"],
       "properties": {
         "jobId": { "type": "string", "minLength": 1, "pattern": "\\S" },
@@ -168,6 +187,7 @@ package enum EmbeddedSchemas {
       "$defs": {
         "rectangle": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["x", "y", "width", "height"],
           "properties": {
             "x": { "type": "integer", "minimum": 0 },
@@ -322,6 +342,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/publication.schema.json",
       "title": "ポケモンユナイト match publication state",
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "$schema",
         "schemaVersion",
@@ -348,6 +369,7 @@ package enum EmbeddedSchemas {
       "$defs": {
         "filePublication": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "lastRelativePath",
             "syncedAt",
@@ -370,6 +392,7 @@ package enum EmbeddedSchemas {
         },
         "googleDrivePublication": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "documentId",
             "lastRelativePath",
@@ -458,7 +481,12 @@ package enum EmbeddedSchemas {
           "required": ["text", "confidence", "box"],
           "properties": {
             "text": { "type": "string" },
-            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Apple Vision recognition confidence for the raw text observation, from 0 through 1."
+            },
             "box": { "$ref": "#/$defs/box" }
           }
         },
@@ -467,7 +495,12 @@ package enum EmbeddedSchemas {
           "required": ["alternatives", "inferred"],
           "properties": {
             "text": { "type": "string" },
-            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Maximum Apple Vision recognition confidence across all observations in the cell crop, from 0 through 1; it may belong to a different observation than the selected text and is omitted when unavailable or inferred."
+            },
             "alternatives": { "type": "array", "items": { "type": "string" } },
             "inferred": {
               "type": "boolean",
@@ -505,7 +538,10 @@ package enum EmbeddedSchemas {
           "required": ["kind", "detectionScore", "rawText"],
           "properties": {
             "kind": { "enum": ["summary", "battleData"] },
-            "detectionScore": { "type": "integer" },
+            "detectionScore": {
+              "type": "integer",
+              "description": "Unnormalized screen-layout evidence score from recognized keywords and numeric-token count; it is diagnostic and not a probability."
+            },
             "rawText": { "type": "array", "items": { "$ref": "#/$defs/observation" } },
             "battleData": {
               "type": "array",
@@ -586,7 +622,8 @@ package enum EmbeddedSchemas {
             },
             "score": {
               "type": "number",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Nonnegative fixed-window audio power-rise score after applying gain; it ranks peaks within this analysis and is not an event probability."
             }
           }
         },
@@ -638,6 +675,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/batch-frame.schema.json",
       "title": "unite-analysis-swift batch frame job",
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "jobId",
         "matchTimestamps",
@@ -653,6 +691,7 @@ package enum EmbeddedSchemas {
         "matchTimestamps": {
           "type": "array",
           "minItems": 1,
+          "description": "Finite, strictly increasing seconds relative to match start; negative values select pre-match frames and values above match duration select post-match frames.",
           "items": {
             "type": "number"
           }
@@ -668,6 +707,7 @@ package enum EmbeddedSchemas {
       "$defs": {
         "rectangle": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -793,6 +833,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/contact-sheet.schema.json",
       "title": "unite-analysis-swift contact sheet job",
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "jobId",
         "cell",
@@ -828,6 +869,7 @@ package enum EmbeddedSchemas {
         "matchTimestamps": {
           "type": "array",
           "minItems": 1,
+          "description": "Finite, strictly increasing seconds relative to match start; negative values select pre-match frames and values above match duration select post-match frames.",
           "items": {
             "type": "number"
           }
@@ -840,6 +882,7 @@ package enum EmbeddedSchemas {
       "$defs": {
         "size": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "width",
             "height"
@@ -857,6 +900,7 @@ package enum EmbeddedSchemas {
         },
         "rectangle": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -886,6 +930,7 @@ package enum EmbeddedSchemas {
           "oneOf": [
             {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "source",
                 "destination"
@@ -901,6 +946,7 @@ package enum EmbeddedSchemas {
             },
             {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "drawText"
               ],
@@ -914,6 +960,7 @@ package enum EmbeddedSchemas {
         },
         "drawText": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -925,6 +972,7 @@ package enum EmbeddedSchemas {
             },
             "script": {
               "type": "object",
+              "additionalProperties": false,
               "required": [
                 "return"
               ],
@@ -1069,6 +1117,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.schema.json",
       "title": "unite-analysis-swift OCR job",
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "jobId",
         "input",
@@ -1104,6 +1153,7 @@ package enum EmbeddedSchemas {
       "$defs": {
         "rectangle": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "x",
             "y",
@@ -1219,7 +1269,8 @@ package enum EmbeddedSchemas {
             "confidence": {
               "type": "number",
               "minimum": 0,
-              "maximum": 1
+              "maximum": 1,
+              "description": "Apple Vision recognition confidence for the raw text observation, from 0 through 1."
             },
             "box": {
               "$ref": "#/$defs/box"
@@ -1337,6 +1388,7 @@ package enum EmbeddedSchemas {
       "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json",
       "title": "unite-analysis-swift named OCR region options",
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "$schema"
       ],
@@ -1461,7 +1513,8 @@ package enum EmbeddedSchemas {
             },
             "score": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Maximum of the independently computed Cb and Cr Otsu thresholds for this adjacent JPEG pair; it is comparable only within the same sampled region and run."
             },
             "cbThreshold": {
               "type": "integer",
