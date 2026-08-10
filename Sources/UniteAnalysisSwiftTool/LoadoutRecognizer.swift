@@ -148,17 +148,23 @@ extension unite_analysis.IconMatcher {
     let prepared = try BGRImage(
       width: width, height: height, bytesPerRow: width * 3,
       bytes: (0..<image.byteCount()).map { image.byte($0) })
-    let mask: BGRImage? =
-      if image.hasMask() {
-        try BGRImage(
-          width: width, height: height, bytesPerRow: width * 3,
-          bytes: (0..<image.maskByteCount()).flatMap { index in
-            let value = image.maskByte(index)
-            return [value, value, value]
-          })
-      } else {
-        nil
+    let mask: BGRImage?
+    if image.hasMask() {
+      let maskByteCount = Int(image.maskByteCount())
+      var maskBytes = [UInt8](repeating: 0, count: maskByteCount * 3)
+      for index in 0..<maskByteCount {
+        let value = image.maskByte(index)
+        let offset = index * 3
+        maskBytes[offset] = value
+        maskBytes[offset + 1] = value
+        maskBytes[offset + 2] = value
       }
+      mask = try BGRImage(
+        width: width, height: height, bytesPerRow: width * 3,
+        bytes: maskBytes)
+    } else {
+      mask = nil
+    }
     return PreparedAKAZEInput(image: prepared, mask: mask)
   }
 

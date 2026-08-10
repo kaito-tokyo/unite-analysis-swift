@@ -364,9 +364,14 @@ package func prepareDiagnosticDirectory(
 ) throws {
   guard let directory else { return }
   for name in diagnosticNames(matchFormat: matchFormat) {
-    try validateOutputPath(
-      directory.appendingPathComponent(name).appendingPathExtension("png"),
-      force: force)
+    let outputURL = directory.appendingPathComponent(name).appendingPathExtension("png")
+    try validateOutputPath(outputURL, force: force)
+    var isDirectory: ObjCBool = false
+    if FileManager.default.fileExists(atPath: outputURL.path, isDirectory: &isDirectory),
+      isDirectory.boolValue
+    {
+      throw ValidationError("AKAZE diagnostic output is a directory: \(outputURL.path)")
+    }
   }
   try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 }

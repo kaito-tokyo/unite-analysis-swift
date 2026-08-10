@@ -374,6 +374,12 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(throws: Never.self) {
     try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: true)
   }
+  let directoryCollision = directory.appendingPathComponent("ally-4-battle-mask.png")
+  try FileManager.default.createDirectory(
+    at: directoryCollision, withIntermediateDirectories: false)
+  #expect(throws: Error.self) {
+    try prepareDiagnosticDirectory(directory, matchFormat: "draft", force: true)
+  }
 }
 
 @Test func loadoutOutputDestinationRejectsInvalidTypesBeforeRecognition() throws {
