@@ -95,12 +95,15 @@ public enum MatchTimerVideoOCR {
     let reference = layout.referenceSize
     let scaleX = Double(gameScreen.width) / Double(reference.width)
     let scaleY = Double(gameScreen.height) / Double(reference.height)
-    return CGRect(
+    let scaledTimer = CGRect(
       x: Double(gameScreen.x) + Double(timer.x) * scaleX,
       y: Double(gameScreen.y) + Double(timer.y) * scaleY,
       width: Double(timer.width) * scaleX,
       height: Double(timer.height) * scaleY
     ).integral
+    let gameScreenBounds = CGRect(
+      x: gameScreen.x, y: gameScreen.y, width: gameScreen.width, height: gameScreen.height)
+    return scaledTimer.intersection(gameScreenBounds)
   }
 
   private static func timerCrop(

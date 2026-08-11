@@ -34,6 +34,18 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   }
 }
 
+@Test func timerRectangleClampsIntegralRoundingToGameScreen() {
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL,
+    layoutId: "edge-touching",
+    referenceSize: .init(width: 6, height: 6),
+    regions: .init(matchTimer: .init(x: 1, y: 0, width: 5, height: 6)))
+  #expect(
+    MatchTimerVideoOCR.timerRectangle(
+      gameScreen: .init(x: 0, y: 0, width: 7, height: 7), layout: layout)
+      == .init(x: 1, y: 0, width: 6, height: 7))
+}
+
 @Test func matchLayoutRejectsUnknownKeysAtEveryLevel() {
   let documents = [
     #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json","layoutId":"ja.20260811.match.timer","referenceSize":{"width":1920,"height":1080},"regions":{"matchTimer":{"x":0,"y":0,"width":1,"height":1}},"engine":"ignored"}"#,
@@ -87,6 +99,20 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
     result.diagnostics.first { $0.recordingTimelineMilliseconds == 1_989_805 })
   #expect(outlier.disposition == "excluded")
   #expect(outlier.reason == "noConsistentCluster")
+}
+
+@Test func laterTenMinuteOutlierDoesNotMoveClusterStart() throws {
+  let result = MatchTimerDetection(records: [
+    timer(104_000, "10:00"), timer(105_000, "09:55"), timer(110_000, "09:50"),
+  ])
+  #expect(try #require(result.matches.first).recordingPTSStart == 100)
+  #expect(result.diagnostics[0].reason == "isolatedStartRequiresCorroboration")
+}
+
+@Test func frozenTimerDoesNotFormAStandardMatch() {
+  let result = MatchTimerDetection(records: [timer(400_000, "05:00"), timer(401_000, "05:00")])
+  #expect(result.matches.isEmpty)
+  #expect(result.diagnostics.allSatisfy { $0.reason == "noConsistentCluster" })
 }
 
 @Test func rejectsNegativeAndOverlappingMatchesWithoutSkippingIdentifiers() {

@@ -73,7 +73,7 @@ unite-analysis-swift schema <schema-basename>
 `batch-frame`、`contact-sheet`、`frame-burst`、`ocr-v1`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events-v1`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
 
 - `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`と`frame-burst`の各ジョブには`output`を明示する。`ocr-v1`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
-- 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。`ocr-v1`は静止画入力のみを読み、`record-spec.json`を使わない。
+- 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。試合区間を検出する前の`detect-matches-v1`だけは例外で、録画を`--input`、固定UIレイアウトJSONを`--layout`で指定する。`ocr-v1`は静止画入力のみを読み、`record-spec.json`を使わない。
 - すべての相対パスは、ジョブファイルの位置に関係なく現在の作業ディレクトリ基準とする。
 - 既存成果物を意図せず上書きしない。`--force`は再生成対象を確認した場合だけ使う。
 - `ocr-v1`の各ジョブは`region`で`ocr-options.json`の同名エントリを選び、`source`と`type`を明示する。`ocr-options.json`には`$schema`、選択領域ごとの空でない`recognitionLanguages`、必要なら`customWords`を記録する。fallbackはない。
