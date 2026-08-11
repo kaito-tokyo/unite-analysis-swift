@@ -17,12 +17,13 @@ public enum MatchTimerVideoOCR {
   ) async throws -> [MatchTimerObservation] {
     try layout.validate()
     let extractor = try await VideoFrameExtractor(videoURL: videoURL)
-    let duration = extractor.duration.seconds
+    let duration = extractor.videoTrackEnd.seconds
     let times = try sampleTimes(duration: duration, interval: sampleInterval)
 
     var observations: [MatchTimerObservation] = []
     var observedPresentationMilliseconds = Set<Int64>()
     try extractor.extractFrames(at: times) { _, frame, presentationTime in
+      try Task.checkCancellation()
       let milliseconds = Int64((presentationTime.seconds * 1_000).rounded())
       guard observedPresentationMilliseconds.insert(milliseconds).inserted else { return }
       try autoreleasepool {

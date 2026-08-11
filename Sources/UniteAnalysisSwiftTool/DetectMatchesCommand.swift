@@ -73,25 +73,15 @@ struct DetectMatches: ParsableCommand {
     else {
       throw UniteAnalysisSwiftToolError.message("Recording is not finalized: \(recordingURL.path)")
     }
-    let plistURL = recordingURL.appendingPathComponent("Info.plist")
-    guard
-      let plist = try PropertyListSerialization.propertyList(
-        from: Data(contentsOf: plistURL), options: 0, format: nil) as? [String: Any],
-      plist["LDTXRecordingFormatVersion"] as? Int == 2,
-      let mainMediaFile = plist["LDTXRecordingMainMediaFile"] as? String,
-      !mainMediaFile.isEmpty
-    else { throw UniteAnalysisSwiftToolError.message("Invalid recording format v2 Info.plist") }
-    let mediaURL = recordingURL.appendingPathComponent(mainMediaFile)
-    guard FileManager.default.fileExists(atPath: mediaURL.path) else {
-      throw UniteAnalysisSwiftToolError.message("Main media file not found: \(mediaURL.path)")
-    }
+    let mediaURL = try detectMatchesVideoURL(in: recordingURL)
+    let mainMediaFile = mediaURL.lastPathComponent
     let asset = AVURLAsset(url: mediaURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
       throw UniteAnalysisSwiftToolError.message("Main media has no video track")
     }
     let naturalSize = try await track.load(.naturalSize)
     let transform = try await track.load(.preferredTransform)
-    let videoDuration = try await asset.load(.duration).seconds
+    let videoDuration = try await track.load(.timeRange).end.seconds
     let displaySize = naturalSize.applying(transform)
     let videoWidth = Int(abs(displaySize.width).rounded())
     let videoHeight = Int(abs(displaySize.height).rounded())
@@ -138,4 +128,18 @@ struct DetectMatches: ParsableCommand {
       gameScreen: gameScreen,
       matches: detection.matches, diagnostics: detection.diagnostics)
   }
+}
+
+package func detectMatchesVideoURL(in recordingURL: URL) throws -> URL {
+  let plistURL = recordingURL.appendingPathComponent("Info.plist")
+  guard
+    let plist = try PropertyListSerialization.propertyList(
+      from: Data(contentsOf: plistURL), options: 0, format: nil) as? [String: Any],
+    plist["LDTXRecordingFormatVersion"] as? Int == 2
+  else { throw UniteAnalysisSwiftToolError.message("Invalid recording format v2 Info.plist") }
+  let mediaURL = recordingURL.appendingPathComponent("main.fragmented.mp4").standardizedFileURL
+  guard FileManager.default.fileExists(atPath: mediaURL.path) else {
+    throw UniteAnalysisSwiftToolError.message("Main media file not found: \(mediaURL.path)")
+  }
+  return mediaURL
 }

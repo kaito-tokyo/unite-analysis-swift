@@ -26,6 +26,7 @@ public final class VideoFrameExtractor {
   private let transform: CGAffineTransform
   private let context: CIContext
   public let duration: CMTime
+  public let videoTrackEnd: CMTime
   public let naturalSize: CGSize
   public let nominalFrameRate: Float
 
@@ -40,6 +41,7 @@ public final class VideoFrameExtractor {
     self.transform = try await track.load(.preferredTransform)
     self.context = CIContext()
     self.duration = try await asset.load(.duration)
+    self.videoTrackEnd = try await track.load(.timeRange).end
     self.naturalSize = try await track.load(.naturalSize)
     self.nominalFrameRate = try await track.load(.nominalFrameRate)
   }
