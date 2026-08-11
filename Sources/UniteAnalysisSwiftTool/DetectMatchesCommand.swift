@@ -12,7 +12,7 @@ struct DetectMatches: ParsableCommand {
     commandName: "detect-matches-v1",
     abstract: "Detect standard 10-minute matches by OCRing the main video timer.",
     discussion: """
-      INPUT. --input must be a finalized recording format v2 .ldtxrecord. The main video is selected by LDTXRecordingMainMediaFile. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
+      INPUT. --input must be a finalized recording format v2 .ldtxrecord. The main video is the format-v2 fixed file main.fragmented.mp4; LDTXRecordingMainMediaFile does not select another file. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
 
       EXECUTION. AVFoundation decoding and Apple Vision recognition require this command to run outside an application sandbox.
 
