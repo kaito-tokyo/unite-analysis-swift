@@ -128,7 +128,8 @@
               "isolatedStartRequiresCorroboration",
               "noConsistentCluster",
               "startBeforeRecording",
-              "endAfterRecording"
+              "endAfterRecording",
+              "overlapsPreviousMatch"
             ]
           }
         }

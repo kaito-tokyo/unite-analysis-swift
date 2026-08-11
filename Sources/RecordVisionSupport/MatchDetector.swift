@@ -109,7 +109,17 @@ public struct MatchTimerDetection: Codable, Sendable {
         continue
       }
       // Do not let overlapping candidate clusters describe the same match.
-      guard matches.last.map({ start - $0.recordingPTSStart >= 600 }) ?? true else { continue }
+      guard matches.last.map({ start - $0.recordingPTSStart >= 600 }) ?? true else {
+        for value in cluster + corroboratedStarts {
+          diagnostics[value.index] = .init(
+            recordingTimelineMilliseconds: value.record.recordingTimelineMilliseconds,
+            output: value.record.output, imageFileName: value.record.imageFileName,
+            confidence: value.record.confidence, remainingSeconds: value.remaining,
+            startCandidate: value.candidate, disposition: "excluded",
+            reason: "overlapsPreviousMatch")
+        }
+        continue
+      }
       matches.append(
         .init(
           matchId: String(format: "match-%02d", matches.count + 1), recordingPTSStart: start,
@@ -313,6 +323,7 @@ public struct GameScreenRectangle: Codable, Equatable, Sendable {
     }
     let x = try value("x", default: 0)
     let y = try value("y", default: 0)
+    guard x >= 0, y >= 0 else { throw ResolutionError.invalidOrigin(x, y) }
     let width = try value("width", default: videoWidth - x)
     let height = try value("height", default: videoHeight - y)
     guard x >= 0, y >= 0, width > 0, height > 0,
@@ -324,6 +335,7 @@ public struct GameScreenRectangle: Codable, Equatable, Sendable {
   public enum ResolutionError: Error, CustomStringConvertible {
     case invalidVideoDimensions
     case invalidValue(String, String)
+    case invalidOrigin(Int, Int)
     case outOfBounds(Int, Int, Int, Int, Int, Int)
 
     public var description: String {
@@ -331,6 +343,8 @@ public struct GameScreenRectangle: Codable, Equatable, Sendable {
       case .invalidVideoDimensions: "Main video has invalid display dimensions"
       case .invalidValue(let key, let value):
         "Invalid unite-analysis-swift.\(key) value: \(value)"
+      case .invalidOrigin(let x, let y):
+        "Game-screen origin (\(x),\(y)) must not be negative"
       case .outOfBounds(let x, let y, let width, let height, let videoWidth, let videoHeight):
         "Game-screen rectangle (\(x),\(y),\(width),\(height)) is outside display video \(videoWidth)x\(videoHeight)"
       }

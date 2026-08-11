@@ -55,6 +55,15 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   }
 }
 
+@Test func timerOCRPrefersValidTimerBeforeConfidence() throws {
+  let candidate = try #require(
+    MatchTimerVideoOCR.preferredCandidate(from: [
+      ("fragment", 0.99), (" 09:55 ", 0.75), ("09:54", 0.70),
+    ]))
+  #expect(candidate.string == "09:55")
+  #expect(candidate.confidence == 0.75)
+}
+
 @Test func detectsOneStandardMatchWithMissingObservations() throws {
   let result = MatchTimerDetection(records: [
     timer(100_000, "10:00"), timer(110_000, "09:50"), timer(125_000, "09:35"),
@@ -91,6 +100,8 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
   #expect(result.diagnostics[0].reason == "startBeforeRecording")
   #expect(result.diagnostics[1].reason == "startBeforeRecording")
+  #expect(result.diagnostics[5].reason == "overlapsPreviousMatch")
+  #expect(result.diagnostics[6].reason == "overlapsPreviousMatch")
 }
 
 @Test func rejectsMatchesThatEndAfterTheRecording() {
@@ -150,6 +161,11 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(throws: GameScreenRectangle.ResolutionError.self) {
     try GameScreenRectangle.resolve(
       customFields: ["unite-analysis-swift.height": "0"], videoWidth: 100,
+      videoHeight: 100)
+  }
+  #expect(throws: GameScreenRectangle.ResolutionError.self) {
+    try GameScreenRectangle.resolve(
+      customFields: ["unite-analysis-swift.x": String(Int.min)], videoWidth: 100,
       videoHeight: 100)
   }
 }

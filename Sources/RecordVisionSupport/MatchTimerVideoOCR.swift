@@ -36,18 +36,39 @@ public enum MatchTimerVideoOCR {
         request.automaticallyDetectsLanguage = false
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cgImage: recognitionImage, options: [:]).perform([request])
-        let candidate =
-          (request.results ?? [])
-          .compactMap { $0.topCandidates(1).first }
-          .max { $0.confidence < $1.confidence }
+        let candidate = preferredCandidate(
+          from: (request.results ?? []).compactMap { observation in
+            observation.topCandidates(1).first.map { ($0.string, $0.confidence) }
+          })
         observations.append(
           .init(
             recordingTimelineMilliseconds: milliseconds,
-            output: candidate?.string.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-            confidence: candidate?.confidence))
+            output: candidate?.string ?? "", confidence: candidate?.confidence))
       }
     }
     return observations
+  }
+
+  package static func preferredCandidate(
+    from candidates: [(string: String, confidence: Float)]
+  ) -> (string: String, confidence: Float)? {
+    candidates.map { candidate in
+      (candidate.string.trimmingCharacters(in: .whitespacesAndNewlines), candidate.confidence)
+    }.max { lhs, rhs in
+      let lhsIsTimer = isValidTimer(lhs.0)
+      let rhsIsTimer = isValidTimer(rhs.0)
+      return lhsIsTimer == rhsIsTimer ? lhs.1 < rhs.1 : !lhsIsTimer && rhsIsTimer
+    }
+  }
+
+  private static func isValidTimer(_ value: String) -> Bool {
+    let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+    guard parts.count == 2, parts[0].count == 2, parts[1].count == 2,
+      parts.allSatisfy({ $0.allSatisfy(\.isNumber) }),
+      let minutes = Int(parts[0]), let seconds = Int(parts[1]),
+      (0...10).contains(minutes), (0...59).contains(seconds)
+    else { return false }
+    return minutes != 10 || seconds == 0
   }
 
   public static func sampleTimes(duration: Double, interval: Double) throws -> [CMTime] {
