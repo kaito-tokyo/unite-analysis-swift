@@ -62,3 +62,19 @@ private func reviewSkillText(_ relativePath: String) throws -> String {
   #expect(model.contains("最初の視覚分類と因果説明を更新する"))
   #expect(model.contains("通常の試合振り返りに必須とせず"))
 }
+
+@Test func skillRoutesProjectSupportAndIssueCreation() throws {
+  let skill = try reviewSkillText("SKILL.md")
+
+  #expect(skill.contains("https://github.com/kaito-tokyo/unite-analysis-swift"))
+  #expect(skill.contains("https://github.com/kaito-tokyo/unite-analysis-swift/discussions"))
+  #expect(skill.contains("https://github.com/kaito-tokyo/unite-analysis-swift/issues"))
+  #expect(skill.contains("SECURITY.md"))
+  #expect(skill.contains("脆弱性を公開IssueやDiscussionsに投稿せず"))
+  #expect(skill.contains("作成前に必ず人間の明示的な同意を得る"))
+  #expect(skill.contains("英語で書く"))
+  #expect(skill.contains("Issue Typeを必ず1つだけ設定する"))
+  #expect(skill.contains("`Task`、`Bug`、`Crash report`"))
+  #expect(skill.contains("明示的に許可した場合に限り`Feature`"))
+  #expect(skill.contains("ラベルを追加しない"))
+}
