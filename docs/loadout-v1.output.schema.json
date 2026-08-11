@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout-v1.output.schema.json",
   "title": "ポケモンユナイト recognized loadout",
   "type": "object",
   "required": [
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "$schema": {
-      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json"
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout-v1.output.schema.json"
     },
     "format": {
       "enum": [

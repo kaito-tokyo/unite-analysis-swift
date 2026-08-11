@@ -34,14 +34,14 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["precise-frame"]: PreciseFrame.self
     case ["contact-sheet"]: ContactSheet.self
     case ["frame-burst"]: FrameBurst.self
-    case ["detect-chroma-events"]: DetectChromaEvents.self
-    case ["audio-peaks"]: AudioPeaks.self
-    case ["event-detect"]: EventDetect.self
+    case ["detect-chroma-events-v1"]: DetectChromaEvents.self
+    case ["audio-peaks-v1"]: AudioPeaks.self
+    case ["event-detect-v1"]: EventDetect.self
     case ["extract-clip"]: ExtractClip.self
-    case ["ocr"]: OCRCommand.self
-    case ["scan-result"]: ScanResultCommand.self
-    case ["recognize-draft-loadout"]: RecognizeDraftLoadout.self
-    case ["recognize-blind-loadout"]: RecognizeBlindLoadout.self
+    case ["ocr-v1"]: OCRCommand.self
+    case ["scan-result-v1"]: ScanResultCommand.self
+    case ["recognize-draft-loadout-v1"]: RecognizeDraftLoadout.self
+    case ["recognize-blind-loadout-v1"]: RecognizeBlindLoadout.self
     case ["eval-draw-text-script"]: EvaluateDrawText.self
     case ["schema"]: Schema.self
     case ["config"]: Config.self

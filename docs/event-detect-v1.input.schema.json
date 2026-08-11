@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json",
-  "title": "unite-analysis-swift event-detect input",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect-v1.input.schema.json",
+  "title": "unite-analysis-swift event-detect-v1 input",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "$schema": {
-      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json"
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect-v1.input.schema.json"
     },
     "audioPeaks": {
       "type": "string",

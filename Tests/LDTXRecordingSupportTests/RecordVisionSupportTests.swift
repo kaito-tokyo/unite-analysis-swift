@@ -292,7 +292,7 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
   let data = Data(
     """
     {
-      "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json",
+      "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options-v1.schema.json",
       "result-screen.text": {
         "recognitionLanguages": ["ja-JP"],
         "customWords": ["バトルデータ"],
@@ -439,7 +439,7 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   } catch {
     #expect(
       String(describing: error)
-        == "audio-peaks requires LDTX recording format version 2: \(bundle.appendingPathComponent("Info.plist").path)"
+        == "audio-peaks-v1 requires LDTX recording format version 2: \(bundle.appendingPathComponent("Info.plist").path)"
     )
   }
 }

@@ -14,7 +14,7 @@ import UniteAnalysisConfiguration
 
 struct AudioPeaks: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "audio-peaks",
+    commandName: "audio-peaks-v1",
     abstract: "Print visually interesting recording-audio SE peak times as JSON.",
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation audio decoding is unavailable in the sandboxed execution environment.
@@ -23,7 +23,7 @@ struct AudioPeaks: ParsableCommand {
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift audio-peaks --record-spec _PokemonUniteMatches/match-01/record-spec.json --gain 1.0 --output _PokemonUniteAnalysis/matches/match-01/candidates/audio-peaks.json
+      unite-analysis-swift audio-peaks-v1 --record-spec _PokemonUniteMatches/match-01/record-spec.json --gain 1.0 --output _PokemonUniteAnalysis/matches/match-01/candidates/audio-peaks.json
 
       RANGE. The full record-spec match is always analyzed. There are no start or duration options. The detector reads 200ms before match start to preserve FIR history and 20ms after match end for local-maximum detection, but reports only peaks inside the match.
 
@@ -36,7 +36,7 @@ struct AudioPeaks: ParsableCommand {
       COMPLETE OUTPUT EXAMPLE.
 
       {
-        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json",
+        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks-v1.output.schema.json",
         "dilation": 0.5,
         "duration": 600,
         "gain": 1,
@@ -67,7 +67,7 @@ struct AudioPeaks: ParsableCommand {
         ]
       }
 
-      SCHEMA. Print the output schema with `unite-analysis-swift schema audio-peaks.output.schema.json`.
+      SCHEMA. Print the output schema with `unite-analysis-swift schema audio-peaks-v1.output.schema.json`.
 
       DIAGNOSTICS. Resolved record-spec.json and audio paths and unfinished-recording warnings are written to stderr. Missing metadata or media, a v2 main media file without an audio track, and undecodable audio are errors.
       """.reflowedHelp()

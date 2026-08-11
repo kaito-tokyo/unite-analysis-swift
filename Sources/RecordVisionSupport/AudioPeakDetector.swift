@@ -40,7 +40,7 @@ public struct AudioPeakInterval: Codable, Equatable, Sendable {
 
 public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
   public static let schema =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks-v1.output.schema.json"
 
   public let matchId: String
   public let inmatchStart: Double
@@ -119,7 +119,7 @@ public enum AudioPeakDetector {
     let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
     guard formatVersion == 2 else {
       throw AudioPeakDetectorError.message(
-        "audio-peaks requires LDTX recording format version 2: \(infoURL.path)")
+        "audio-peaks-v1 requires LDTX recording format version 2: \(infoURL.path)")
     }
 
     // Recording format v2 defines the main media name independently of whether the redundant

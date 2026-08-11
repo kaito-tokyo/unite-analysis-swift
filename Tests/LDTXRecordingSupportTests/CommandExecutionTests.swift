@@ -18,6 +18,95 @@ import Testing
   #expect(parsed is Schema)
 }
 
+@Test func analysisCommandNamesHaveExplicitVersions() {
+  let names = [
+    DetectChromaEvents.configuration.commandName,
+    AudioPeaks.configuration.commandName,
+    EventDetect.configuration.commandName,
+    OCRCommand.configuration.commandName,
+    ScanResultCommand.configuration.commandName,
+    RecognizeDraftLoadout.configuration.commandName,
+    RecognizeBlindLoadout.configuration.commandName,
+  ].compactMap { $0 }
+  #expect(names.count == 7)
+  #expect(
+    Set(names) == [
+      "audio-peaks-v1", "detect-chroma-events-v1", "event-detect-v1",
+      "ocr-v1", "recognize-blind-loadout-v1", "recognize-draft-loadout-v1", "scan-result-v1",
+    ])
+  #expect(
+    names.allSatisfy {
+      $0.range(of: #"-v[1-9][0-9]*$"#, options: .regularExpression) != nil
+    })
+}
+
+@Test func versionedAnalysisCommandsParseAsTheirConcreteTypes() throws {
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "detect-chroma-events-v1", "--input-sample-dir", "frames", "--fps", "2", "--output",
+      "events.json",
+    ]) is DetectChromaEvents)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "audio-peaks-v1", "--record-spec", "record-spec.json",
+    ]) is AudioPeaks)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "event-detect-v1", "manifest.json", "--output", "events.json",
+    ]) is EventDetect)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "ocr-v1", "jobs.jsonl", "--ocr-options", "ocr-options.json",
+    ]) is OCRCommand)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "scan-result-v1", "result.jpg", "--type", "summary", "--ocr-options",
+      "ocr-options.json",
+    ]) is ScanResultCommand)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "recognize-draft-loadout-v1", "--input", "recording.ldtxrecord", "--final-prep-time",
+      "1", "--vs-time", "2",
+    ]) is RecognizeDraftLoadout)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "recognize-blind-loadout-v1", "--input", "recording.ldtxrecord", "--prep-time", "1",
+    ]) is RecognizeBlindLoadout)
+}
+
+@Test func unversionedAnalysisCommandNamesAreRejected() {
+  let names = [
+    "audio-peaks", "detect-chroma-events", "event-detect", "ocr",
+    "recognize-blind-loadout", "recognize-draft-loadout", "scan-result",
+  ]
+  for name in names {
+    #expect(throws: Error.self) {
+      _ = try UniteAnalysisSwiftCommand.parseAsRoot([name])
+    }
+  }
+}
+
+@Test func unversionedAnalysisSchemaBasenamesAreRejectedBySchemaCommand() async throws {
+  let basenames = [
+    "audio-peaks.output.schema.json",
+    "chroma-events.output.schema.json",
+    "event-detect.input.schema.json",
+    "event-detect.output.schema.json",
+    "loadout.output.schema.json",
+    "ocr-options.schema.json",
+    "ocr.output.schema.json",
+    "ocr.schema.json",
+    "scan-result.output.schema.json",
+  ]
+  for basename in basenames {
+    let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(["schema", basename])
+    let command = try #require(parsed as? Schema)
+    await #expect(throws: ValidationError.self) {
+      for try await _ in command.outputRecords() {}
+    }
+  }
+}
+
 @Test func schemaCommandProducesSemanticOutputRecord() async throws {
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
     "schema", "publication.schema.json",
@@ -100,7 +189,7 @@ func batchFrameJobRejectsUnknownKeys(json: String) {
 
 @Test func eventDetectManifestAcceptsAndValidatesSchemaURL() throws {
   let valid =
-    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json","audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[]}"#
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/event-detect-v1.input.schema.json","audioPeaks":"audio.json","chromaEvents":[],"ocrCandidates":[],"scheduledCandidates":[]}"#
   _ = try JSONDecoder().decode(EventDetectManifest.self, from: Data(valid.utf8))
 
   let invalid =
@@ -174,16 +263,16 @@ func batchFrameJobRejectsUnknownKeys(json: String) {
   #expect(versionRecords == [["text": UniteAnalysisSwiftCommand.configuration.version]])
 }
 
-@Test(arguments: ["ocr", "scan-result"])
+@Test(arguments: ["ocr-v1", "scan-result-v1"])
 func writingCommandsParseForceFlag(commandName: String) throws {
   let arguments =
-    commandName == "ocr"
+    commandName == "ocr-v1"
     ? [
-      "ocr", "jobs.jsonl", "--ocr-options", "ocr-options.json", "--output", "result.jsonl",
+      "ocr-v1", "jobs.jsonl", "--ocr-options", "ocr-options.json", "--output", "result.jsonl",
       "--force",
     ]
     : [
-      "scan-result", "result.jpg", "--type", "summary", "--ocr-options", "ocr-options.json",
+      "scan-result-v1", "result.jpg", "--type", "summary", "--ocr-options", "ocr-options.json",
       "--output", "result.json", "--force",
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
@@ -197,7 +286,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
 
 @Test func audioPeaksParsesPersistentOutputOptions() throws {
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "audio-peaks", "--record-spec", "record-spec.json", "--output", "audio-peaks.json",
+    "audio-peaks-v1", "--record-spec", "record-spec.json", "--output", "audio-peaks.json",
     "--force",
   ])
   let command = try #require(parsed as? AudioPeaks)
@@ -226,7 +315,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   defer { try? FileManager.default.removeItem(at: output) }
   try Data("original\n".utf8).write(to: output)
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "audio-peaks", "--record-spec", "missing.json", "--output", output.path,
+    "audio-peaks-v1", "--record-spec", "missing.json", "--output", output.path,
   ])
 
   await #expect(throws: UniteAnalysisSwiftToolError.self) {
@@ -241,7 +330,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   defer { try? FileManager.default.removeItem(at: output) }
   try Data("original\n".utf8).write(to: output)
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "audio-peaks", "--record-spec", "missing.json", "--output", output.path,
+    "audio-peaks-v1", "--record-spec", "missing.json", "--output", output.path,
   ])
 
   await #expect(throws: UniteAnalysisSwiftToolError.self) {
@@ -308,20 +397,20 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   #expect(try Data(contentsOf: output) == expected)
 }
 
-@Test(arguments: ["ocr", "scan-result"])
+@Test(arguments: ["ocr-v1", "scan-result-v1"])
 func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: output) }
   try Data("original\n".utf8).write(to: output)
   let arguments =
-    commandName == "ocr"
+    commandName == "ocr-v1"
     ? [
-      "ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path,
+      "ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path,
       "--force",
     ]
     : [
-      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
       "--output", output.path, "--force",
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
@@ -334,17 +423,17 @@ func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
   }
 }
 
-@Test(arguments: ["ocr", "scan-result"])
+@Test(arguments: ["ocr-v1", "scan-result-v1"])
 func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: output) }
   try Data("original\n".utf8).write(to: output)
   let arguments =
-    commandName == "ocr"
-    ? ["ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
+    commandName == "ocr-v1"
+    ? ["ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
     : [
-      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
       "--output", output.path,
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
@@ -355,17 +444,17 @@ func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) asy
   #expect(try Data(contentsOf: output) == Data("original\n".utf8))
 }
 
-@Test(arguments: ["ocr", "scan-result"])
+@Test(arguments: ["ocr-v1", "scan-result-v1"])
 func writingCommandsRejectExistingOutputBeforeProcessing(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: output) }
   try Data("original\n".utf8).write(to: output)
   let arguments =
-    commandName == "ocr"
-    ? ["ocr", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
+    commandName == "ocr-v1"
+    ? ["ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
     : [
-      "scan-result", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
       "--output", output.path,
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)

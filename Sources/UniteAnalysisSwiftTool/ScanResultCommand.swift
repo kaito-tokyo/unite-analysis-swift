@@ -19,7 +19,7 @@ struct ScanResultCommand: ParsableCommand {
   }
 
   static let configuration = CommandConfiguration(
-    commandName: "scan-result",
+    commandName: "scan-result-v1",
     abstract: "Scan ポケモンユナイト result and battle-data screens into JSON.",
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because Apple Vision text recognition is unavailable in the sandboxed execution environment.
@@ -28,18 +28,18 @@ struct ScanResultCommand: ParsableCommand {
 
       COMPLETE EXAMPLES.
 
-      unite-analysis-swift scan-result result-summary.jpg --type summary --ocr-options ocr-options.json
+      unite-analysis-swift scan-result-v1 result-summary.jpg --type summary --ocr-options ocr-options-v1.json
 
-      unite-analysis-swift scan-result battle-data.jpg --type battle-data --ocr-options ocr-options.json --output battle-data.json
+      unite-analysis-swift scan-result-v1 battle-data.jpg --type battle-data --ocr-options ocr-options-v1.json --output battle-data.json
 
       SCREEN TYPE. --type is required and selects summary or battle-data parsing. The command does not auto-detect a different type or emit both types. The requested type is returned even when its detection score is low; that condition is recorded in warnings.
 
-      OCR OPTIONS. --ocr-options is a JSON dictionary keyed by globally unique OCR region names. scan-result requires result-screen.text, player-name, and result-screen.numeric. player-name is shared by every command that OCRs player names. Every selected entry requires a non-empty recognitionLanguages array of Apple Vision identifiers and may contain customWords. There is no fallback or implicit language list. Unrelated region entries and unrecognized fields are ignored. Relative paths use the current working directory.
+      OCR OPTIONS. --ocr-options is a JSON dictionary keyed by globally unique OCR region names. scan-result-v1 requires result-screen.text, player-name, and result-screen.numeric. player-name is shared by every command that OCRs player names. Every selected entry requires a non-empty recognitionLanguages array of Apple Vision identifiers and may contain customWords. There is no fallback or implicit language list. Unrelated region entries and unrecognized fields are ignored. Relative paths use the current working directory.
 
       COMPLETE ocr-options.json EXAMPLE.
 
       {
-        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json",
+        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options-v1.schema.json",
         "result-screen.text": {
           "recognitionLanguages": ["ja-JP", "en-US"],
           "customWords": ["バトルデータ", "スコアの詳細"]
@@ -54,7 +54,7 @@ struct ScanResultCommand: ParsableCommand {
         }
       }
 
-      SCHEMAS. Print the OCR options schema with `unite-analysis-swift schema ocr-options.schema.json` and the output schema with `unite-analysis-swift schema scan-result.output.schema.json`.
+      SCHEMAS. Print the OCR options schema with `unite-analysis-swift schema ocr-options-v1.schema.json` and the output schema with `unite-analysis-swift schema scan-result-v1.output.schema.json`.
 
       OCR. Battle-data uses fixed-cell OCR. Summary combines full-screen and row OCR. Language correction is disabled for numeric and proper-name fields.
 
@@ -65,7 +65,7 @@ struct ScanResultCommand: ParsableCommand {
       COMPLETE OUTPUT SHAPE.
 
       {
-        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json",
+        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result-v1.output.schema.json",
         "generatedAt": "2026-08-06T00:00:00Z",
         "input": "/recording/result-summary.jpg",
         "ocrOptions": {

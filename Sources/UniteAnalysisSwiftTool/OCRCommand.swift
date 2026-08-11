@@ -54,7 +54,7 @@ struct OCRJobResult: Encodable {
 
 struct OCRCommandOutput: Encodable {
   static let schemaURL =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-v1.output.schema.json"
 
   let schema = schemaURL
   let jobId: String
@@ -69,7 +69,7 @@ struct OCRCommandOutput: Encodable {
 
 struct OCRCommand: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "ocr",
+    commandName: "ocr-v1",
     abstract: "Recognize named still-image regions from JSONL jobs.",
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because Apple Vision text recognition is unavailable in the sandboxed execution environment.
@@ -91,7 +91,7 @@ struct OCRCommand: ParsableCommand {
 
       OUTPUT. One JSON response line containing jobId, ok, and either result or error is written before the next job is read. A malformed line has no jobId when it cannot be recovered. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Each successful result records the absolute input path, source, region, type, raw observations, and interpreted values. Observation boxes are normalized within source and use Apple Vision's bottom-left origin; source itself uses top-left-origin input-image pixels. stdout is used when --output is omitted; otherwise all response lines are atomically written to that path after EOF. An existing output is rejected unless --force is supplied.
 
-      SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema ocr.schema.json`, the response schema with `unite-analysis-swift schema ocr.output.schema.json`, and OCR option schema with `unite-analysis-swift schema ocr-options.schema.json`.
+      SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema ocr-v1.schema.json`, the response schema with `unite-analysis-swift schema ocr-v1.output.schema.json`, and OCR option schema with `unite-analysis-swift schema ocr-options-v1.schema.json`.
       """.reflowedHelp()
   )
 

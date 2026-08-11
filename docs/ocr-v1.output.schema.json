@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.output.schema.json",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-v1.output.schema.json",
   "title": "unite-analysis-swift OCR JSONL response",
   "oneOf": [
     {
@@ -145,7 +145,7 @@
       ],
       "properties": {
         "$schema": {
-          "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.output.schema.json"
+          "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-v1.output.schema.json"
         },
         "jobId": {
           "type": "string",
@@ -168,7 +168,7 @@
       ],
       "properties": {
         "$schema": {
-          "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.output.schema.json"
+          "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-v1.output.schema.json"
         },
         "jobId": {
           "type": "string"

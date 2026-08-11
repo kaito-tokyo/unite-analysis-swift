@@ -54,7 +54,7 @@ public struct ChromaEventSample: Codable, Equatable, Sendable {
 
 public struct ChromaEventResult: Codable, Equatable, Sendable {
   public static let schema =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events-v1.output.schema.json"
 
   public let inputSampleDirectory: String
   public let inputSampleCount: Int

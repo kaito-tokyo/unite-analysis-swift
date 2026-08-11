@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json",
-  "title": "unite-analysis-swift detect-chroma-events output",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events-v1.output.schema.json",
+  "title": "unite-analysis-swift detect-chroma-events-v1 output",
   "type": "object",
   "required": [
     "$schema",
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "$schema": {
-      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json"
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events-v1.output.schema.json"
     },
     "inputSampleDirectory": {
       "type": "string",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options-v1.schema.json",
   "title": "unite-analysis-swift named OCR region options",
   "type": "object",
   "additionalProperties": false,
@@ -9,7 +9,7 @@
   ],
   "properties": {
     "$schema": {
-      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json"
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options-v1.schema.json"
     }
   },
   "patternProperties": {

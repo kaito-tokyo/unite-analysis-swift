@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr.schema.json",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-v1.schema.json",
   "title": "unite-analysis-swift OCR job",
   "type": "object",
   "additionalProperties": false,

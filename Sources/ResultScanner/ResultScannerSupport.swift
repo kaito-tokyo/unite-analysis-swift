@@ -125,7 +125,7 @@ package struct ScreenResult: Codable {
 
 package struct ScanResult: Codable {
   package static let schemaURL =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/scan-result-v1.output.schema.json"
 
   let schema = schemaURL
   let input: String
@@ -171,7 +171,7 @@ public struct OCRRecognitionOptions: Codable, Sendable {
 
 public struct OCRRecognitionOptionsDocument: Decodable, Sendable {
   public static let schemaURL =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options-v1.schema.json"
 
   public let schema: String
   public let regions: [String: OCRRecognitionOptions]
@@ -735,7 +735,7 @@ public enum ResultScannerRunner {
       let numericOptions = ocrOptions[ScanResultOCRRegion.numeric]
     else {
       throw ScannerError.message(
-        "scan-result requires OCR options for \(ScanResultOCRRegion.screenText), \(ScanResultOCRRegion.playerName), and \(ScanResultOCRRegion.numeric)"
+        "scan-result-v1 requires OCR options for \(ScanResultOCRRegion.screenText), \(ScanResultOCRRegion.playerName), and \(ScanResultOCRRegion.numeric)"
       )
     }
     let inputURL = URL(fileURLWithPath: input).standardizedFileURL
