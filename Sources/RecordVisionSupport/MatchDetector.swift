@@ -63,13 +63,16 @@ public struct MatchTimerDetection: Codable, Sendable {
     for (index, record) in records.enumerated() {
       guard let remaining = Self.parseTimer(record.output) else { continue }
       let candidate = Double(record.recordingTimelineMilliseconds) / 1000 - Double(600 - remaining)
-      parsed.append(.init(index: index, record: record, remaining: remaining, candidate: candidate))
       diagnostics[index] = .init(
         recordingTimelineMilliseconds: record.recordingTimelineMilliseconds, output: record.output,
         imageFileName: record.imageFileName, confidence: record.confidence,
         remainingSeconds: remaining, startCandidate: candidate,
         disposition: "excluded",
-        reason: remaining == 600 ? "isolatedStartRequiresCorroboration" : "noConsistentCluster")
+        reason: candidate < 0
+          ? "startBeforeRecording"
+          : remaining == 600 ? "isolatedStartRequiresCorroboration" : "noConsistentCluster")
+      guard candidate >= 0 else { continue }
+      parsed.append(.init(index: index, record: record, remaining: remaining, candidate: candidate))
     }
 
     var clusters: [[Parsed]] = []
@@ -87,7 +90,7 @@ public struct MatchTimerDetection: Codable, Sendable {
     }.sorted { Self.median($0.map(\.candidate)) < Self.median($1.map(\.candidate)) }
 
     var matches: [DetectedMatch] = []
-    for (matchIndex, cluster) in accepted.enumerated() {
+    for cluster in accepted {
       let clusterStart = Self.median(cluster.map(\.candidate))
       let corroboratedStarts = parsed.filter { value in
         value.remaining == 600 && abs(value.candidate - clusterStart) <= 5
@@ -95,10 +98,10 @@ public struct MatchTimerDetection: Codable, Sendable {
       }
       let start = corroboratedStarts.map(\.candidate).min() ?? clusterStart
       // Do not let overlapping candidate clusters describe the same match.
-      guard matches.last.map({ start - $0.recordingPTSStart >= 300 }) ?? true else { continue }
+      guard matches.last.map({ start - $0.recordingPTSStart >= 600 }) ?? true else { continue }
       matches.append(
         .init(
-          matchId: String(format: "match-%02d", matchIndex + 1), recordingPTSStart: start,
+          matchId: String(format: "match-%02d", matches.count + 1), recordingPTSStart: start,
           recordingPTSEnd: start + 600, duration: 600,
           observationCount: cluster.count + corroboratedStarts.count))
       for value in cluster + corroboratedStarts {
@@ -134,6 +137,28 @@ public struct MatchTimerDetection: Codable, Sendable {
 }
 
 public struct MatchTimerLayout: Codable, Equatable, Sendable {
+  private struct AnyCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int? = nil
+
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+  }
+
+  private static func rejectUnknownKeys<Key: CodingKey & CaseIterable>(
+    from decoder: Decoder, keys: Key.Type, context: String
+  ) throws where Key.AllCases: Sequence {
+    let container = try decoder.container(keyedBy: AnyCodingKey.self)
+    let allowed = Set(keys.allCases.map(\.stringValue))
+    let unknown = Set(container.allKeys.map(\.stringValue)).subtracting(allowed)
+    guard unknown.isEmpty else {
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: decoder.codingPath,
+          debugDescription: "Unknown \(context) keys: \(unknown.sorted().joined(separator: ", "))"))
+    }
+  }
+
   public struct Size: Codable, Equatable, Sendable {
     public let width: Int
     public let height: Int
@@ -141,6 +166,15 @@ public struct MatchTimerLayout: Codable, Equatable, Sendable {
     public init(width: Int, height: Int) {
       self.width = width
       self.height = height
+    }
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case width, height }
+
+    public init(from decoder: Decoder) throws {
+      try MatchTimerLayout.rejectUnknownKeys(from: decoder, keys: CodingKeys.self, context: "size")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      width = try container.decode(Int.self, forKey: .width)
+      height = try container.decode(Int.self, forKey: .height)
     }
   }
 
@@ -156,6 +190,18 @@ public struct MatchTimerLayout: Codable, Equatable, Sendable {
       self.width = width
       self.height = height
     }
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case x, y, width, height }
+
+    public init(from decoder: Decoder) throws {
+      try MatchTimerLayout.rejectUnknownKeys(
+        from: decoder, keys: CodingKeys.self, context: "rectangle")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      x = try container.decode(Int.self, forKey: .x)
+      y = try container.decode(Int.self, forKey: .y)
+      width = try container.decode(Int.self, forKey: .width)
+      height = try container.decode(Int.self, forKey: .height)
+    }
   }
 
   public struct Regions: Codable, Equatable, Sendable {
@@ -164,6 +210,15 @@ public struct MatchTimerLayout: Codable, Equatable, Sendable {
     public init(matchTimer: Rectangle) {
       self.matchTimer = matchTimer
     }
+
+    private enum CodingKeys: String, CodingKey, CaseIterable { case matchTimer }
+
+    public init(from decoder: Decoder) throws {
+      try MatchTimerLayout.rejectUnknownKeys(
+        from: decoder, keys: CodingKeys.self, context: "regions")
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      matchTimer = try container.decode(Rectangle.self, forKey: .matchTimer)
+    }
   }
 
   public let schema: String
@@ -171,7 +226,7 @@ public struct MatchTimerLayout: Codable, Equatable, Sendable {
   public let referenceSize: Size
   public let regions: Regions
 
-  private enum CodingKeys: String, CodingKey {
+  private enum CodingKeys: String, CodingKey, CaseIterable {
     case schema = "$schema"
     case layoutId, referenceSize, regions
   }
@@ -181,6 +236,15 @@ public struct MatchTimerLayout: Codable, Equatable, Sendable {
     self.layoutId = layoutId
     self.referenceSize = referenceSize
     self.regions = regions
+  }
+
+  public init(from decoder: Decoder) throws {
+    try Self.rejectUnknownKeys(from: decoder, keys: CodingKeys.self, context: "layout")
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    schema = try container.decode(String.self, forKey: .schema)
+    layoutId = try container.decode(String.self, forKey: .layoutId)
+    referenceSize = try container.decode(Size.self, forKey: .referenceSize)
+    regions = try container.decode(Regions.self, forKey: .regions)
   }
 
   public func validate() throws {

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import Foundation
 import RecordVisionSupport
 import Testing
 
@@ -33,6 +34,27 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   }
 }
 
+@Test func matchLayoutRejectsUnknownKeysAtEveryLevel() {
+  let documents = [
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json","layoutId":"ja.20260811.match.timer","referenceSize":{"width":1920,"height":1080},"regions":{"matchTimer":{"x":0,"y":0,"width":1,"height":1}},"engine":"ignored"}"#,
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json","layoutId":"ja.20260811.match.timer","referenceSize":{"width":1920,"height":1080,"extra":1},"regions":{"matchTimer":{"x":0,"y":0,"width":1,"height":1}}}"#,
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json","layoutId":"ja.20260811.match.timer","referenceSize":{"width":1920,"height":1080},"regions":{"matchTimer":{"x":0,"y":0,"width":1,"height":1,"extra":1}}}"#,
+  ]
+  for document in documents {
+    #expect(throws: DecodingError.self) {
+      _ = try JSONDecoder().decode(MatchTimerLayout.self, from: Data(document.utf8))
+    }
+  }
+}
+
+@Test func timerSamplingAvoidsTheAssetEndAndRejectsSubMillisecondIntervals() throws {
+  #expect(try MatchTimerVideoOCR.sampleTimes(duration: 10.1, interval: 5).map(\.seconds) == [0, 5])
+  #expect(try MatchTimerVideoOCR.sampleTimes(duration: 2, interval: 5).map(\.seconds) == [0])
+  #expect(throws: MatchTimerVideoOCR.Error.self) {
+    _ = try MatchTimerVideoOCR.sampleTimes(duration: 10, interval: 0.0005)
+  }
+}
+
 @Test func detectsOneStandardMatchWithMissingObservations() throws {
   let result = MatchTimerDetection(records: [
     timer(100_000, "10:00"), timer(110_000, "09:50"), timer(125_000, "09:35"),
@@ -56,6 +78,19 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
     result.diagnostics.first { $0.recordingTimelineMilliseconds == 1_989_805 })
   #expect(outlier.disposition == "excluded")
   #expect(outlier.reason == "noConsistentCluster")
+}
+
+@Test func rejectsNegativeAndOverlappingMatchesWithoutSkippingIdentifiers() {
+  let result = MatchTimerDetection(records: [
+    timer(0, "05:00"), timer(5_000, "04:55"),
+    timer(700_000, "10:00"), timer(705_000, "09:55"), timer(710_000, "09:50"),
+    timer(1_100_000, "10:00"), timer(1_105_000, "09:55"),
+    timer(1_400_000, "10:00"), timer(1_405_000, "09:55"),
+  ])
+  #expect(result.matches.map(\.recordingPTSStart) == [700, 1_400])
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
+  #expect(result.diagnostics[0].reason == "startBeforeRecording")
+  #expect(result.diagnostics[1].reason == "startBeforeRecording")
 }
 
 @Test func corroboratedTenMinuteFrameAnchorsDelayedTimerSeries() throws {

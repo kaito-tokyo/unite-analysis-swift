@@ -126,7 +126,8 @@
               "consistentStandardMatchCluster",
               "invalidMMSS",
               "isolatedStartRequiresCorroboration",
-              "noConsistentCluster"
+              "noConsistentCluster",
+              "startBeforeRecording"
             ]
           }
         }

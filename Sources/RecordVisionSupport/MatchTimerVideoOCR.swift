@@ -16,23 +16,15 @@ public enum MatchTimerVideoOCR {
     sampleInterval: Double
   ) async throws -> [MatchTimerObservation] {
     try layout.validate()
-    guard sampleInterval.isFinite, sampleInterval > 0 else {
-      throw Error.message("Sample interval must be finite and positive")
-    }
     let extractor = try await VideoFrameExtractor(videoURL: videoURL)
     let duration = extractor.duration.seconds
-    guard duration.isFinite, duration > 0 else {
-      throw Error.message("Main video duration must be finite and positive")
-    }
-    var times: [CMTime] = []
-    var seconds = 0.0
-    while seconds < duration {
-      times.append(CMTime(seconds: seconds, preferredTimescale: 1_000))
-      seconds += sampleInterval
-    }
+    let times = try sampleTimes(duration: duration, interval: sampleInterval)
 
     var observations: [MatchTimerObservation] = []
+    var observedPresentationMilliseconds = Set<Int64>()
     try extractor.extractFrames(at: times) { _, frame, presentationTime in
+      let milliseconds = Int64((presentationTime.seconds * 1_000).rounded())
+      guard observedPresentationMilliseconds.insert(milliseconds).inserted else { return }
       try autoreleasepool {
         let crop = try timerCrop(
           frame: frame, gameScreen: gameScreen, layout: layout)
@@ -50,12 +42,29 @@ public enum MatchTimerVideoOCR {
           .max { $0.confidence < $1.confidence }
         observations.append(
           .init(
-            recordingTimelineMilliseconds: Int64((presentationTime.seconds * 1_000).rounded()),
+            recordingTimelineMilliseconds: milliseconds,
             output: candidate?.string.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             confidence: candidate?.confidence))
       }
     }
     return observations
+  }
+
+  public static func sampleTimes(duration: Double, interval: Double) throws -> [CMTime] {
+    guard interval.isFinite, interval >= 0.001 else {
+      throw Error.message("Sample interval must be finite and at least 0.001 seconds")
+    }
+    guard duration.isFinite, duration > 0 else {
+      throw Error.message("Main video duration must be finite and positive")
+    }
+    var times: [CMTime] = []
+    var seconds = 0.0
+    while seconds + interval <= duration {
+      times.append(CMTime(seconds: seconds, preferredTimescale: 1_000))
+      seconds += interval
+    }
+    if times.isEmpty { times.append(.zero) }
+    return times
   }
 
   public static func timerRectangle(
