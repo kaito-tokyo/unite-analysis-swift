@@ -100,7 +100,12 @@ public struct MatchTimerDetection: Codable, Sendable {
           && !claimedObservationIndices.contains(value.index)
           && !cluster.contains(where: { $0.index == value.index })
       }
-      let start = corroboratedStarts.map(\.candidate).min() ?? clusterStart
+      let inClusterStart = cluster.filter {
+        $0.remaining == 600 && $0.candidate <= clusterStart
+      }.map(\.candidate).min()
+      let startCandidates =
+        (inClusterStart.map { [$0] } ?? []) + corroboratedStarts.map(\.candidate)
+      let start = startCandidates.min() ?? clusterStart
       guard start + 600 <= recordingDuration else {
         for value in cluster + corroboratedStarts {
           diagnostics[value.index] = .init(

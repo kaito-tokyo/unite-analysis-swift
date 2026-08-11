@@ -109,6 +109,13 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.diagnostics[0].reason == "isolatedStartRequiresCorroboration")
 }
 
+@Test func inClusterTenMinuteObservationAnchorsStart() throws {
+  let result = MatchTimerDetection(records: [
+    timer(100_000, "10:00"), timer(107_000, "09:55"), timer(112_000, "09:50"),
+  ])
+  #expect(try #require(result.matches.first).recordingPTSStart == 100)
+}
+
 @Test func frozenTimerDoesNotFormAStandardMatch() {
   let result = MatchTimerDetection(records: [timer(400_000, "05:00"), timer(401_000, "05:00")])
   #expect(result.matches.isEmpty)

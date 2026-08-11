@@ -37,8 +37,8 @@ public enum MatchTimerVideoOCR {
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cgImage: recognitionImage, options: [:]).perform([request])
         let candidate = preferredCandidate(
-          from: (request.results ?? []).compactMap { observation in
-            observation.topCandidates(1).first.map { ($0.string, $0.confidence) }
+          from: (request.results ?? []).flatMap { observation in
+            observation.topCandidates(10).map { ($0.string, $0.confidence) }
           })
         observations.append(
           .init(
