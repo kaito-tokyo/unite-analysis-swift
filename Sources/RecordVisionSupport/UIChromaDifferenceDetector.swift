@@ -54,7 +54,7 @@ public struct ChromaEventSample: Codable, Equatable, Sendable {
 
 public struct ChromaEventResult: Codable, Equatable, Sendable {
   public static let schema =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events-v1.output.schema.json"
 
   public let inputSampleDirectory: String
   public let inputSampleCount: Int
@@ -73,6 +73,12 @@ public struct ChromaEventResult: Codable, Equatable, Sendable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let schema = try container.decode(String.self, forKey: .schema)
+    guard schema == Self.schema else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schema, in: container,
+        debugDescription: "$schema must equal \(Self.schema)")
+    }
     inputSampleDirectory = try container.decode(String.self, forKey: .inputSampleDirectory)
     inputSampleCount = try container.decode(Int.self, forKey: .inputSampleCount)
     firstInputFilename = try container.decode(String.self, forKey: .firstInputFilename)

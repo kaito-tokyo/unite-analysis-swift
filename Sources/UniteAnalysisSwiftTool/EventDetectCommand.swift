@@ -8,27 +8,27 @@ import RecordVisionSupport
 
 struct EventDetect: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "event-detect",
+    commandName: "event-detect-v1",
     abstract: "Deterministically merge audio, chroma, OCR, and scheduled candidates.",
     discussion: """
-      INPUT. Pass an event-detect.input.schema.json manifest. Paths in audioPeaks and chromaEvents are resolved relative to the manifest. Each chromaEvents entry assigns one nonempty region name to one detect-chroma-events output. OCR and scheduled candidates are embedded because they are already small normalized observations.
+      INPUT. Pass an event-detect-v1.input.schema.json manifest. Paths in audioPeaks and chromaEvents are resolved relative to the manifest. Each chromaEvents entry assigns one nonempty region name to one detect-chroma-events-v1 output. OCR and scheduled candidates are embedded because they are already small normalized observations.
 
       DETECTION. Audio scores use a nearest-rank 95th percentile and fixed-width five-second clusters anchored on the first peak. Chroma scores use independent nearest-rank 99.5th and 99th percentiles per region. Secondary chroma samples are admitted only when more than two seconds from every primary chroma or selected audio constituent point. Final candidates merge transitively across adjacent points at most two seconds apart. Scores from different sources or regions are never compared.
 
-      OUTPUT. The complete event-detect.output.schema.json result is written atomically to --output. Existing output is rejected unless --force is supplied. The absolute output path is written to stdout.
+      OUTPUT. The complete event-detect-v1.output.schema.json result is written atomically to --output. Existing output is rejected unless --force is supplied. The absolute output path is written to stdout.
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift event-detect event-detect.input.json --output _PokemonUniteAnalysis/matches/match-01/candidates/events.json
+      unite-analysis-swift event-detect-v1 event-detect-v1.input.json --output _PokemonUniteAnalysis/matches/match-01/candidates/events.json
 
-      SCHEMAS. Print the contracts with `unite-analysis-swift schema event-detect.input.schema.json` and `unite-analysis-swift schema event-detect.output.schema.json`.
+      SCHEMAS. Print the contracts with `unite-analysis-swift schema event-detect-v1.input.schema.json` and `unite-analysis-swift schema event-detect-v1.output.schema.json`.
       """.reflowedHelp()
   )
 
-  @Argument(help: "Input manifest conforming to event-detect.input.schema.json.")
+  @Argument(help: "Input manifest conforming to event-detect-v1.input.schema.json.")
   var input: String
 
-  @Option(help: "Required event-detect.output.schema.json path.")
+  @Option(help: "Required event-detect-v1.output.schema.json path.")
   var output: String
 
   @Flag(help: "Replace an existing output atomically.")
@@ -50,7 +50,7 @@ struct EventDetect: ParsableCommand {
 
 struct EventDetectManifest: Codable, Equatable, Sendable {
   static let schemaURL =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.input.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect-v1.input.schema.json"
 
   let audioPeaks: String
   let chromaEvents: [ChromaInput]
@@ -75,7 +75,7 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
   init(from decoder: Decoder) throws {
     try rejectUnknownKeys(
       from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
-      context: "event-detect manifest")
+      context: "event-detect-v1 manifest")
     let container = try decoder.container(keyedBy: CodingKeys.self)
     if let schema = try container.decodeIfPresent(String.self, forKey: .schema),
       schema != Self.schemaURL
@@ -113,7 +113,7 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
       try rejectUnknownKeys(
         from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
-        context: "event-detect chroma input")
+        context: "event-detect-v1 chroma input")
       let container = try decoder.container(keyedBy: CodingKeys.self)
       region = try container.decode(String.self, forKey: .region)
       path = try container.decode(String.self, forKey: .path)
@@ -140,7 +140,7 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
       try rejectUnknownKeys(
         from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
-        context: "event-detect OCR candidate")
+        context: "event-detect-v1 OCR candidate")
       let container = try decoder.container(keyedBy: CodingKeys.self)
       region = try container.decode(String.self, forKey: .region)
       inmatch = try container.decode(Double.self, forKey: .inmatch)
@@ -163,7 +163,7 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
       try rejectUnknownKeys(
         from: decoder, allowedKeys: Set(CodingKeys.allCases.map(\.rawValue)),
-        context: "event-detect scheduled candidate")
+        context: "event-detect-v1 scheduled candidate")
       let container = try decoder.container(keyedBy: CodingKeys.self)
       inmatch = try container.decode(Double.self, forKey: .inmatch)
       label = try container.decode(String.self, forKey: .label)
@@ -173,7 +173,7 @@ struct EventDetectManifest: Codable, Equatable, Sendable {
 
 struct EventDetectResult: Codable, Equatable, Sendable {
   static let schema =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/event-detect-v1.output.schema.json"
 
   let matchId: String
   let duration: Double

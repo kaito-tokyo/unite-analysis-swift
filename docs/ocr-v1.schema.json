@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-v1.schema.json",
+  "title": "unite-analysis-swift OCR job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jobId",
+    "input",
+    "source",
+    "region",
+    "type"
+  ],
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "input": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "$ref": "#/$defs/rectangle"
+    },
+    "region": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": [
+        "text",
+        "player-name",
+        "numeric"
+      ]
+    }
+  },
+  "$defs": {
+    "rectangle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

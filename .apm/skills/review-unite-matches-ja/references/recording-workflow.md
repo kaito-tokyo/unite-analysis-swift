@@ -22,7 +22,7 @@ arguments: ["--help"]
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks`、`extract-clip`、`recognize-draft-loadout`、`recognize-blind-loadout`、`eval-draw-text-script`と、Apple Visionを使う`ocr`、`scan-result`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -54,14 +54,14 @@ unite-analysis-swift schema <schema-basename>
 | `precise-frame` | AVAssetReaderで1枚の明示的なソース矩形画像を出力する |
 | `contact-sheet` | ソース動画フレームから任意配置のコンタクトシートを作る |
 | `frame-burst` | 指定時刻以降の連続ソースフレームを連写として1枚へ並べ、1秒未満の動作を検証する |
-| `ocr` | 静止画ジョブごとに矩形、領域名、認識タイプを明示してOCRする |
+| `ocr-v1` | 静止画ジョブごとに矩形、領域名、認識タイプを明示してOCRする |
 | `sample-frames` | FFmpeg相似のcrop、fps、scale指定で1領域のJPEG連番を出力する |
-| `detect-chroma-events` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
-| `audio-peaks` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
+| `detect-chroma-events-v1` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
+| `audio-peaks-v1` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
 | `extract-clip` | 試合相対の指定区間を再エンコードせずMP4へ切り出す |
-| `scan-result` | 結果画面またはバトルデータ画面をJSONへ読み取る |
-| `recognize-draft-loadout` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
-| `recognize-blind-loadout` | blind選択画面から、味方の持ち物・バトルアイテム・宣言ルートをJSONへ読み取る |
+| `scan-result-v1` | 結果画面またはバトルデータ画面をJSONへ読み取る |
+| `recognize-draft-loadout-v1` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
+| `recognize-blind-loadout-v1` | blind選択画面から、味方の持ち物・バトルアイテム・宣言ルートをJSONへ読み取る |
 | `eval-draw-text-script` | コンタクトシートの`drawText`用JSC式を単独評価する |
 | `schema` | `$schema` URLのbasenameを指定して内蔵JSON Schemaを表示する |
 | `config` | 明示的な保存・公開時にユーザー設定を管理する |
@@ -70,14 +70,14 @@ unite-analysis-swift schema <schema-basename>
 
 ## JSONジョブ
 
-`batch-frame`、`contact-sheet`、`frame-burst`、`ocr`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
+`batch-frame`、`contact-sheet`、`frame-burst`、`ocr-v1`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events-v1`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
 
-- `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`と`frame-burst`の各ジョブには`output`を明示する。`ocr`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
-- 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。`ocr`は静止画入力のみを読み、`record-spec.json`を使わない。
+- `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`と`frame-burst`の各ジョブには`output`を明示する。`ocr-v1`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
+- 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。`ocr-v1`は静止画入力のみを読み、`record-spec.json`を使わない。
 - すべての相対パスは、ジョブファイルの位置に関係なく現在の作業ディレクトリ基準とする。
 - 既存成果物を意図せず上書きしない。`--force`は再生成対象を確認した場合だけ使う。
-- `ocr`の各ジョブは`region`で`ocr-options.json`の同名エントリを選び、`source`と`type`を明示する。`ocr-options.json`には`$schema`、選択領域ごとの空でない`recognitionLanguages`、必要なら`customWords`を記録する。fallbackはない。
-- `sample-frames`と`detect-chroma-events`には同じ正の有限値`fps`を明示する。
+- `ocr-v1`の各ジョブは`region`で`ocr-options.json`の同名エントリを選び、`source`と`type`を明示する。`ocr-options.json`には`$schema`、選択領域ごとの空でない`recognitionLanguages`、必要なら`customWords`を記録する。fallbackはない。
+- `sample-frames`と`detect-chroma-events-v1`には同じ正の有限値`fps`を明示する。
 - `batch-frame`と`contact-sheet`の`matchTimestamps`は試合開始を0とする有限数値の配列とし、厳密な昇順にする。負数は試合開始前、試合時間より大きい値は試合終了後を表す。
 - ソース矩形を主映像の左上原点ピクセル座標で明示し、既定のゲーム領域を仮定しない。
 
@@ -139,16 +139,16 @@ overview以外のコンタクトシートに固定のPhase、Detail、列数、�
 
 対話前の分析では、次の候補生成を原則実行する。
 
-1. `audio-peaks`を試合全体へ実行し、完全なraw JSONを`_PokemonUniteAnalysis/matches/<match-id>/candidates/audio-peaks.json`へ`--output`で保存する。全`intervals`をそのまま候補にしない。
-2. 対象録画で確定したUI領域ごとに`sample-frames`を2 fps、JPEG quality 0.95で実行し、同じ2 fpsで`detect-chroma-events`を実行する。ファイル名は`frame-000001.jpg`のようにゼロ埋めし、辞書順と時系列を一致させる。
-3. `event-detect.input.schema.json`に従い、音声出力と領域名付き色差出力、空の`ocrCandidates`と`scheduledCandidates`を指定する。`event-detect`を一度実行し、機械選択された`chroma:<region>`構成点をOCR対象索引にする。分位点、音声クラスタ、二次候補判定、統合をモデルが再計算しない。
-4. 選択された各raw色差点の時刻を`t`とし、`t - 0.5`、`t`、`t + 0.5`秒を`precise-frame`で同じ領域の実寸JPEGとして元動画から再抽出する。試合範囲外の時刻は除き、各画像を`ocr`へ渡す。3時刻の結果とconfidenceをすべて保持し、表示途中と判断できる文字列を無理に統合しない。`batch-frame`は近似シークにより複数の要求時刻が同じ実フレームへ吸着し得るため、この短時間OCR列には使わない。色差計算用の縮小JPEGをOCR入力にせず、OCR内部で候補を生成・選別させない。OCR失敗または空結果でも色差候補を除去しない。
-5. OCR観測と確認済みの定刻イベントをmanifestへ追加し、`event-detect`を再実行して`_PokemonUniteAnalysis/matches/<match-id>/candidates/events.json`へ保存する。この出力だけを後続の自由分析へ渡す。
-6. `event-detect`出力の全構成点と由来を保持する。由来は`audio`、`chroma:<region>`、`ocr:<region>`、`scheduled`であり、色差は領域内score、音声はscore、OCRは認識値とconfidenceを保持する。異なる領域のraw scoreを直接比較しない。
+1. `audio-peaks-v1`を試合全体へ実行し、完全なraw JSONを`_PokemonUniteAnalysis/matches/<match-id>/candidates/audio-peaks.json`へ`--output`で保存する。全`intervals`をそのまま候補にしない。
+2. 対象録画で確定したUI領域ごとに`sample-frames`を2 fps、JPEG quality 0.95で実行し、同じ2 fpsで`detect-chroma-events-v1`を実行する。ファイル名は`frame-000001.jpg`のようにゼロ埋めし、辞書順と時系列を一致させる。
+3. `event-detect-v1.input.schema.json`に従い、音声出力と領域名付き色差出力、空の`ocrCandidates`と`scheduledCandidates`を指定する。`event-detect-v1`を一度実行し、機械選択された`chroma:<region>`構成点をOCR対象索引にする。分位点、音声クラスタ、二次候補判定、統合をモデルが再計算しない。
+4. 選択された各raw色差点の時刻を`t`とし、`t - 0.5`、`t`、`t + 0.5`秒を`precise-frame`で同じ領域の実寸JPEGとして元動画から再抽出する。試合範囲外の時刻は除き、各画像を`ocr-v1`へ渡す。3時刻の結果とconfidenceをすべて保持し、表示途中と判断できる文字列を無理に統合しない。`batch-frame`は近似シークにより複数の要求時刻が同じ実フレームへ吸着し得るため、この短時間OCR列には使わない。色差計算用の縮小JPEGをOCR入力にせず、OCR内部で候補を生成・選別させない。OCR失敗または空結果でも色差候補を除去しない。
+5. OCR観測と確認済みの定刻イベントをmanifestへ追加し、`event-detect-v1`を再実行して`_PokemonUniteAnalysis/matches/<match-id>/candidates/events.json`へ保存する。この出力だけを後続の自由分析へ渡す。
+6. `event-detect-v1`出力の全構成点と由来を保持する。由来は`audio`、`chroma:<region>`、`ocr:<region>`、`scheduled`であり、色差は領域内score、音声はscore、OCRは認識値とconfidenceを保持する。異なる領域のraw scoreを直接比較しない。
 
 2 fpsでは、10分試合の各領域が約1200枚になる。領域を縮小したJPEG連番は色差測定用の一時索引であり、証拠画像ではない。色差出力の`requestedInmatch`が`t`なら、変化後の画像は通常`round(t * fps) + 1`番のJPEGに対応するが、OCRと最終確認には番号から画像を流用せず、`requestedInmatch`を使って元動画から再抽出する。
 
-`event-detect`はnearest-rank分位点、領域ごとの一次・二次色差選択、最初の点を起点とする5秒未満の音声固定幅クラスタ、2秒の二次候補被覆判定、隣接差2秒以下の推移的統合を決定論的に実行する。入力契約は`event-detect.input.schema.json`、出力契約は`event-detect.output.schema.json`で確認する。
+`event-detect-v1`はnearest-rank分位点、領域ごとの一次・二次色差選択、最初の点を起点とする5秒未満の音声固定幅クラスタ、2秒の二次候補被覆判定、隣接差2秒以下の推移的統合を決定論的に実行する。入力契約は`event-detect-v1.input.schema.json`、出力契約は`event-detect-v1.output.schema.json`で確認する。
 
 16:9ゲーム領域での初期領域は次とする。値はゲーム領域の幅と高さに対する割合であり、実際のピクセル矩形へ比例変換してゲーム領域の左上オフセットを加える。UI配置が異なるモードではソース動画で領域を再確認する。
 
@@ -162,28 +162,28 @@ overview以外のコンタクトシートに固定のPhase、Detail、列数、�
 
 入力メディア不存在、必要なCLI機能不存在、デコード不能、Vision利用不能など、技術的に実行できない場合だけ該当種別を省略できる。その場合は、未取得種別、実行コマンド、失敗理由を分析成果物へ記録する。
 
-上記の分位点、音声クラスタ幅、統合幅は`event-detect`の固定契約である。録画条件の違いで候補が明らかに過多または過少でも、モデルが値を変更せずIssueとして記録する。OCR時刻列を変更した場合は変更値と理由を分析メモへ記録する。
+上記の分位点、音声クラスタ幅、統合幅は`event-detect-v1`の固定契約である。録画条件の違いで候補が明らかに過多または過少でも、モデルが値を変更せずIssueとして記録する。OCR時刻列を変更した場合は変更値と理由を分析メモへ記録する。
 
-OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`source`を使って同じJPEG領域を確認する。OCR文字列だけで出来事を確定せず、ソース動画画像を再確認する。`audio-peaks`と`detect-chroma-events`もイベントを分類しない。
+OCR結果に疑問がある場合は、`ocr-v1`出力の入力絶対パスと`source`を使って同じJPEG領域を確認する。OCR文字列だけで出来事を確定せず、ソース動画画像を再確認する。`audio-peaks-v1`と`detect-chroma-events-v1`もイベントを分類しない。
 
-`audio-peaks`は`--record-spec`と必要なら正の`--gain`を受け、試合全体を解析する。`--output`を指定しても完全なJSONをstdoutへ出力する既存契約は変わらない。`inmatch-start`や`duration`は指定しない。format v2の`main.fragmented.mp4`内の音声トラックを使い、音声トラックなし、format v1、デコード不能はエラーとして記録する。出力契約は`audio-peaks.output.schema.json`で確認する。
+`audio-peaks-v1`は`--record-spec`と必要なら正の`--gain`を受け、試合全体を解析する。`--output`を指定しても完全なJSONをstdoutへ出力する既存契約は変わらない。`inmatch-start`や`duration`は指定しない。format v2の`main.fragmented.mp4`内の音声トラックを使い、音声トラックなし、format v1、デコード不能はエラーとして記録する。出力契約は`audio-peaks-v1.output.schema.json`で確認する。
 
-分析メモには`audio-peaks`を`成功（peaksあり）`、`成功（0件）`、`失敗`、`未実行`のいずれかで記録し、成功時はraw JSONの保存先も記録する。raw JSONを保存しただけでは後段へ引き渡し済みとせず、候補選択・統合へ渡したかを別に記録する。失敗または未実行では、実行予定または実行したコマンドと理由を残す。
+分析メモには`audio-peaks-v1`を`成功（peaksあり）`、`成功（0件）`、`失敗`、`未実行`のいずれかで記録し、成功時はraw JSONの保存先も記録する。raw JSONを保存しただけでは後段へ引き渡し済みとせず、候補選択・統合へ渡したかを別に記録する。失敗または未実行では、実行予定または実行したコマンドと理由を残す。
 
-`detect-chroma-events`はJPEGディレクトリ、同じ`--fps`、JSON出力先をオプションで受ける。出力は全隣接ペアの無選別測定であり、契約は`chroma-events.output.schema.json`で確認する。
+`detect-chroma-events-v1`はJPEGディレクトリ、同じ`--fps`、JSON出力先をオプションで受ける。出力は全隣接ペアの無選別測定であり、契約は`chroma-events-v1.output.schema.json`で確認する。
 
-試合全体の概要コンタクトシートは目視探索索引であり、上記の機械生成候補に含めない。`scan-result`も事前基礎情報と最終結果の復元であり、候補生成に含めない。
+試合全体の概要コンタクトシートは目視探索索引であり、上記の機械生成候補に含めない。`scan-result-v1`も事前基礎情報と最終結果の復元であり、候補生成に含めない。
 
 ## リザルト
 
-`scan-result`には、Swift CLIで生成し、ゲーム画面全体が正しく含まれると確認した静止画を渡す。
+`scan-result-v1`には、Swift CLIで生成し、ゲーム画面全体が正しく含まれると確認した静止画を渡す。
 
 - 総合結果には`--type summary`を使う。
 - バトルデータには`--type battle-data`を使う。
 - レイアウトや切り出しが不正な画像の認識値を採用しない。
 - Apple Visionを実行できない場合は未実行として報告する。
 - 出力JSONと元のソース動画画像を対応づけて保存する。
-- 出力契約は`scan-result.output.schema.json`で確認する。
+- 出力契約は`scan-result-v1.output.schema.json`で確認する。
 - `--output`は既存ファイルを`--force`なしで原子的に置換するため、新規パスを使うか、置換対象を確認してから実行する。
 
 ## 選出形式とロードアウト
@@ -212,8 +212,8 @@ OCR結果に疑問がある場合は、`ocr`出力の入力絶対パスと`sourc
 3. `run_unite_analysis`へ`["--help"]`を渡してCLIを確認する。
 4. 既存の`_PokemonUniteAnalysis`成果物を調べ、現行入力と一致するものを再利用する。
 5. 選出開始前からVS画面までの映像で`draft`、`blind`、`unknown`を判定する。認識器に形式を推測させない。
-6. `draft`なら`recognize-draft-loadout`、`blind`なら`recognize-blind-loadout`を実行する。`unknown`または技術的失敗なら、未取得の認識種別、コマンド、理由を記録する。
-7. 結果画面とバトルデータ画面の安定フレームを抽出し、`scan-result`を実行する。取得不能または失敗した種類、コマンド、理由も記録する。
+6. `draft`なら`recognize-draft-loadout-v1`、`blind`なら`recognize-blind-loadout-v1`を実行する。`unknown`または技術的失敗なら、未取得の認識種別、コマンド、理由を記録する。
+7. 結果画面とバトルデータ画面の安定フレームを抽出し、`scan-result-v1`を実行する。取得不能または失敗した種類、コマンド、理由も記録する。
 8. 取得値と未取得理由を前提コンテキストへ整理し、以降の全分析入力として保存する。
 9. 事前イベント点候補生成の実行契約を実行し、候補または未取得理由を前提コンテキストとともに保存する。
 10. `batch-frame`または`contact-sheet`で、候補生成とは別に試合全体の概要を作る。

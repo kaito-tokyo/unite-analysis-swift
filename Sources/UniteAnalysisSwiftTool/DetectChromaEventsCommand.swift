@@ -8,14 +8,14 @@ import RecordVisionSupport
 
 struct DetectChromaEvents: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "detect-chroma-events",
+    commandName: "detect-chroma-events-v1",
     abstract: "Measure temporal Cb and Cr differences in a JPEG sequence.",
     discussion: """
       INPUT. --input-sample-dir is required and must contain at least two JPEG files. Files whose extension is .jpg or .jpeg, case-insensitively, are processed in filename dictionary order. Every filename must end in a consistently zero-padded, contiguous, 1-based sequence number such as frame-000001.jpg. The command rejects the first missing, repeated, malformed, or out-of-order index. Hidden files and other formats are ignored. Relative paths use the current working directory.
 
       COMPLETE EXAMPLE.
 
-      unite-analysis-swift detect-chroma-events --input-sample-dir sampled/top-event-banner --fps 2 --output top-event-banner.chroma-events.json
+      unite-analysis-swift detect-chroma-events-v1 --input-sample-dir sampled/top-event-banner --fps 2 --output top-event-banner.chroma-events.json
 
       TIMING. --fps must match the value used to create the sequence. Filename index 1 represents match-relative time 0; later files represent (filename index - 1) / fps. Because the JPEG sequence contains no decoder timestamp metadata, requestedInmatch and actualInmatch are both set to this validated sequence-grid time; actualInmatch is not a decoder-reported timestamp.
 
@@ -28,7 +28,7 @@ struct DetectChromaEvents: ParsableCommand {
       COMPLETE OUTPUT EXAMPLE.
 
       {
-        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events.output.schema.json",
+        "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/chroma-events-v1.output.schema.json",
         "firstInputFilename": "frame-000001.jpg",
         "fps": 2,
         "inputSampleCount": 1200,
@@ -51,7 +51,7 @@ struct DetectChromaEvents: ParsableCommand {
         ]
       }
 
-      SCHEMA. Print the output schema with `unite-analysis-swift schema chroma-events.output.schema.json`.
+      SCHEMA. Print the output schema with `unite-analysis-swift schema chroma-events-v1.output.schema.json`.
       """.reflowedHelp()
   )
 

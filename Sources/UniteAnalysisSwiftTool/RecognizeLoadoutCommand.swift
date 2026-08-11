@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 import UniteAnalysisConfiguration
 
 private struct LoadoutOutputDocument: Encodable {
-  let schema = "https://kaito-tokyo.github.io/unite-analysis-swift/loadout.output.schema.json"
+  let schema = "https://kaito-tokyo.github.io/unite-analysis-swift/loadout-v1.output.schema.json"
   let format: String
   let matchFormat: String
   let video: String
@@ -411,7 +411,7 @@ package func validateLoadoutOutputDestination(_ outputURL: URL, force: Bool) thr
 
 struct RecognizeDraftLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "recognize-draft-loadout",
+    commandName: "recognize-draft-loadout-v1",
     abstract: "Recognize draft final-preparation and versus-screen item loadouts.",
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
@@ -491,7 +491,7 @@ extension RecognizeDraftLoadout {
 
 struct RecognizeBlindLoadout: ParsableCommand {
   static let configuration = CommandConfiguration(
-    commandName: "recognize-blind-loadout",
+    commandName: "recognize-blind-loadout-v1",
     abstract: "Recognize allied loadouts from a blind-selection preparation screen.",
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.

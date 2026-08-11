@@ -40,22 +40,22 @@ package enum EmbeddedSchemas {
   }
 
   private static let schemas: [String: [UInt8]] = [
-    "audio-peaks.output.schema.json": PackageResources.audio_peaks_output_schema_json,
+    "audio-peaks-v1.output.schema.json": PackageResources.audio_peaks_v1_output_schema_json,
     "batch-frame.output.schema.json": PackageResources.batch_frame_output_schema_json,
     "batch-frame.schema.json": PackageResources.batch_frame_schema_json,
-    "chroma-events.output.schema.json": PackageResources.chroma_events_output_schema_json,
+    "chroma-events-v1.output.schema.json": PackageResources.chroma_events_v1_output_schema_json,
     "contact-sheet.output.schema.json": PackageResources.contact_sheet_output_schema_json,
     "contact-sheet.schema.json": PackageResources.contact_sheet_schema_json,
-    "event-detect.input.schema.json": PackageResources.event_detect_input_schema_json,
-    "event-detect.output.schema.json": PackageResources.event_detect_output_schema_json,
+    "event-detect-v1.input.schema.json": PackageResources.event_detect_v1_input_schema_json,
+    "event-detect-v1.output.schema.json": PackageResources.event_detect_v1_output_schema_json,
     "frame-burst.output.schema.json": PackageResources.frame_burst_output_schema_json,
     "frame-burst.schema.json": PackageResources.frame_burst_schema_json,
-    "loadout.output.schema.json": PackageResources.loadout_output_schema_json,
-    "ocr-options.schema.json": PackageResources.ocr_options_schema_json,
-    "ocr.output.schema.json": PackageResources.ocr_output_schema_json,
-    "ocr.schema.json": PackageResources.ocr_schema_json,
+    "loadout-v1.output.schema.json": PackageResources.loadout_v1_output_schema_json,
+    "ocr-options-v1.schema.json": PackageResources.ocr_options_v1_schema_json,
+    "ocr-v1.output.schema.json": PackageResources.ocr_v1_output_schema_json,
+    "ocr-v1.schema.json": PackageResources.ocr_v1_schema_json,
     "publication.schema.json": PackageResources.publication_schema_json,
     "ranked-seasons.schema.json": PackageResources.ranked_seasons_schema_json,
-    "scan-result.output.schema.json": PackageResources.scan_result_output_schema_json,
+    "scan-result-v1.output.schema.json": PackageResources.scan_result_v1_output_schema_json,
   ]
 }

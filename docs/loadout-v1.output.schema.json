@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout-v1.output.schema.json",
+  "title": "ポケモンユナイト recognized loadout",
+  "type": "object",
+  "required": [
+    "$schema",
+    "format",
+    "match_format",
+    "video",
+    "time_basis",
+    "recognizer",
+    "allies",
+    "enemies"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/loadout-v1.output.schema.json"
+    },
+    "format": {
+      "enum": [
+        "pokemon-unite-draft-loadout-2",
+        "pokemon-unite-blind-loadout-1"
+      ]
+    },
+    "match_format": {
+      "enum": [
+        "draft",
+        "blind"
+      ]
+    },
+    "video": {
+      "type": "string",
+      "minLength": 1
+    },
+    "final_prep_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "versus_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "prep_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "final_prep_presentation_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "versus_presentation_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "prep_presentation_time": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "time_basis": {
+      "enum": [
+        "match-relative",
+        "recording-timeline"
+      ]
+    },
+    "recognizer": {
+      "$ref": "#/$defs/recognizer"
+    },
+    "allies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ally"
+      }
+    },
+    "enemies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/enemy"
+      }
+    }
+  },
+  "$defs": {
+    "recognizer": {
+      "type": "object",
+      "required": [
+        "matching",
+        "held_knn_ratio",
+        "battle_knn_ratio",
+        "selection_mode",
+        "database_id",
+        "database_created_at"
+      ],
+      "properties": {
+        "matching": {
+          "type": "string"
+        },
+        "held_knn_ratio": {
+          "type": "number"
+        },
+        "battle_knn_ratio": {
+          "type": "number"
+        },
+        "selection_mode": {
+          "type": "string"
+        },
+        "database_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "database_created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "name",
+        "score"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "description": "Unnormalized sum of surviving Lowe-ratio descriptor votes. Each vote is 1 - nearestDistance / secondNearestDistance; this orders candidates within one crop but is not a probability or a calibrated value comparable across crops or database revisions."
+        }
+      }
+    },
+    "recognizedItem": {
+      "type": "object",
+      "required": [
+        "candidates"
+      ],
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Top candidate name, or null when evidence is below one vote, the top score is less than twice the runner-up score, or an allied player's independently accepted held-item slots select the same item."
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Top candidate unnormalized vote sum, retained even when name is null; null only when there are no candidates."
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        }
+      }
+    },
+    "declaredRoute": {
+      "type": "object",
+      "required": [
+        "method",
+        "chromatic_fraction"
+      ],
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Declared route, or null for low chromatic coverage or a median hue farther than 24.5 OpenCV hue units from every route reference."
+        },
+        "method": {
+          "const": "hsv"
+        },
+        "median_hue": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "chromatic_fraction": {
+          "type": "number"
+        }
+      }
+    },
+    "ally": {
+      "type": "object",
+      "required": [
+        "slot",
+        "held_items",
+        "battle_item",
+        "declared_route"
+      ],
+      "properties": {
+        "slot": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "held_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recognizedItem"
+          }
+        },
+        "battle_item": {
+          "$ref": "#/$defs/recognizedItem"
+        },
+        "declared_route": {
+          "$ref": "#/$defs/declaredRoute"
+        }
+      }
+    },
+    "enemy": {
+      "type": "object",
+      "required": [
+        "slot",
+        "battle_item"
+      ],
+      "properties": {
+        "slot": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "battle_item": {
+          "$ref": "#/$defs/recognizedItem"
+        }
+      }
+    }
+  }
+}

@@ -53,9 +53,9 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
       at: docsURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
     ).filter { $0.pathExtension == "json" }.map(\.lastPathComponent))
 
-  #expect(Set(EmbeddedSchemas.basenames) == documentBasenames)
+  #expect(Set(EmbeddedSchemas.basenames).isSubset(of: documentBasenames))
 
-  for basename in documentBasenames.sorted() {
+  for basename in EmbeddedSchemas.basenames.sorted() {
     let embeddedData = try #require(EmbeddedSchemas.data(basename: basename))
     let documentData = try Data(contentsOf: docsURL.appendingPathComponent(basename))
     #expect(embeddedData == documentData)
@@ -67,13 +67,43 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
   }
 }
 
+@Test func analysisSchemasRequireExplicitVersions() {
+  let expected = Set([
+    "audio-peaks-v1.output.schema.json",
+    "chroma-events-v1.output.schema.json",
+    "event-detect-v1.input.schema.json",
+    "event-detect-v1.output.schema.json",
+    "loadout-v1.output.schema.json",
+    "ocr-options-v1.schema.json",
+    "ocr-v1.output.schema.json",
+    "ocr-v1.schema.json",
+    "scan-result-v1.output.schema.json",
+  ])
+  #expect(expected.isSubset(of: Set(EmbeddedSchemas.basenames)))
+
+  let obsolete = [
+    "audio-peaks.output.schema.json",
+    "chroma-events.output.schema.json",
+    "event-detect.input.schema.json",
+    "event-detect.output.schema.json",
+    "loadout.output.schema.json",
+    "ocr-options.schema.json",
+    "ocr.output.schema.json",
+    "ocr.schema.json",
+    "scan-result.output.schema.json",
+  ]
+  for basename in obsolete {
+    #expect(EmbeddedSchemas.data(basename: basename) == nil)
+  }
+}
+
 @Test func inputSchemasRejectUnknownObjectProperties() throws {
   let inputSchemas = [
     "batch-frame.schema.json",
     "contact-sheet.schema.json",
-    "event-detect.input.schema.json",
+    "event-detect-v1.input.schema.json",
     "frame-burst.schema.json",
-    "ocr.schema.json",
+    "ocr-v1.schema.json",
     "publication.schema.json",
   ]
   for basename in inputSchemas {
@@ -82,7 +112,7 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
   }
 
   let ocrOptionsData = try Data(
-    contentsOf: repositoryRoot.appendingPathComponent("docs/ocr-options.schema.json")
+    contentsOf: repositoryRoot.appendingPathComponent("docs/ocr-options-v1.schema.json")
   )
   let ocrOptionsRoot = try #require(
     JSONSerialization.jsonObject(with: ocrOptionsData) as? [String: Any]

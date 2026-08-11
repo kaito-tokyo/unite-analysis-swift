@@ -40,7 +40,7 @@ public struct AudioPeakInterval: Codable, Equatable, Sendable {
 
 public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
   public static let schema =
-    "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks.output.schema.json"
+    "https://kaito-tokyo.github.io/unite-analysis-swift/audio-peaks-v1.output.schema.json"
 
   public let matchId: String
   public let inmatchStart: Double
@@ -75,6 +75,12 @@ public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let schema = try container.decode(String.self, forKey: .schema)
+    guard schema == Self.schema else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schema, in: container,
+        debugDescription: "$schema must equal \(Self.schema)")
+    }
     matchId = try container.decode(String.self, forKey: .matchId)
     inmatchStart = try container.decode(Double.self, forKey: .inmatchStart)
     duration = try container.decode(Double.self, forKey: .duration)
@@ -119,7 +125,7 @@ public enum AudioPeakDetector {
     let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
     guard formatVersion == 2 else {
       throw AudioPeakDetectorError.message(
-        "audio-peaks requires LDTX recording format version 2: \(infoURL.path)")
+        "audio-peaks-v1 requires LDTX recording format version 2: \(infoURL.path)")
     }
 
     // Recording format v2 defines the main media name independently of whether the redundant

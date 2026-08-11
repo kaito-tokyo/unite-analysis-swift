@@ -29,10 +29,10 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       Commands that accept jobs use one JSON object per non-empty jobs.jsonl line. Pass - to process
       stdin one line at a time; every job requires a unique jobId echoed by its JSONL response.
       Commands that use AVFoundation media access or Apple Vision text recognition must run outside a sandbox; their individual help identifies this requirement. Audio peak detection uses recording format v2 main-media audio to propose visually interesting times; it does not classify events. Run `batch-frame --help`, `sample-frames --help`, `precise-frame --help`,
-      `contact-sheet --help`, `frame-burst --help`, `detect-chroma-events --help`,
-      `event-detect --help`,
-      `audio-peaks --help`, `extract-clip --help`, `ocr --help`, `scan-result --help`,
-      `recognize-draft-loadout --help`, `recognize-blind-loadout --help`,
+      `contact-sheet --help`, `frame-burst --help`, `detect-chroma-events-v1 --help`,
+      `event-detect-v1 --help`,
+      `audio-peaks-v1 --help`, `extract-clip --help`, `ocr-v1 --help`, `scan-result-v1 --help`,
+      `recognize-draft-loadout-v1 --help`, `recognize-blind-loadout-v1 --help`,
       `eval-draw-text-script --help`, `schema --help`, or `config --help`
       for their JSON and output contracts.
       """.reflowedHelp(),
