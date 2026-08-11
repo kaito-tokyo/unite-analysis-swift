@@ -122,6 +122,14 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.diagnostics.allSatisfy { $0.reason == "noConsistentCluster" })
 }
 
+@Test func fiveMinuteCountdownDoesNotFormAStandardMatch() {
+  let result = MatchTimerDetection(records: [
+    timer(1_000_000, "05:00"), timer(1_005_000, "04:55"), timer(1_010_000, "04:50"),
+  ])
+  #expect(result.matches.isEmpty)
+  #expect(result.diagnostics.allSatisfy { $0.reason == "noConsistentCluster" })
+}
+
 @Test func acceptedObservationIsNotReusedByLaterCluster() {
   let result = MatchTimerDetection(records: [
     timer(100_000, "10:00"), timer(101_000, "09:59"),

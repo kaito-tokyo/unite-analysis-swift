@@ -88,6 +88,7 @@ public struct MatchTimerDetection: Codable, Sendable {
     let accepted = clusters.filter { cluster in
       cluster.count >= 2 && Set(cluster.map(\.remaining)).count >= 2
         && cluster.contains { $0.remaining < 600 }
+        && cluster.contains { $0.remaining > 300 }
     }.sorted { Self.median($0.map(\.candidate)) < Self.median($1.map(\.candidate)) }
 
     var matches: [DetectedMatch] = []
