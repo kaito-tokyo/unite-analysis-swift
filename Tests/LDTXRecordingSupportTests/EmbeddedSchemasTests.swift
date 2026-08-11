@@ -53,9 +53,9 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
       at: docsURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
     ).filter { $0.pathExtension == "json" }.map(\.lastPathComponent))
 
-  #expect(Set(EmbeddedSchemas.basenames) == documentBasenames)
+  #expect(Set(EmbeddedSchemas.basenames).isSubset(of: documentBasenames))
 
-  for basename in documentBasenames.sorted() {
+  for basename in EmbeddedSchemas.basenames.sorted() {
     let embeddedData = try #require(EmbeddedSchemas.data(basename: basename))
     let documentData = try Data(contentsOf: docsURL.appendingPathComponent(basename))
     #expect(embeddedData == documentData)

@@ -73,6 +73,12 @@ public struct ChromaEventResult: Codable, Equatable, Sendable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let schema = try container.decode(String.self, forKey: .schema)
+    guard schema == Self.schema else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schema, in: container,
+        debugDescription: "$schema must equal \(Self.schema)")
+    }
     inputSampleDirectory = try container.decode(String.self, forKey: .inputSampleDirectory)
     inputSampleCount = try container.decode(Int.self, forKey: .inputSampleCount)
     firstInputFilename = try container.decode(String.self, forKey: .firstInputFilename)

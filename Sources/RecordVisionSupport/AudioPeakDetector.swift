@@ -75,6 +75,12 @@ public struct AudioPeakDetectionResult: Codable, Equatable, Sendable {
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let schema = try container.decode(String.self, forKey: .schema)
+    guard schema == Self.schema else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .schema, in: container,
+        debugDescription: "$schema must equal \(Self.schema)")
+    }
     matchId = try container.decode(String.self, forKey: .matchId)
     inmatchStart = try container.decode(Double.self, forKey: .inmatchStart)
     duration = try container.decode(Double.self, forKey: .duration)

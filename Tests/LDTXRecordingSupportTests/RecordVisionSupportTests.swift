@@ -692,6 +692,16 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   #expect(object["$schema"] as? String == ChromaEventResult.schema)
 }
 
+@Test func chromaEventResultRejectsMismatchedSchemaURL() throws {
+  let data = Data(
+    #"{"$schema":"https://example.com/chroma-events.json","inputSampleDirectory":"samples","inputSampleCount":1,"firstInputFilename":"frame-000001.jpg","lastInputFilename":"frame-000001.jpg","fps":2,"sampledWidth":4,"sampledHeight":4,"samples":[]}"#
+      .utf8)
+
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(ChromaEventResult.self, from: data)
+  }
+}
+
 @Test func chromaEventUsesIndependentOtsuThresholds() {
   #expect(ChromaEventDetector.otsuThreshold([0, 0, 0, 8, 8, 8]) == 0)
   #expect(ChromaEventDetector.otsuThreshold([4, 4, 4]) == nil)
@@ -824,6 +834,16 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
     JSONSerialization.jsonObject(with: JSONEncoder().encode(result)) as? [String: Any])
 
   #expect(object["$schema"] as? String == AudioPeakDetectionResult.schema)
+}
+
+@Test func audioPeakResultRejectsMismatchedSchemaURL() throws {
+  let data = Data(
+    #"{"$schema":"https://example.com/audio-peaks.json","matchId":"recording","inmatchStart":0,"duration":600,"gain":1,"dilation":0.5,"peaks":[],"intervals":[]}"#
+      .utf8)
+
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(AudioPeakDetectionResult.self, from: data)
+  }
 }
 
 @Test func audioPeakDetectorDilatesAndUnionsPeakIntervals() {
