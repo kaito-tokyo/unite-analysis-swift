@@ -1,0 +1,112 @@
+// SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+//
+// SPDX-License-Identifier: Apache-2.0
+
+import RecordVisionSupport
+import Testing
+
+private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObservation {
+  .init(recordingTimelineMilliseconds: milliseconds, output: output)
+}
+
+@Test func matchLayoutValidatesAndScalesTimerRectangle() throws {
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL,
+    layoutId: "ja.20260811.match.timer",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 900, y: 20, width: 120, height: 60)))
+  try layout.validate()
+  #expect(
+    MatchTimerVideoOCR.timerRectangle(
+      gameScreen: .init(x: 0, y: 0, width: 1632, height: 918), layout: layout)
+      == .init(x: 765, y: 17, width: 102, height: 51))
+}
+
+@Test func matchLayoutRejectsOutOfBoundsTimer() {
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL,
+    layoutId: "ja.20260811.match.timer",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 1900, y: 20, width: 120, height: 60)))
+  #expect(throws: MatchTimerLayout.ValidationError.self) {
+    try layout.validate()
+  }
+}
+
+@Test func detectsOneStandardMatchWithMissingObservations() throws {
+  let result = MatchTimerDetection(records: [
+    timer(100_000, "10:00"), timer(110_000, "09:50"), timer(125_000, "09:35"),
+    timer(145_000, "09:15"),
+  ])
+  let match = try #require(result.matches.first)
+  #expect(result.matches.count == 1)
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 700)
+  #expect(match.observationCount == 4)
+}
+
+@Test func separatesMatchesAndRejectsResetAdjacentOutlier() throws {
+  let result = MatchTimerDetection(records: [
+    timer(584_806, "10:00"), timer(589_806, "09:55"), timer(604_806, "09:40"),
+    timer(1_984_806, "10:00"), timer(1_989_805, "00:01"), timer(1_994_806, "09:50"),
+    timer(2_009_806, "09:35"),
+  ])
+  #expect(result.matches.map(\.recordingPTSStart) == [584.806, 1_984.806])
+  let outlier = try #require(
+    result.diagnostics.first { $0.recordingTimelineMilliseconds == 1_989_805 })
+  #expect(outlier.disposition == "excluded")
+  #expect(outlier.reason == "noConsistentCluster")
+}
+
+@Test func corroboratedTenMinuteFrameAnchorsDelayedTimerSeries() throws {
+  let result = MatchTimerDetection(records: [
+    timer(584_806, "10:00"), timer(589_805, "09:58"), timer(594_806, "09:53"),
+    timer(599_806, "09:48"),
+  ])
+  #expect(result.matches.map(\.recordingPTSStart) == [584.806])
+  #expect(result.diagnostics[0].disposition == "accepted")
+}
+
+@Test func rejectsInvalidTimersAndIsolatedTenMinutes() throws {
+  let result = MatchTimerDetection(records: [
+    timer(1_000, "10:00"), timer(2_000, "10:01"), timer(3_000, "9:59"),
+    timer(4_000, "00:60"), timer(5_000, "hello"),
+  ])
+  #expect(result.matches.isEmpty)
+  #expect(result.diagnostics[0].reason == "isolatedStartRequiresCorroboration")
+  #expect(result.diagnostics.dropFirst().allSatisfy { $0.reason == "invalidMMSS" })
+}
+
+@Test func gameScreenRectangleDefaultsAndPartialFields() throws {
+  #expect(
+    try GameScreenRectangle.resolve(customFields: [:], videoWidth: 1632, videoHeight: 918)
+      == .init(x: 0, y: 0, width: 1632, height: 918))
+  #expect(
+    try GameScreenRectangle.resolve(
+      customFields: ["unite-analysis-swift.x": "32", "unite-analysis-swift.y": "18"],
+      videoWidth: 1632, videoHeight: 918)
+      == .init(x: 32, y: 18, width: 1600, height: 900))
+  #expect(
+    try GameScreenRectangle.resolve(
+      customFields: ["unite-analysis-swift.width": "1280"], videoWidth: 1632,
+      videoHeight: 918)
+      == .init(x: 0, y: 0, width: 1280, height: 918))
+}
+
+@Test func gameScreenRectangleRejectsInvalidAndOutOfBoundsValues() {
+  #expect(throws: GameScreenRectangle.ResolutionError.self) {
+    try GameScreenRectangle.resolve(
+      customFields: ["unite-analysis-swift.x": "not-an-integer"], videoWidth: 100,
+      videoHeight: 100)
+  }
+  #expect(throws: GameScreenRectangle.ResolutionError.self) {
+    try GameScreenRectangle.resolve(
+      customFields: ["unite-analysis-swift.x": "90", "unite-analysis-swift.width": "11"],
+      videoWidth: 100, videoHeight: 100)
+  }
+  #expect(throws: GameScreenRectangle.ResolutionError.self) {
+    try GameScreenRectangle.resolve(
+      customFields: ["unite-analysis-swift.height": "0"], videoWidth: 100,
+      videoHeight: 100)
+  }
+}

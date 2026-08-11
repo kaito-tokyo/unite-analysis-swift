@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json",
+  "title": "Pokemon Unite match timer layout v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "layoutId",
+    "referenceSize",
+    "regions"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json"
+    },
+    "layoutId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "referenceSize": {
+      "$ref": "#/$defs/size"
+    },
+    "regions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matchTimer"
+      ],
+      "properties": {
+        "matchTimer": {
+          "$ref": "#/$defs/rectangle"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "rectangle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

@@ -20,6 +20,7 @@ import Testing
 
 @Test func analysisCommandNamesHaveExplicitVersions() {
   let names = [
+    DetectMatches.configuration.commandName,
     DetectChromaEvents.configuration.commandName,
     AudioPeaks.configuration.commandName,
     EventDetect.configuration.commandName,
@@ -28,10 +29,10 @@ import Testing
     RecognizeDraftLoadout.configuration.commandName,
     RecognizeBlindLoadout.configuration.commandName,
   ].compactMap { $0 }
-  #expect(names.count == 7)
+  #expect(names.count == 8)
   #expect(
     Set(names) == [
-      "audio-peaks-v1", "detect-chroma-events-v1", "event-detect-v1",
+      "audio-peaks-v1", "detect-chroma-events-v1", "detect-matches-v1", "event-detect-v1",
       "ocr-v1", "recognize-blind-loadout-v1", "recognize-draft-loadout-v1", "scan-result-v1",
     ])
   #expect(
@@ -41,6 +42,10 @@ import Testing
 }
 
 @Test func versionedAnalysisCommandsParseAsTheirConcreteTypes() throws {
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "detect-matches-v1", "--input", "recording.ldtxrecord", "--layout", "layout.json",
+    ]) is DetectMatches)
   #expect(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "detect-chroma-events-v1", "--input-sample-dir", "frames", "--fps", "2", "--output",
@@ -76,7 +81,7 @@ import Testing
 
 @Test func unversionedAnalysisCommandNamesAreRejected() {
   let names = [
-    "audio-peaks", "detect-chroma-events", "event-detect", "ocr",
+    "audio-peaks", "detect-chroma-events", "detect-matches", "event-detect", "ocr",
     "recognize-blind-loadout", "recognize-draft-loadout", "scan-result",
   ]
   for name in names {
@@ -93,6 +98,7 @@ import Testing
     "event-detect.input.schema.json",
     "event-detect.output.schema.json",
     "loadout.output.schema.json",
+    "match-detection.output.schema.json",
     "ocr-options.schema.json",
     "ocr.output.schema.json",
     "ocr.schema.json",
@@ -105,6 +111,18 @@ import Testing
       for try await _ in command.outputRecords() {}
     }
   }
+}
+
+@Test func detectMatchesParsesPersistentOutputOptions() throws {
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "detect-matches-v1", "--input", "recording.ldtxrecord", "--layout", "layout.json",
+    "--output", "matches.json", "--force",
+  ])
+  let command = try #require(parsed as? DetectMatches)
+  #expect(command.input == "recording.ldtxrecord")
+  #expect(command.layout == "layout.json")
+  #expect(command.output == "matches.json")
+  #expect(command.force)
 }
 
 @Test func schemaCommandProducesSemanticOutputRecord() async throws {
