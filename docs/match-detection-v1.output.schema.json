@@ -47,7 +47,7 @@
         "properties": {
           "matchId": {
             "type": "string",
-            "pattern": "^match-[0-9]{2}$"
+            "pattern": "^match-[0-9]{2,}$"
           },
           "recordingPTSStart": {
             "type": "number",
@@ -127,7 +127,8 @@
               "invalidMMSS",
               "isolatedStartRequiresCorroboration",
               "noConsistentCluster",
-              "startBeforeRecording"
+              "startBeforeRecording",
+              "endAfterRecording"
             ]
           }
         }

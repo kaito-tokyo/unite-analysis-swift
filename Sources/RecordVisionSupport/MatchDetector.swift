@@ -44,7 +44,7 @@ public struct MatchTimerDetection: Codable, Sendable {
   public let matches: [DetectedMatch]
   public let diagnostics: [MatchTimerDiagnostic]
 
-  public init(records: [MatchTimerObservation]) {
+  public init(records: [MatchTimerObservation], recordingDuration: Double = .infinity) {
     struct Parsed {
       let index: Int
       let record: MatchTimerObservation
@@ -97,6 +97,17 @@ public struct MatchTimerDetection: Codable, Sendable {
           && !cluster.contains(where: { $0.index == value.index })
       }
       let start = corroboratedStarts.map(\.candidate).min() ?? clusterStart
+      guard start + 600 <= recordingDuration else {
+        for value in cluster + corroboratedStarts {
+          diagnostics[value.index] = .init(
+            recordingTimelineMilliseconds: value.record.recordingTimelineMilliseconds,
+            output: value.record.output, imageFileName: value.record.imageFileName,
+            confidence: value.record.confidence, remainingSeconds: value.remaining,
+            startCandidate: value.candidate, disposition: "excluded",
+            reason: "endAfterRecording")
+        }
+        continue
+      }
       // Do not let overlapping candidate clusters describe the same match.
       guard matches.last.map({ start - $0.recordingPTSStart >= 600 }) ?? true else { continue }
       matches.append(

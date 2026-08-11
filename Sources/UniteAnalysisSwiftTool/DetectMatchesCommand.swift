@@ -14,6 +14,8 @@ struct DetectMatches: ParsableCommand {
     discussion: """
       INPUT. --input must be a finalized recording format v2 .ldtxrecord. The main video is selected by LDTXRecordingMainMediaFile. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
 
+      EXECUTION. AVFoundation decoding and Apple Vision recognition require this command to run outside an application sandbox.
+
       OCR. The main video is decoded sequentially with AVAssetReader at --sample-interval spacing. Only the timer ROI is sent through VNImageRequestHandler using accurate en-US recognition with automatic language detection and language correction disabled. Every sample is handled in this process without JPEG round-trips or image-by-image process launches.
 
       DETECTION. Strict MM:SS observations produce standard-match start candidates. A lone 10:00 is insufficient. Consistent candidates are clustered despite missing samples; discontinuous OCR values are retained as excluded diagnostics. A later independently corroborated reset creates another match.
@@ -89,6 +91,7 @@ struct DetectMatches: ParsableCommand {
     }
     let naturalSize = try await track.load(.naturalSize)
     let transform = try await track.load(.preferredTransform)
+    let videoDuration = try await asset.load(.duration).seconds
     let displaySize = naturalSize.applying(transform)
     let videoWidth = Int(abs(displaySize.width).rounded())
     let videoHeight = Int(abs(displaySize.height).rounded())
@@ -129,7 +132,7 @@ struct DetectMatches: ParsableCommand {
     } catch {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
-    let detection = MatchTimerDetection(records: records)
+    let detection = MatchTimerDetection(records: records, recordingDuration: videoDuration)
     return .init(
       source: "videoOCR", mainMediaFile: mainMediaFile, layoutId: matchLayout.layoutId,
       gameScreen: gameScreen,

@@ -93,6 +93,14 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.diagnostics[1].reason == "startBeforeRecording")
 }
 
+@Test func rejectsMatchesThatEndAfterTheRecording() {
+  let result = MatchTimerDetection(
+    records: [timer(700_000, "10:00"), timer(705_000, "09:55")],
+    recordingDuration: 1_000)
+  #expect(result.matches.isEmpty)
+  #expect(result.diagnostics.allSatisfy { $0.reason == "endAfterRecording" })
+}
+
 @Test func corroboratedTenMinuteFrameAnchorsDelayedTimerSeries() throws {
   let result = MatchTimerDetection(records: [
     timer(584_806, "10:00"), timer(589_805, "09:58"), timer(594_806, "09:53"),
