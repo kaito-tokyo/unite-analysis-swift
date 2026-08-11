@@ -357,6 +357,22 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   #expect(try Data(contentsOf: output) == Data("original\n".utf8))
 }
 
+@Test func mcpDetectMatchesRejectsExistingOutputBeforeDecoding() async throws {
+  let output = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: output) }
+  try Data("original\n".utf8).write(to: output)
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "detect-matches-v1", "--input", "missing.ldtxrecord", "--layout", "missing.json",
+    "--output", output.path,
+  ])
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try await executeForMCP(parsed)
+  }
+  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
+
 @Test func jsonlOutputRequiresForceBeforeReplacingExistingFile() throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
