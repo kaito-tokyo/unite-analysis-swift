@@ -91,11 +91,13 @@ public struct MatchTimerDetection: Codable, Sendable {
     }.sorted { Self.median($0.map(\.candidate)) < Self.median($1.map(\.candidate)) }
 
     var matches: [DetectedMatch] = []
+    var claimedObservationIndices = Set<Int>()
     for cluster in accepted {
       let clusterStart = Self.median(cluster.map(\.candidate))
       let corroboratedStarts = parsed.filter { value in
         value.remaining == 600 && abs(value.candidate - clusterStart) <= 5
           && value.candidate <= clusterStart
+          && !claimedObservationIndices.contains(value.index)
           && !cluster.contains(where: { $0.index == value.index })
       }
       let start = corroboratedStarts.map(\.candidate).min() ?? clusterStart
@@ -128,6 +130,7 @@ public struct MatchTimerDetection: Codable, Sendable {
           recordingPTSEnd: start + 600, duration: 600,
           observationCount: cluster.count + corroboratedStarts.count))
       for value in cluster + corroboratedStarts {
+        claimedObservationIndices.insert(value.index)
         diagnostics[value.index] = .init(
           recordingTimelineMilliseconds: value.record.recordingTimelineMilliseconds,
           output: value.record.output, imageFileName: value.record.imageFileName,

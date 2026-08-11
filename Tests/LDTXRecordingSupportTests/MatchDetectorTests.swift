@@ -115,6 +115,18 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.diagnostics.allSatisfy { $0.reason == "noConsistentCluster" })
 }
 
+@Test func acceptedObservationIsNotReusedByLaterCluster() {
+  let result = MatchTimerDetection(records: [
+    timer(100_000, "10:00"), timer(101_000, "09:59"),
+    timer(109_000, "09:55"), timer(110_000, "09:54"),
+  ])
+  #expect(result.matches.count == 1)
+  #expect(result.diagnostics[0].disposition == "accepted")
+  #expect(result.diagnostics[1].disposition == "accepted")
+  #expect(result.diagnostics[2].reason == "overlapsPreviousMatch")
+  #expect(result.diagnostics[3].reason == "overlapsPreviousMatch")
+}
+
 @Test func rejectsNegativeAndOverlappingMatchesWithoutSkippingIdentifiers() {
   let result = MatchTimerDetection(records: [
     timer(0, "05:00"), timer(5_000, "04:55"),
