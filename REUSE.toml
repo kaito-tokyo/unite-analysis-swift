@@ -12,6 +12,7 @@ path = [
   "Contents/Info.plist",
   "docs/*.json",
   "docs/metadata/*",
+  "Sources/UniteAnalysisSwiftTool/Schemas/*.json",
   "Sources/IconMatcherNative/Generated/*.pb.c",
   "Sources/IconMatcherNative/Generated/*.pb.h",
 ]

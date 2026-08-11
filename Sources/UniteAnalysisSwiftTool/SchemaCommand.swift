@@ -51,6 +51,8 @@ package enum EmbeddedSchemas {
     "frame-burst.output.schema.json": PackageResources.frame_burst_output_schema_json,
     "frame-burst.schema.json": PackageResources.frame_burst_schema_json,
     "loadout-v1.output.schema.json": PackageResources.loadout_v1_output_schema_json,
+    "match-detection-v1.output.schema.json": PackageResources.match_detection_v1_output_schema_json,
+    "match-layout-v1.schema.json": PackageResources.match_layout_v1_schema_json,
     "ocr-options-v1.schema.json": PackageResources.ocr_options_v1_schema_json,
     "ocr-v1.output.schema.json": PackageResources.ocr_v1_output_schema_json,
     "ocr-v1.schema.json": PackageResources.ocr_v1_schema_json,

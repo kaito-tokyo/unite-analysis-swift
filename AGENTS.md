@@ -60,6 +60,7 @@ When creating a commit, follow these rules:
 ## Verification
 
 - Do not run `actionlint` in this repository.
+- Do not use `VNRecognizeTextRequest` with the `.fast` recognition level. It has caused a non-recoverable out-of-bounds abort inside Apple's private TextRecognition framework on real recordings. Use `.accurate` for native Vision text recognition unless a future macOS release is separately verified to fix the framework failure and a human explicitly approves changing this policy.
 - Keep `bump.yml` as a deliberately shallow gate that only checks whether the expected version strings occur in the designated files. Leave structural and semantic version divergence to agentic review instead of making this workflow stricter.
 - Run `swift format lint --recursive --strict Package.swift Sources Tests` after changing Swift files or formatting configuration. Vendor submodules contain upstream Swift examples outside this repository's formatting policy.
 - Verify that `Package.resolved` and `docs/*.json` equal their `jq --indent 2` output after changing JSON files.

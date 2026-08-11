@@ -1,0 +1,16 @@
+{
+  "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/match-layout-v1.schema.json",
+  "layoutId": "ja.20260811.match.timer",
+  "referenceSize": {
+    "width": 1920,
+    "height": 1080
+  },
+  "regions": {
+    "matchTimer": {
+      "x": 880,
+      "y": 20,
+      "width": 160,
+      "height": 60
+    }
+  }
+}

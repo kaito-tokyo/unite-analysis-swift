@@ -51,6 +51,15 @@ package func builtInMCPOutput(arguments: [String]) throws -> String? {
 package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] {
   var records: [Any] = []
   switch parsed {
+  case let command as DetectMatches:
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
+    for try await record in command.outputRecords() {
+      if let output = command.output {
+        try writeOutputData(
+          try prettyPrintedJSONData(record), to: resolvePath(output), force: command.force)
+      }
+      records.append(try encodedObject(record))
+    }
   case let command as AudioPeaks:
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
