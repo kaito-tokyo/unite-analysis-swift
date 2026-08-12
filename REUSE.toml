@@ -10,6 +10,8 @@ path = [
   "Package.resolved",
   "Package.swift",
   "Contents/Info.plist",
+  ".github/aw/actions-lock.json",
+  ".github/workflows/*.lock.yml",
   "docs/*.json",
   "docs/metadata/*",
   "Sources/UniteAnalysisSwiftTool/Schemas/*.json",

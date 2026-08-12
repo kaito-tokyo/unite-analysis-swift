@@ -4,11 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: PR
+name: PR Check
 
 on:
   pull_request:
-    branches: [main]
 
 permissions: {}
 
