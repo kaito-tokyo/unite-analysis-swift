@@ -1,1 +1,2 @@
-Sources/IconMatcherNative/Generated/* linguist-generated
+.github/workflows/*.lock.yml linguist-generated=true
+Sources/IconMatcherNative/Generated/* linguist-generated=true
