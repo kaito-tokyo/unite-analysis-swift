@@ -18,6 +18,42 @@ import Testing
   #expect(parsed is Schema)
 }
 
+private struct RegisteredCommand {
+  let path: [String]
+  let type: ParsableCommand.Type
+  let isLeaf: Bool
+}
+
+private func registeredCommands(
+  in type: ParsableCommand.Type = UniteAnalysisSwiftCommand.self,
+  path: [String] = []
+) -> [RegisteredCommand] {
+  type.configuration.subcommands.flatMap { subcommand in
+    let commandName = subcommand.configuration.commandName ?? String(describing: subcommand)
+    let commandPath = path + [commandName]
+    let registered = RegisteredCommand(
+      path: commandPath, type: subcommand,
+      isLeaf: subcommand.configuration.subcommands.isEmpty)
+    return [registered] + registeredCommands(in: subcommand, path: commandPath)
+  }
+}
+
+@Test func registeredCommandsHaveHelpAndExecutionDispatch() async throws {
+  let commands = registeredCommands()
+  #expect(!commands.isEmpty)
+
+  for command in commands {
+    #expect(
+      builtInCLIOutput(arguments: command.path + ["--help"]) != nil,
+      "Missing help dispatch for \(command.path.joined(separator: " "))")
+
+    guard command.isLeaf else { continue }
+    let instance = command.type.init()
+    try await executeCLI(instance, mode: .validate)
+    _ = try await executeForMCP(instance, mode: .validate)
+  }
+}
+
 @Test func analysisCommandNamesHaveExplicitVersions() {
   let names = [
     DetectChromaEvents.configuration.commandName,
