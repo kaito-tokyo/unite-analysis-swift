@@ -314,13 +314,16 @@ private enum ASRAudioInput {
     guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
       throw UniteAnalysisSwiftToolError.message("Input has no audio track: \(url.path)")
     }
+    let duration = try await asset.load(.duration)
     let reader = try AVAssetReader(asset: asset)
+    reader.timeRange = CMTimeRange(start: .zero, duration: duration)
+    let pcmDescription = try pcmDescription(for: audioFormat)
     let settings: [String: Any] = [
       AVFormatIDKey: kAudioFormatLinearPCM,
-      AVLinearPCMIsFloatKey: false,
-      AVLinearPCMBitDepthKey: 16,
-      AVLinearPCMIsBigEndianKey: false,
-      AVLinearPCMIsNonInterleaved: false,
+      AVLinearPCMIsFloatKey: pcmDescription.isFloat,
+      AVLinearPCMBitDepthKey: pcmDescription.bitDepth,
+      AVLinearPCMIsBigEndianKey: pcmDescription.isBigEndian,
+      AVLinearPCMIsNonInterleaved: !audioFormat.isInterleaved,
       AVSampleRateKey: audioFormat.sampleRate,
       AVNumberOfChannelsKey: audioFormat.channelCount,
     ]
@@ -336,6 +339,35 @@ private enum ASRAudioInput {
         "Could not start audio decoding: \(reader.error?.localizedDescription ?? "unknown error")")
     }
     return ASRAnalyzerInputSequence(reader: reader, output: output, inputPath: url.path)
+  }
+
+  private static func pcmDescription(
+    for audioFormat: AVAudioFormat
+  ) throws -> (isFloat: Bool, bitDepth: Int, isBigEndian: Bool) {
+    let isFloat: Bool
+    let bitDepth: Int
+    switch audioFormat.commonFormat {
+    case .pcmFormatFloat32:
+      isFloat = true
+      bitDepth = 32
+    case .pcmFormatFloat64:
+      isFloat = true
+      bitDepth = 64
+    case .pcmFormatInt16:
+      isFloat = false
+      bitDepth = 16
+    case .pcmFormatInt32:
+      isFloat = false
+      bitDepth = 32
+    case .otherFormat:
+      throw UniteAnalysisSwiftToolError.message(
+        "SpeechAnalyzer requested an unsupported PCM format: \(audioFormat)")
+    @unknown default:
+      throw UniteAnalysisSwiftToolError.message(
+        "SpeechAnalyzer requested an unknown PCM format: \(audioFormat)")
+    }
+    let flags = audioFormat.streamDescription.pointee.mFormatFlags
+    return (isFloat, bitDepth, flags & kAudioFormatFlagIsBigEndian != 0)
   }
 }
 
@@ -374,9 +406,10 @@ private final class ASRAnalyzerInputSequence: AsyncSequence, @unchecked Sendable
       lock.lock()
       defer { lock.unlock() }
       if let sampleBuffer = output.copyNextSampleBuffer() {
+        let presentationTime = Swift.max(sampleBuffer.presentationTimeStamp, .zero)
         return try AnalyzerInput(
           buffer: Self.audioBuffer(from: sampleBuffer),
-          bufferStartTime: sampleBuffer.presentationTimeStamp)
+          bufferStartTime: presentationTime)
       }
       guard reader.status == .completed else {
         throw UniteAnalysisSwiftToolError.message(

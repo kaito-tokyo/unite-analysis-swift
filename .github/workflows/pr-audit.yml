@@ -17,7 +17,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.pr_number }}
+  group: ${{ github.workflow }}-dispatcher-${{ inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
