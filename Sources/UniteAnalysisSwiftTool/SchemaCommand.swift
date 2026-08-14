@@ -40,6 +40,8 @@ package enum EmbeddedSchemas {
   }
 
   private static let schemas: [String: [UInt8]] = [
+    "asr-v1.input.schema.json": PackageResources.asr_v1_input_schema_json,
+    "asr-v1.output.schema.json": PackageResources.asr_v1_output_schema_json,
     "audio-peaks-v1.output.schema.json": PackageResources.audio_peaks_v1_output_schema_json,
     "batch-frame.output.schema.json": PackageResources.batch_frame_output_schema_json,
     "batch-frame.schema.json": PackageResources.batch_frame_schema_json,

@@ -53,6 +53,11 @@ package func executeForMCP(
 ) async throws -> [Any] {
   var records: [Any] = []
   switch parsed {
+  case let command as ASRCommand:
+    guard mode == .execute else { return records }
+    for try await record in command.outputRecords() {
+      records.append(try encodedObject(record))
+    }
   case let command as DetectMatches:
     guard mode == .execute else { return records }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)

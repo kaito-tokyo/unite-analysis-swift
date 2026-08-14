@@ -69,6 +69,8 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
 
 @Test func analysisSchemasRequireExplicitVersions() {
   let expected = Set([
+    "asr-v1.input.schema.json",
+    "asr-v1.output.schema.json",
     "audio-peaks-v1.output.schema.json",
     "chroma-events-v1.output.schema.json",
     "event-detect-v1.input.schema.json",
@@ -84,6 +86,8 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
   #expect(expected.isSubset(of: Set(EmbeddedSchemas.basenames)))
 
   let obsolete = [
+    "asr.input.schema.json",
+    "asr.output.schema.json",
     "audio-peaks.output.schema.json",
     "chroma-events.output.schema.json",
     "event-detect.input.schema.json",
@@ -102,6 +106,7 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
 
 @Test func inputSchemasRejectUnknownObjectProperties() throws {
   let inputSchemas = [
+    "asr-v1.input.schema.json",
     "batch-frame.schema.json",
     "contact-sheet.schema.json",
     "event-detect-v1.input.schema.json",
@@ -125,6 +130,21 @@ private func fieldDescriptions(named fieldName: String, in value: Any) -> [Strin
   let definitions = try #require(ocrOptionsRoot["$defs"] as? [String: Any])
   let options = try #require(definitions["options"] as? [String: Any])
   #expect(options["additionalProperties"] == nil)
+}
+
+@Test func asrSchemaMatchesConfigurationValidationLimits() throws {
+  let data = try Data(
+    contentsOf: repositoryRoot.appendingPathComponent("docs/asr-v1.input.schema.json"))
+  let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+  let required = try #require(root["required"] as? [String])
+  #expect(Set(required) == ["$schema", "language"])
+  let properties = try #require(root["properties"] as? [String: Any])
+  let contextualStrings = try #require(properties["contextualStrings"] as? [String: Any])
+  #expect(contextualStrings["maxItems"] as? Int == 100)
+  #expect(contextualStrings["uniqueItems"] as? Bool == true)
+  let items = try #require(contextualStrings["items"] as? [String: Any])
+  #expect(items["minLength"] as? Int == 1)
+  #expect(items["maxLength"] as? Int == 100)
 }
 
 @Test func schemasDescribeSemanticallyAmbiguousFields() throws {

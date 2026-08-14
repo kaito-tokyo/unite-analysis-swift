@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/asr-v1.output.schema.json",
+  "title": "ASR v1 output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "input",
+    "requestedLanguage",
+    "resolvedLanguage",
+    "contextualStrings",
+    "results"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/asr-v1.output.schema.json"
+    },
+    "input": {
+      "type": "string",
+      "description": "Absolute local media input path."
+    },
+    "requestedLanguage": {
+      "type": "string"
+    },
+    "resolvedLanguage": {
+      "type": "string"
+    },
+    "contextualStrings": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "startTime",
+          "duration",
+          "isFinal"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Media-relative start time in seconds."
+          },
+          "duration": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Media-relative result duration in seconds."
+          },
+          "isFinal": {
+            "type": "boolean",
+            "description": "Whether Speech framework finalized this result."
+          }
+        }
+      }
+    }
+  }
+}
