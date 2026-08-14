@@ -6,6 +6,13 @@
 
 この文書は、不明な事実から次の調査へ進むための手順である。正確な引数、入出力、制約は実行中の`unite-analysis-swift help <subcommand>`を正本とし、実行方法と共通契約は[recording-workflow.md](recording-workflow.md)に従う。
 
+## 録画内の試合区間を検出する
+
+- **使うツール**: `detect-matches-v1`。LDTX Visionメタデータには依存せず、recording format v2の主映像を直接順次デコードして試合タイマーをOCRする。
+- **レイアウト**: `--layout`には同梱の[ja.20260811.match.timer.json](ja.20260811.match.timer.json)を指定する。レイアウトIDとコマンドのバージョンは別の契約であり、エンジン選択をJSON内で行わない。
+- **再現例**: `.ldtxrecord`ルートから`unite-analysis-swift detect-matches-v1 --input . --layout <skill-root>/references/ja.20260811.match.timer.json`を実行する。`<skill-root>`はインストール済みSkillのルート絶対パスへ置き換える。このコマンドは試合別`record-spec.json`を作る前に使うため、`--record-spec`を指定しない。
+- **限界**: 標準10分試合だけを候補化する。降参および特殊モードの終了は推測しない。
+
 ## 長い録画から候補時刻を探す
 
 - **症状**: 関連場面の時刻が不明で、試合全体を通して候補を探す必要がある。

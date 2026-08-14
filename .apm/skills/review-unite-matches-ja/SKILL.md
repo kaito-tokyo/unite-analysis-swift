@@ -163,4 +163,19 @@ description: LDTXの.ldtxrecordに収録された完了済みポケモンユナ�
 
 Obsidian操作が必要になったら、今回の依頼で明示されたパスを優先し、なければSwift CLIの恒久設定を読む。必要な設定が未登録ならユーザーへ設定値を尋ね、`~/Obsidian/PokemonUnite/MatchReports`または`~/Obsidian/PokemonUnite/StrategyBooks`を既定の候補として提案する。ユーザーが選んだ既存ディレクトリ、または作成に同意したディレクトリだけをCLIへ設定する。詳しい確認、作成、設定手順は保存・公開の参照文書に従う。
 
+## Upstreamと問い合わせ
+
+Upstreamは[https://github.com/kaito-tokyo/unite-analysis-swift](https://github.com/kaito-tokyo/unite-analysis-swift)である。プロジェクトについて質問がある場合は[GitHub Discussions](https://github.com/kaito-tokyo/unite-analysis-swift/discussions)、機能提案またはバグ報告が必要な場合は[GitHub Issues](https://github.com/kaito-tokyo/unite-analysis-swift/issues)を案内する。
+
+セキュリティに関する報告や操作の前に、Upstreamの[`SECURITY.md`](https://github.com/kaito-tokyo/unite-analysis-swift/blob/main/SECURITY.md)を読み、その指示を優先する。脆弱性を公開IssueやDiscussionsに投稿せず、`SECURITY.md`に記載された非公開の報告手段を使う。
+
+GitHub Issueを作成する場合は次を守る。
+
+- 起票が必要と判断しても勝手に作成せず、作成前に必ず人間の明示的な同意を得る。
+- 英語で書く。
+- Issue Typeを必ず1つだけ設定する。
+- Issue Typeは`Task`、`Bug`、`Crash report`のいずれかとし、人間が明示的に許可した場合に限り`Feature`を使う。
+- 適切なIssue Typeが不明な場合は`Task`を使ってよい。
+- ラベルを追加しない。
+
 このワークフローで試合中のリアルタイムコーチングを行わない。

@@ -57,9 +57,22 @@ When creating a commit, follow these rules:
 - Report missing datasets, unavailable tools, and skipped checks as not run. Never report them as passed.
 - Write generated test and evaluation artifacts only to locations allowed by the applicable dataset instructions.
 
+## Skill review
+
+- Use the `Skill Audit` instructions in `.github/workflows/audit-skills.md` as the review criteria when reviewing changes under `.apm/skills/`.
+- Treat a Skill audit as the final Skill-review gate for the reviewed revision, not as GitHub pull request approval. Perform it only after implementation, validation, ordinary review, and requested corrections are complete.
+- In a local review, do not follow the workflow frontmatter or call its safe-output tools. Return an equivalent audit result in the current session unless the user explicitly requests a GitHub Check Run or pull request comment.
+
+## GitHub Agentic Workflows
+
+- Use the installed custom `gh-aw` compiler, but pin the generated runtime to the official `github/gh-aw@v0.86.2` release.
+- Compile an agentic workflow with `gh aw compile <workflow> --gh-aw-ref v0.86.2 --no-check-update`. Do not run `gh aw compile` without `--gh-aw-ref v0.86.2`, because the custom compiler otherwise emits development-mode runtime references and `--action-tag v0.86.2` leaves a mutable tag reference instead of resolving it to a commit SHA.
+- After compilation, verify that every generated `github/gh-aw` runtime reference is pinned to commit `48e5fa3ff52294d91d97715017a9f8693a48387f`.
+
 ## Verification
 
-- Do not run `actionlint` in this repository.
+- Do not respect any result of `actionlint` in this repository.
+- Do not use `VNRecognizeTextRequest` with the `.fast` recognition level. It has caused a non-recoverable out-of-bounds abort inside Apple's private TextRecognition framework on real recordings. Use `.accurate` for native Vision text recognition unless a future macOS release is separately verified to fix the framework failure and a human explicitly approves changing this policy.
 - Keep `bump.yml` as a deliberately shallow gate that only checks whether the expected version strings occur in the designated files. Leave structural and semantic version divergence to agentic review instead of making this workflow stricter.
 - Run `swift format lint --recursive --strict Package.swift Sources Tests` after changing Swift files or formatting configuration. Vendor submodules contain upstream Swift examples outside this repository's formatting policy.
 - Verify that `Package.resolved` and `docs/*.json` equal their `jq --indent 2` output after changing JSON files.

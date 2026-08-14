@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: PR Audit Check
+
+# Register this workflow from the main branch with the organization ruleset's
+# "Require workflows to pass before merging" rule.
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-skills-precondition:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+    outputs:
+      AUDIT_REQUIRED: ${{ steps.detect-changes.outputs.result }}
+      AUDIT_AUTHORIZED: ${{ contains(github.event.pull_request.labels.*.name, 'apm') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          filter: blob:none
+          fetch-depth: 0
+
+      - name: Detect apm file changes
+        id: detect-changes
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --quiet "${BASE_SHA:?}...${HEAD_SHA:?}" -- '.apm/skills/**'; then
+            printf 'result=false\n' | tee -a "${GITHUB_OUTPUT:?}"
+          else
+            printf 'result=true\n' | tee -a "${GITHUB_OUTPUT:?}"
+          fi
+
+  audit-skills:
+    if: >-
+      needs.audit-skills-precondition.outputs.AUDIT_REQUIRED == 'true' &&
+      needs.audit-skills-precondition.outputs.AUDIT_AUTHORIZED == 'true'
+    needs: audit-skills-precondition
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/audit-skills.lock.yml
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  audit-ci:
+    needs: [audit-skills-precondition, audit-skills]
+    if: always()
+    runs-on: ubuntu-slim
+    steps:
+      - name: Require audit skill pass
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        env:
+          PRECONDITION_RESULT: ${{ needs.audit-skills-precondition.result }}
+          AUDIT_REQUIRED: ${{ needs.audit-skills-precondition.outputs.AUDIT_REQUIRED }}
+          AUDIT_AUTHORIZED: ${{ needs.audit-skills-precondition.outputs.AUDIT_AUTHORIZED }}
+          AUDIT_RESULT: ${{ needs.audit-skills.result }}
+        run: |
+          [[ "${PRECONDITION_RESULT:?}" != success ]] && { printf 'FAILURE: Precondition job error\n'; exit 1; }
+          [[ "${AUDIT_REQUIRED:?}" == false ]] && { printf 'SUCCESS: This audit is not required\n'; exit 0; }
+          [[ "${AUDIT_AUTHORIZED:?}" != true ]] && { printf 'FAILURE: Apply the apm label, then close and reopen the pull request\n'; exit 1; }
+          [[ "${AUDIT_RESULT:?}" != success ]] && { printf 'FAILURE: This audit failed\n'; exit 1; }
+          printf 'SUCCESS: This audit passed\n'

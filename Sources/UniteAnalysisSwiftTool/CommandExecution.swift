@@ -36,6 +36,7 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["frame-burst"]: FrameBurst.self
     case ["detect-chroma-events-v1"]: DetectChromaEvents.self
     case ["audio-peaks-v1"]: AudioPeaks.self
+    case ["detect-matches-v1"]: DetectMatches.self
     case ["event-detect-v1"]: EventDetect.self
     case ["extract-clip"]: ExtractClip.self
     case ["ocr-v1"]: OCRCommand.self
@@ -68,6 +69,17 @@ package func executeCLI(
   _ parsed: any ParsableCommand, mode: CommandDispatchMode = .execute
 ) async throws {
   switch parsed {
+  case let command as DetectMatches:
+    guard mode == .execute else { return }
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
+    for try await record in command.outputRecords() {
+      let data = try prettyPrintedJSONData(record)
+      if let output = command.output {
+        try writeOutputData(data, to: resolvePath(output), force: command.force)
+      }
+      try FileHandle.standardOutput.write(contentsOf: data)
+    }
+
   case let command as AudioPeaks:
     guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
