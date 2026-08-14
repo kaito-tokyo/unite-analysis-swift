@@ -55,6 +55,7 @@ jobs:
       actions: read
       checks: read
       contents: read
+      issues: write
       pull-requests: write
     uses: ./.github/workflows/audit-skills.lock.yml
     with:
