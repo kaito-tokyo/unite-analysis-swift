@@ -22,7 +22,7 @@ arguments: ["--help"]
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。`asr-v1`が必要とするApple管理のSpeech assetもサンドボックス外で取得する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -58,6 +58,7 @@ unite-analysis-swift schema <schema-basename>
 | `sample-frames` | FFmpeg相似のcrop、fps、scale指定で1領域のJPEG連番を出力する |
 | `detect-chroma-events-v1` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
 | `audio-peaks-v1` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
+| `asr-v1` | ローカル音声・動画内の発話をAppleのオンデバイス音声認識で時刻付きテキスト索引にする |
 | `extract-clip` | 試合相対の指定区間を再エンコードせずMP4へ切り出す |
 | `scan-result-v1` | 結果画面またはバトルデータ画面をJSONへ読み取る |
 | `recognize-draft-loadout-v1` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
@@ -67,6 +68,30 @@ unite-analysis-swift schema <schema-basename>
 | `config` | 明示的な保存・公開時にユーザー設定を管理する |
 
 専用サブコマンドがある処理を、手作業の抽出や独自スクリプトへ置き換えない。失敗した場合は、実行したサブコマンド、入力、失敗理由、未取得項目を記録する。
+
+## 発話の任意索引
+
+録画に含まれるユーザー発話、チーム音声、またはゲーム内アナウンスが場面探索に役立つ場合だけ`asr-v1`を使う。全試合で必須にせず、音声トラックがない場合、発話が分析に寄与しない場合、または音声認識を実行できない場合は省略理由を記録する。
+
+対象試合またはシーンを`extract-clip`でMP4へ切り出し、そのMP4を`--input`へ渡す。設定は`asr-v1.input.schema.json`に従うJSONとして同じ試合の分析領域へ保存し、`language`には録音された発話の言語を指定する。`contextualStrings`には映像、ロードアウト、リザルト、またはユーザーの説明から確認済みの公式名称だけを最大100件まで渡し、一般知識から参加者、技名、意図を先回りして補完しない。
+
+```json
+{
+  "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/asr-v1.input.schema.json",
+  "language": "ja-JP",
+  "contextualStrings": ["エースバーン", "ユナイト技"]
+}
+```
+
+```sh
+unite-analysis-swift asr-v1 \
+  --input _PokemonUniteAnalysis/matches/match-01/clips/commentary.mp4 \
+  --config _PokemonUniteAnalysis/matches/match-01/asr-config.json
+```
+
+返された完全な`asr-v1.output.schema.json`準拠JSONを、対応する入力MP4と設定JSONを識別できる分析成果物として保存する。`results`の`startTime`と`duration`は入力MP4基準であり、元録画や試合の絶対時刻とみなさない。パススルー切り出しでは近接する同期サンプルから始まる場合もあるため、認識時刻は該当区間を探す索引に限って使う。
+
+認識テキストだけで、発話者、ゲーム内の出来事、技の使用、命中、意図、因果関係を確定しない。`isFinal`が`true`でも認識内容の正しさを保証しない。採用する内容と対応時刻は入力MP4の音声を聴き、出来事はソース動画画像または連続映像で再確認する。音声トラックなし、対応localeなし、asset取得不能、デコード不能、または認識失敗は、実行コマンドと理由を添えて`失敗`または`未実行`として記録する。
 
 ## JSONジョブ
 
