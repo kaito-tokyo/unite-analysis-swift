@@ -405,11 +405,10 @@ private final class ASRAnalyzerInputSequence: AsyncSequence, @unchecked Sendable
     func next() throws -> AnalyzerInput? {
       lock.lock()
       defer { lock.unlock() }
-      if let sampleBuffer = output.copyNextSampleBuffer() {
-        let presentationTime = Swift.max(sampleBuffer.presentationTimeStamp, .zero)
-        return try AnalyzerInput(
-          buffer: Self.audioBuffer(from: sampleBuffer),
-          bufferStartTime: presentationTime)
+      while let sampleBuffer = output.copyNextSampleBuffer() {
+        if let input = try Self.analyzerInput(from: sampleBuffer) {
+          return input
+        }
       }
       guard reader.status == .completed else {
         throw UniteAnalysisSwiftToolError.message(
@@ -425,7 +424,7 @@ private final class ASRAnalyzerInputSequence: AsyncSequence, @unchecked Sendable
       reader.cancelReading()
     }
 
-    private static func audioBuffer(from sampleBuffer: CMSampleBuffer) throws -> AVAudioPCMBuffer {
+    private static func analyzerInput(from sampleBuffer: CMSampleBuffer) throws -> AnalyzerInput? {
       guard let formatDescription = sampleBuffer.formatDescription,
         var streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(
           formatDescription)?.pointee,
@@ -433,18 +432,35 @@ private final class ASRAnalyzerInputSequence: AsyncSequence, @unchecked Sendable
       else {
         throw UniteAnalysisSwiftToolError.message("Decoded audio has no valid PCM format")
       }
-      let frameCount = AVAudioFrameCount(sampleBuffer.numSamples)
+      let presentationTime = sampleBuffer.presentationTimeStamp
+      let presentationSeconds = CMTimeGetSeconds(presentationTime)
+      guard presentationSeconds.isFinite else {
+        throw UniteAnalysisSwiftToolError.message("Decoded audio has an invalid presentation time")
+      }
+      let skippedFrameCount =
+        presentationSeconds < 0
+        ? Swift.min(
+          sampleBuffer.numSamples, Int(ceil(-presentationSeconds * format.sampleRate))) : 0
+      guard skippedFrameCount < sampleBuffer.numSamples else { return nil }
+
+      let frameCount = AVAudioFrameCount(sampleBuffer.numSamples - skippedFrameCount)
       guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
         throw UniteAnalysisSwiftToolError.message("Could not allocate a decoded PCM buffer")
       }
       buffer.frameLength = frameCount
       let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
-        sampleBuffer, at: 0, frameCount: Int32(frameCount), into: buffer.mutableAudioBufferList)
+        sampleBuffer, at: Int32(skippedFrameCount), frameCount: Int32(frameCount),
+        into: buffer.mutableAudioBufferList)
       guard status == noErr else {
         throw UniteAnalysisSwiftToolError.message(
           "Could not copy decoded PCM data (status \(status))")
       }
-      return buffer
+      let skippedDuration = CMTime(
+        seconds: Double(skippedFrameCount) / format.sampleRate,
+        preferredTimescale: Swift.max(presentationTime.timescale, 1))
+      return AnalyzerInput(
+        buffer: buffer,
+        bufferStartTime: Swift.max(presentationTime + skippedDuration, .zero))
     }
   }
 }
