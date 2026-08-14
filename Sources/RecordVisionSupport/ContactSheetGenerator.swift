@@ -8,6 +8,7 @@ import CoreMedia
 import CoreText
 import Foundation
 import JavaScriptCore
+import JavaScriptCoreSupport
 import LDTXRecordingSupport
 
 public enum ContactSheetGeneratorError: Error, CustomStringConvertible {
@@ -217,6 +218,14 @@ public struct ContactSheetDefinition: Codable {
 }
 
 public enum DrawTextScriptEngine {
+  package static let executionTimeLimit: TimeInterval = 0.1
+
+  private static let terminateTimedOutScript: UASJavaScriptShouldTerminateCallback = {
+    _, callbackContext in
+    callbackContext?.assumingMemoryBound(to: Bool.self).pointee = true
+    return true
+  }
+
   public static func evaluate(
     script: String,
     recordSpecURL: URL,
@@ -288,7 +297,17 @@ public enum DrawTextScriptEngine {
         "width": videoWidth, "height": videoHeight, "frameRate": videoFrameRate,
         "duration": videoDuration,
       ], forKeyedSubscript: "VIDEO" as NSString)
-    let result = context.evaluateScript(script)
+    var timedOut = false
+    let result = withUnsafeMutablePointer(to: &timedOut) { timedOutPointer in
+      UASSetJavaScriptExecutionTimeLimit(
+        context.jsGlobalContextRef, executionTimeLimit, terminateTimedOutScript, timedOutPointer)
+      defer { UASClearJavaScriptExecutionTimeLimit(context.jsGlobalContextRef) }
+      return context.evaluateScript(script)
+    }
+    if timedOut {
+      throw ContactSheetGeneratorError.message(
+        "drawText script timed out after \(executionTimeLimit) seconds")
+    }
     if let exception = context.exception {
       throw ContactSheetGeneratorError.message(
         "drawText script failed: \(exception.toString() ?? "unknown error")")

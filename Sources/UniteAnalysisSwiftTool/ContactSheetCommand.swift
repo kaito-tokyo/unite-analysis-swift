@@ -50,7 +50,7 @@ struct ContactSheet: ParsableCommand {
 
       TIMING. matchTimestamps must contain finite, strictly increasing seconds relative to match start. Negative values select pre-match frames. Values above the match duration select post-match frames. Duplicate or reverse values are rejected before decoding. After adding record-spec startPTS, every requested source time must be in the half-open source-video range [0, duration). The first out-of-range request is reported as a validation error before AVAssetImageGenerator decoding begins.
 
-      SCRIPT LABELS. A drawText script return expression is evaluated by JSC once per cell. Available globals are FRAME, MATCH, RECORD, and VIDEO. Use FRAME.actualInmatch for the decoded timestamp. FRAME.index is zero-based.
+      SCRIPT LABELS. A drawText script return expression is evaluated by JSC once per cell with a fixed 0.1-second execution limit. A timeout fails only that JSONL job. Available globals are FRAME, MATCH, RECORD, and VIDEO. Use FRAME.actualInmatch for the decoded timestamp. FRAME.index is zero-based.
 
       OUTPUT. The command shares one AVAssetImageGenerator within each job and writes a baseline 8-bit RGB JPEG. One JSON response line containing jobId, ok, and either result.output or error is written to stdout before the next job is read. A malformed line has no jobId when it cannot be recovered. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Existing output is rejected unless --force is supplied. The filename extension does not change the JPEG format. stdout contains JSONL responses only.
 
