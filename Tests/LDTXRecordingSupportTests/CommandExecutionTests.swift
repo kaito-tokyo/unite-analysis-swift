@@ -80,6 +80,11 @@ private func registeredCommands(
 }
 
 @Test func versionedAnalysisCommandsParseAsTheirConcreteTypes() throws {
+  let installer = try #require(
+    UniteAnalysisSwiftCommand.parseAsRoot([
+      "install-asr-assets-v1", "--language", "ja-JP",
+    ]) as? InstallASRAssets)
+  #expect(installer.language == "ja-JP")
   #expect(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "asr-v1", "--input", "commentary.m4a", "--config", "asr.json",
@@ -184,6 +189,15 @@ private func registeredCommands(
       .validatedContextualStrings()
   }
   #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(language: "ja-JP", contextualStrings: ["top\nbottom"])
+      .validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(
+      language: "ja-JP", contextualStrings: [String(repeating: "e\u{301}", count: 51)]
+    ).validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
     _ = try ASRConfiguration(
       language: "ja-JP", contextualStrings: [String(repeating: "あ", count: 101)]
     ).validatedContextualStrings()
@@ -194,6 +208,16 @@ private func registeredCommands(
       contextualStrings: Array(repeating: "term", count: 101)
     ).validatedContextualStrings()
   }
+}
+
+@Test func asrAssetInstallationOutputIsMachineReadable() throws {
+  let output = ASRAssetInstallationOutput(
+    requestedLanguage: "ja-JP", resolvedLanguage: "ja_JP", status: "installed")
+  let object = try #require(
+    JSONSerialization.jsonObject(with: prettyPrintedJSONData(output)) as? [String: Any])
+  #expect(object["requestedLanguage"] as? String == "ja-JP")
+  #expect(object["resolvedLanguage"] as? String == "ja_JP")
+  #expect(object["status"] as? String == "installed")
 }
 
 @Test func asrOutputEncodesVersionedMachineReadableTiming() throws {
@@ -452,6 +476,16 @@ func writingCommandsParseForceFlag(commandName: String) throws {
     _ = try await executeForMCP(parsed)
   }
   #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
+
+@Test func mcpRejectsSpeechAssetInstallation() async throws {
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "install-asr-assets-v1", "--language", "ja-JP",
+  ])
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try await executeForMCP(parsed)
+  }
 }
 
 @Test func mcpDetectMatchesRejectsExistingOutputBeforeDecoding() async throws {

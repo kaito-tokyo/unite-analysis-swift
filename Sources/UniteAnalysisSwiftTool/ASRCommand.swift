@@ -15,7 +15,7 @@ struct ASRCommand: ParsableCommand {
     discussion: """
       INPUT. --input is a local audio or video file containing a readable audio track. --config is a strict asr-v1.input.schema.json document containing a language identifier and up to 100 short contextual strings. Paths are resolved from the current working directory.
 
-      EXECUTION. Speech framework media processing must run outside an application sandbox. The requested language is resolved through DictationTranscriber's supported-locale API. Required Apple-managed on-device assets are downloaded and installed before analysis when necessary. Asset and resolved-input diagnostics are written to stderr.
+      EXECUTION. Speech framework media processing must run outside an application sandbox. The requested language is resolved through DictationTranscriber's supported-locale API. The input audio track is decoded to PCM with AVAssetReader before asset status is checked. Install missing Apple-managed on-device assets explicitly with install-asr-assets-v1 before running this command. Asset and resolved-input diagnostics are written to stderr.
 
       CONTEXT. contextualStrings are trimmed, must contain 1 through 100 characters, and must be unique after trimming. They are supplied only as AnalysisContext general contextual strings. This command does not train or load a custom language model, accept custom pronunciations, or select an arbitrary recognition model.
 
@@ -57,18 +57,18 @@ struct ASRCommand: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
 
-    let requestedLocale = Locale(identifier: configuration.language)
-    guard
-      let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale)
-    else {
-      throw UniteAnalysisSwiftToolError.message(
-        "No supported DictationTranscriber locale is equivalent to '\(configuration.language)'")
-    }
+    let locale = try await ASRSupport.resolveLocale(configuration.language)
     ASRDiagnostics.write("ASR input: \(inputURL.path)")
     ASRDiagnostics.write("ASR locale: \(configuration.language) -> \(locale.identifier)")
 
     let transcriber = DictationTranscriber(locale: locale, preset: .timeIndexedLongDictation)
     let modules: [any SpeechModule] = [transcriber]
+    guard let audioFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules)
+    else {
+      throw UniteAnalysisSwiftToolError.message(
+        "No compatible PCM format is available for locale '\(locale.identifier)'")
+    }
+    try await ASRAudioInput.validate(url: inputURL, audioFormat: audioFormat)
     switch await AssetInventory.status(forModules: modules) {
     case .unsupported:
       throw UniteAnalysisSwiftToolError.message(
@@ -76,11 +76,9 @@ struct ASRCommand: ParsableCommand {
     case .installed:
       ASRDiagnostics.write("Speech asset status: installed")
     case .supported, .downloading:
-      if let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
-        ASRDiagnostics.write("Speech asset installation: started")
-        try await request.downloadAndInstall()
-        ASRDiagnostics.write("Speech asset installation: completed")
-      }
+      throw UniteAnalysisSwiftToolError.message(
+        "Speech assets are not installed for locale '\(locale.identifier)'. Run install-asr-assets-v1 --language \(configuration.language) explicitly, then retry asr-v1."
+      )
     @unknown default:
       throw UniteAnalysisSwiftToolError.message("Unknown Speech asset status")
     }
@@ -91,13 +89,7 @@ struct ASRCommand: ParsableCommand {
     }
     let analyzer = SpeechAnalyzer(modules: modules)
     try await analyzer.setContext(context)
-    let audioFile: AVAudioFile
-    do {
-      audioFile = try AVAudioFile(forReading: inputURL)
-    } catch {
-      throw UniteAnalysisSwiftToolError.message(
-        "Could not open input audio track at \(inputURL.path): \(error)")
-    }
+    let inputSequence = try await ASRAudioInput.sequence(url: inputURL, audioFormat: audioFormat)
 
     let resultsTask = Task<[ASRSegment], Error> {
       var segments: [ASRSegment] = []
@@ -107,7 +99,7 @@ struct ASRCommand: ParsableCommand {
       return segments
     }
     do {
-      _ = try await analyzer.analyzeSequence(from: audioFile)
+      _ = try await analyzer.analyzeSequence(inputSequence)
       try await analyzer.finalizeAndFinishThroughEndOfInput()
       return ASROutput(
         input: inputURL.path,
@@ -120,6 +112,53 @@ struct ASRCommand: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message("Speech analysis failed: \(error)")
     }
   }
+}
+
+struct InstallASRAssets: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    commandName: "install-asr-assets-v1",
+    abstract: "Install Apple-managed on-device speech assets for one language.",
+    discussion: """
+      This command performs a network download and persistent host installation when the resolved locale's speech assets are absent. Run it directly from the CLI only after the user has explicitly chosen to install those assets. It is not available through MCP and must run outside an application sandbox. Installed assets are managed by Apple.
+
+      The requested language is resolved through DictationTranscriber's supported-locale API. A machine-readable JSON result is written to stdout and diagnostics are written to stderr.
+      """.reflowedHelp()
+  )
+
+  @Option(help: "Language identifier resolved to an equivalent supported locale.")
+  var language: String
+
+  func result() async throws -> ASRAssetInstallationOutput {
+    let locale = try await ASRSupport.resolveLocale(language)
+    let transcriber = DictationTranscriber(locale: locale, preset: .timeIndexedLongDictation)
+    let modules: [any SpeechModule] = [transcriber]
+    switch await AssetInventory.status(forModules: modules) {
+    case .unsupported:
+      throw UniteAnalysisSwiftToolError.message(
+        "Speech assets are unsupported for locale '\(locale.identifier)'")
+    case .installed:
+      ASRDiagnostics.write("Speech asset status: installed")
+    case .supported, .downloading:
+      guard let request = try await AssetInventory.assetInstallationRequest(supporting: modules)
+      else {
+        throw UniteAnalysisSwiftToolError.message(
+          "Could not create a speech asset installation request for locale '\(locale.identifier)'")
+      }
+      ASRDiagnostics.write("Speech asset installation: started")
+      try await request.downloadAndInstall()
+      ASRDiagnostics.write("Speech asset installation: completed")
+    @unknown default:
+      throw UniteAnalysisSwiftToolError.message("Unknown Speech asset status")
+    }
+    return ASRAssetInstallationOutput(
+      requestedLanguage: language, resolvedLanguage: locale.identifier, status: "installed")
+  }
+}
+
+struct ASRAssetInstallationOutput: Encodable, Equatable, Sendable {
+  let requestedLanguage: String
+  let resolvedLanguage: String
+  let status: String
 }
 
 struct ASRConfiguration: Codable, Equatable, Sendable {
@@ -184,10 +223,13 @@ struct ASRConfiguration: Codable, Equatable, Sendable {
         throw ValidationError(
           "ASR contextualStrings[\(index)] must not have leading or trailing whitespace")
       }
-      guard value.count <= Self.maximumContextualStringLength else {
+      guard value.unicodeScalars.count <= Self.maximumContextualStringLength else {
         throw ValidationError(
-          "ASR contextualStrings[\(index)] must contain at most \(Self.maximumContextualStringLength) characters"
+          "ASR contextualStrings[\(index)] must contain at most \(Self.maximumContextualStringLength) Unicode code points"
         )
+      }
+      guard value.rangeOfCharacter(from: .newlines) == nil else {
+        throw ValidationError("ASR contextualStrings[\(index)] must not contain line breaks")
       }
       guard seen.insert(value).inserted else {
         throw ValidationError("ASR contextualStrings contains duplicate '\(value)'")
@@ -233,6 +275,144 @@ struct ASRSegment: Encodable, Equatable, Sendable {
       startTime: result.range.start.seconds,
       duration: result.range.duration.seconds,
       isFinal: result.isFinal)
+  }
+}
+
+private enum ASRSupport {
+  static func resolveLocale(_ language: String) async throws -> Locale {
+    guard !language.isEmpty,
+      language.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    else {
+      throw UniteAnalysisSwiftToolError.message(
+        "ASR language must be a nonempty locale identifier without whitespace")
+    }
+    let requestedLocale = Locale(identifier: language)
+    guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale)
+    else {
+      throw UniteAnalysisSwiftToolError.message(
+        "No supported DictationTranscriber locale is equivalent to '\(language)'")
+    }
+    return locale
+  }
+}
+
+private enum ASRAudioInput {
+  static func validate(url: URL, audioFormat: AVAudioFormat) async throws {
+    let sequence = try await sequence(url: url, audioFormat: audioFormat)
+    var iterator = sequence.makeAsyncIterator()
+    guard try await iterator.next() != nil else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Audio decoding produced no PCM samples: \(url.path)")
+    }
+    sequence.cancel()
+  }
+
+  static func sequence(
+    url: URL, audioFormat: AVAudioFormat
+  ) async throws -> ASRAnalyzerInputSequence {
+    let asset = AVURLAsset(url: url)
+    guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
+      throw UniteAnalysisSwiftToolError.message("Input has no audio track: \(url.path)")
+    }
+    let reader = try AVAssetReader(asset: asset)
+    let settings: [String: Any] = [
+      AVFormatIDKey: kAudioFormatLinearPCM,
+      AVLinearPCMIsFloatKey: false,
+      AVLinearPCMBitDepthKey: 16,
+      AVLinearPCMIsBigEndianKey: false,
+      AVLinearPCMIsNonInterleaved: false,
+      AVSampleRateKey: audioFormat.sampleRate,
+      AVNumberOfChannelsKey: audioFormat.channelCount,
+    ]
+    let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+    output.alwaysCopiesSampleData = false
+    guard reader.canAdd(output) else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Could not configure PCM audio decoding: \(url.path)")
+    }
+    reader.add(output)
+    guard reader.startReading() else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Could not start audio decoding: \(reader.error?.localizedDescription ?? "unknown error")")
+    }
+    return ASRAnalyzerInputSequence(reader: reader, output: output, inputPath: url.path)
+  }
+}
+
+private final class ASRAnalyzerInputSequence: AsyncSequence, @unchecked Sendable {
+  typealias Element = AnalyzerInput
+
+  private let state: State
+
+  init(reader: AVAssetReader, output: AVAssetReaderTrackOutput, inputPath: String) {
+    state = State(reader: reader, output: output, inputPath: inputPath)
+  }
+
+  func makeAsyncIterator() -> Iterator { Iterator(state: state) }
+
+  func cancel() { state.cancel() }
+
+  struct Iterator: AsyncIteratorProtocol {
+    let state: State
+
+    mutating func next() async throws -> AnalyzerInput? { try state.next() }
+  }
+
+  final class State: @unchecked Sendable {
+    private let reader: AVAssetReader
+    private let output: AVAssetReaderTrackOutput
+    private let inputPath: String
+    private let lock = NSLock()
+
+    init(reader: AVAssetReader, output: AVAssetReaderTrackOutput, inputPath: String) {
+      self.reader = reader
+      self.output = output
+      self.inputPath = inputPath
+    }
+
+    func next() throws -> AnalyzerInput? {
+      lock.lock()
+      defer { lock.unlock() }
+      if let sampleBuffer = output.copyNextSampleBuffer() {
+        return try AnalyzerInput(
+          buffer: Self.audioBuffer(from: sampleBuffer),
+          bufferStartTime: sampleBuffer.presentationTimeStamp)
+      }
+      guard reader.status == .completed else {
+        throw UniteAnalysisSwiftToolError.message(
+          "Audio decoding failed: \(reader.error?.localizedDescription ?? "unknown error"): \(inputPath)"
+        )
+      }
+      return nil
+    }
+
+    func cancel() {
+      lock.lock()
+      defer { lock.unlock() }
+      reader.cancelReading()
+    }
+
+    private static func audioBuffer(from sampleBuffer: CMSampleBuffer) throws -> AVAudioPCMBuffer {
+      guard let formatDescription = sampleBuffer.formatDescription,
+        var streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(
+          formatDescription)?.pointee,
+        let format = AVAudioFormat(streamDescription: &streamDescription)
+      else {
+        throw UniteAnalysisSwiftToolError.message("Decoded audio has no valid PCM format")
+      }
+      let frameCount = AVAudioFrameCount(sampleBuffer.numSamples)
+      guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+        throw UniteAnalysisSwiftToolError.message("Could not allocate a decoded PCM buffer")
+      }
+      buffer.frameLength = frameCount
+      let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
+        sampleBuffer, at: 0, frameCount: Int32(frameCount), into: buffer.mutableAudioBufferList)
+      guard status == noErr else {
+        throw UniteAnalysisSwiftToolError.message(
+          "Could not copy decoded PCM data (status \(status))")
+      }
+      return buffer
+    }
   }
 }
 

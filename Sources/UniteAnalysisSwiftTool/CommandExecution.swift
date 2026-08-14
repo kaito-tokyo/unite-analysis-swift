@@ -37,6 +37,7 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["detect-chroma-events-v1"]: DetectChromaEvents.self
     case ["audio-peaks-v1"]: AudioPeaks.self
     case ["asr-v1"]: ASRCommand.self
+    case ["install-asr-assets-v1"]: InstallASRAssets.self
     case ["detect-matches-v1"]: DetectMatches.self
     case ["event-detect-v1"]: EventDetect.self
     case ["extract-clip"]: ExtractClip.self
@@ -70,6 +71,11 @@ package func executeCLI(
   _ parsed: any ParsableCommand, mode: CommandDispatchMode = .execute
 ) async throws {
   switch parsed {
+  case let command as InstallASRAssets:
+    guard mode == .execute else { return }
+    try FileHandle.standardOutput.write(
+      contentsOf: try prettyPrintedJSONData(await command.result()))
+
   case let command as ASRCommand:
     guard mode == .execute else { return }
     for try await record in command.outputRecords() {

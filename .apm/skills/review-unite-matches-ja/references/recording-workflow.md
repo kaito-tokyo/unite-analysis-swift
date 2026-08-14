@@ -22,7 +22,7 @@ arguments: ["--help"]
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。`asr-v1`が必要とするApple管理のSpeech assetもサンドボックス外で取得する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。Apple管理のSpeech assetを導入する`install-asr-assets-v1`もサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -59,6 +59,7 @@ unite-analysis-swift schema <schema-basename>
 | `detect-chroma-events-v1` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
 | `audio-peaks-v1` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
 | `asr-v1` | ローカル音声・動画内の発話をAppleのオンデバイス音声認識で時刻付きテキスト索引にする |
+| `install-asr-assets-v1` | 人間の明示的な選択により、指定言語のApple管理Speech assetを導入する |
 | `extract-clip` | 試合相対の指定区間を再エンコードせずMP4へ切り出す |
 | `scan-result-v1` | 結果画面またはバトルデータ画面をJSONへ読み取る |
 | `recognize-draft-loadout-v1` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
@@ -92,6 +93,8 @@ unite-analysis-swift asr-v1 \
 返された完全な`asr-v1.output.schema.json`準拠JSONを、対応する入力MP4と設定JSONを識別できる分析成果物として保存する。`results`の`startTime`と`duration`は入力MP4基準であり、元録画や試合の絶対時刻とみなさない。パススルー切り出しでは近接する同期サンプルから始まる場合もあるため、認識時刻は該当区間を探す索引に限って使う。
 
 認識テキストだけで、発話者、ゲーム内の出来事、技の使用、命中、意図、因果関係を確定しない。`isFinal`が`true`でも認識内容の正しさを保証しない。採用する内容と対応時刻は入力MP4の音声を聴き、出来事はソース動画画像または連続映像で再確認する。音声トラックなし、対応localeなし、asset取得不能、デコード不能、または認識失敗は、実行コマンドと理由を添えて`失敗`または`未実行`として記録する。
+
+`asr-v1`がSpeech asset未導入エラーを返した場合は、自動的に導入しない。永続的なホストストレージとネットワーク通信を使うことを説明し、人間が導入を明示的に選んだ場合だけ、人間へ`unite-analysis-swift install-asr-assets-v1 --language <language>`の実行を案内する。エージェントは`install-asr-assets-v1`を呼び出さない。人間による導入完了後に`asr-v1`を再実行する。人間が選ばない場合はASRを未実行として記録し、別の証拠経路を使う。
 
 ## JSONジョブ
 

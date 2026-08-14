@@ -53,6 +53,10 @@ package func executeForMCP(
 ) async throws -> [Any] {
   var records: [Any] = []
   switch parsed {
+  case is InstallASRAssets:
+    guard mode == .execute else { return records }
+    throw UniteAnalysisSwiftToolError.message(
+      "install-asr-assets-v1 must be invoked directly by the user through the CLI")
   case let command as ASRCommand:
     guard mode == .execute else { return records }
     for try await record in command.outputRecords() {
