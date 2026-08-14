@@ -6,15 +6,18 @@
 
 name: PR Audit Check
 
-# Register this workflow from the main branch with the organization ruleset's
-# "Require workflows to pass before merging" rule.
 on:
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to audit
+        required: true
+        type: number
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
@@ -22,23 +25,38 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       AUDIT_REQUIRED: ${{ steps.detect-changes.outputs.result }}
-      AUDIT_AUTHORIZED: ${{ contains(github.event.pull_request.labels.*.name, 'apm') }}
+      AUDIT_AUTHORIZED: ${{ steps.pull-request.outputs.audit-authorized }}
     steps:
+      - name: Read pull request
+        id: pull-request
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          pull_request="$(gh api "repos/${REPOSITORY:?}/pulls/${PR_NUMBER:?}")"
+          printf 'base-sha=%s\n' "$(jq -r '.base.sha' <<<"${pull_request}")" >>"${GITHUB_OUTPUT:?}"
+          printf 'head-sha=%s\n' "$(jq -r '.head.sha' <<<"${pull_request}")" >>"${GITHUB_OUTPUT:?}"
+          printf 'audit-authorized=%s\n' "$(jq -r 'any(.labels[]; .name == "apm")' <<<"${pull_request}")" >>"${GITHUB_OUTPUT:?}"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           filter: blob:none
           fetch-depth: 0
+          ref: ${{ steps.pull-request.outputs.head-sha }}
 
       - name: Detect apm file changes
         id: detect-changes
         shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.pull-request.outputs.base-sha }}
+          HEAD_SHA: ${{ steps.pull-request.outputs.head-sha }}
         run: |
           if git diff --quiet "${BASE_SHA:?}...${HEAD_SHA:?}" -- '.apm/skills/**'; then
             printf 'result=false\n' | tee -a "${GITHUB_OUTPUT:?}"
@@ -59,7 +77,7 @@ jobs:
       pull-requests: write
     uses: kaito-tokyo/unite-analysis-swift/.github/workflows/audit-skills.lock.yml@4aaa21bf2f70222897e946d9e0b27d413a069aa6 # v0.2.1
     with:
-      pr_number: ${{ github.event.pull_request.number }}
+      pr_number: ${{ inputs.pr_number }}
     secrets: inherit
 
   audit-ci:
@@ -77,6 +95,6 @@ jobs:
         run: |
           [[ "${PRECONDITION_RESULT:?}" != success ]] && { printf 'FAILURE: Precondition job error\n'; exit 1; }
           [[ "${AUDIT_REQUIRED:?}" == false ]] && { printf 'SUCCESS: This audit is not required\n'; exit 0; }
-          [[ "${AUDIT_AUTHORIZED:?}" != true ]] && { printf 'FAILURE: Apply the apm label, then close and reopen the pull request\n'; exit 1; }
+          [[ "${AUDIT_AUTHORIZED:?}" != true ]] && { printf 'FAILURE: Apply the apm label, then dispatch this workflow again\n'; exit 1; }
           [[ "${AUDIT_RESULT:?}" != success ]] && { printf 'FAILURE: This audit failed\n'; exit 1; }
           printf 'SUCCESS: This audit passed\n'
