@@ -57,7 +57,7 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
-    uses: ./.github/workflows/audit-skills.lock.yml
+    uses: kaito-tokyo/unite-analysis-swift/.github/workflows/audit-skills.lock.yml@4aaa21bf2f70222897e946d9e0b27d413a069aa6 # v0.2.1
     with:
       pr_number: ${{ github.event.pull_request.number }}
     secrets: inherit
