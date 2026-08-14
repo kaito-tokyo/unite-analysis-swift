@@ -48,10 +48,13 @@ package func builtInMCPOutput(arguments: [String]) throws -> String? {
   return String(decoding: data, as: UTF8.self)
 }
 
-package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] {
+package func executeForMCP(
+  _ parsed: any ParsableCommand, mode: CommandDispatchMode = .execute
+) async throws -> [Any] {
   var records: [Any] = []
   switch parsed {
   case let command as DetectMatches:
+    guard mode == .execute else { return records }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       if let output = command.output {
@@ -61,6 +64,7 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       records.append(try encodedObject(record))
     }
   case let command as AudioPeaks:
+    guard mode == .execute else { return records }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       if let output = command.output {
@@ -70,6 +74,7 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       records.append(try encodedObject(record))
     }
   case let command as BatchFrame:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() {
       switch record {
       case .success(let output): records.append(try encodedObject(output))
@@ -77,10 +82,13 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       }
     }
   case let command as SampleFrames:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as PreciseFrame:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as ContactSheet:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() {
       switch record {
       case .success(let output): records.append(try encodedObject(output))
@@ -88,6 +96,7 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       }
     }
   case let command as FrameBurst:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() {
       switch record {
       case .success(let output): records.append(try encodedObject(output))
@@ -95,12 +104,16 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       }
     }
   case let command as DetectChromaEvents:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as EventDetect:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as ExtractClip:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as OCRCommand:
+    guard mode == .execute else { return records }
     let writer = try command.output.map {
       try JSONLResponseWriter(output: $0, force: command.force)
     }
@@ -118,6 +131,7 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
     }
     try writer?.finish()
   case let command as ScanResultCommand:
+    guard mode == .execute else { return records }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       if let output = command.output {
@@ -127,24 +141,33 @@ package func executeForMCP(_ parsed: any ParsableCommand) async throws -> [Any] 
       records.append(try encodedObject(record))
     }
   case let command as RecognizeDraftLoadout:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as RecognizeBlindLoadout:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["output": record.output]) }
   case let command as EvaluateDrawText:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["text": record.text]) }
   case let command as Schema:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() {
       records.append(["schema": String(decoding: record.data, as: UTF8.self)])
     }
   case let command as ConfigGet:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["value": record.value]) }
   case let command as ConfigSet:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["value": record.value]) }
   case let command as ConfigUnset:
+    guard mode == .execute else { return records }
     for try await _ in command.outputRecords() { records.append(["completed": true]) }
   case let command as ConfigPath:
+    guard mode == .execute else { return records }
     for try await record in command.outputRecords() { records.append(["value": record.value]) }
   case is MCPCommand:
+    guard mode == .execute else { return records }
     throw ValidationError("The MCP server cannot invoke the mcp command recursively")
   default:
     throw ValidationError("Unsupported command type: \(String(describing: type(of: parsed)))")

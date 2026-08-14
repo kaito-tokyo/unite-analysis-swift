@@ -60,9 +60,17 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
   return UniteAnalysisSwiftCommand.helpMessage(for: commandType)
 }
 
-package func executeCLI(_ parsed: any ParsableCommand) async throws {
+package enum CommandDispatchMode {
+  case execute
+  case validate
+}
+
+package func executeCLI(
+  _ parsed: any ParsableCommand, mode: CommandDispatchMode = .execute
+) async throws {
   switch parsed {
   case let command as DetectMatches:
+    guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       let data = try prettyPrintedJSONData(record)
@@ -73,6 +81,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as AudioPeaks:
+    guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       let data = try prettyPrintedJSONData(record)
@@ -83,6 +92,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as BatchFrame:
+    guard mode == .execute else { return }
     let writer = try JSONLResponseWriter()
     for try await record in command.outputRecords() {
       switch record {
@@ -94,16 +104,19 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as SampleFrames:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as PreciseFrame:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as ContactSheet:
+    guard mode == .execute else { return }
     let writer = try JSONLResponseWriter()
     for try await record in command.outputRecords() {
       switch record {
@@ -115,6 +128,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as FrameBurst:
+    guard mode == .execute else { return }
     let writer = try JSONLResponseWriter()
     for try await record in command.outputRecords() {
       switch record {
@@ -126,21 +140,25 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as DetectChromaEvents:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as EventDetect:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as ExtractClip:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as OCRCommand:
+    guard mode == .execute else { return }
     let writer = try JSONLResponseWriter(output: command.output, force: command.force)
     for try await record in command.outputRecords() {
       switch record {
@@ -153,6 +171,7 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     try writer.finish()
 
   case let command as ScanResultCommand:
+    guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
       let data = try prettyPrintedJSONData(record)
@@ -164,21 +183,25 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as RecognizeDraftLoadout:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as RecognizeBlindLoadout:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.output)\n".utf8))
     }
 
   case let command as EvaluateDrawText:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.text)\n".utf8))
     }
 
   case let command as Schema:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: record.data)
       if record.data.last != 0x0A {
@@ -187,24 +210,29 @@ package func executeCLI(_ parsed: any ParsableCommand) async throws {
     }
 
   case let command as ConfigGet:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.value)\n".utf8))
     }
 
   case let command as ConfigSet:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.value)\n".utf8))
     }
 
   case let command as ConfigUnset:
+    guard mode == .execute else { return }
     for try await _ in command.outputRecords() {}
 
   case let command as ConfigPath:
+    guard mode == .execute else { return }
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.value)\n".utf8))
     }
 
   case is MCPCommand:
+    guard mode == .execute else { return }
     try await executeMCPServer()
 
   default:
