@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/asr-v1.input.schema.json",
+  "title": "ASR v1 input configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "language"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/asr-v1.input.schema.json"
+    },
+    "language": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\s]+$",
+      "description": "Locale identifier resolved through DictationTranscriber's supported-locale API."
+    },
+    "contextualStrings": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "default": [],
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "pattern": "^(?:\\S|\\S(?:.*\\S)?)$"
+      },
+      "description": "Short domain phrases supplied as general AnalysisContext contextual strings."
+    }
+  }
+}

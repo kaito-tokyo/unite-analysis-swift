@@ -22,6 +22,15 @@
 - **限界**: 命中、個体識別、数値、1秒未満の順序を縮小セルで断定しない。時間が既知の局所場面に全試合overviewを作らない。
 - **次の調査**: 動作順序は`frame-burst`、場面の前後は`extract-clip`、細部は`precise-frame`で確かめる。
 
+## 録音された発話やアナウンスから場面を探す
+
+- **症状**: ユーザー発話、チーム音声、またはゲーム内アナウンスの内容が場面探索に役立つが、発話位置が不明である。
+- **使うツール**: `asr-v1`。対象試合またはシーンを`extract-clip`でMP4へ切り出し、確認済みの公式名称だけを`contextualStrings`へ指定して時刻付きテキスト索引を得る。
+- **再現例**: [recording-workflow.md](recording-workflow.md)の発話索引契約に従って`asr-config.json`を作り、`unite-analysis-swift asr-v1 --input _PokemonUniteAnalysis/matches/match-01/clips/commentary.mp4 --config _PokemonUniteAnalysis/matches/match-01/asr-config.json`を実行する。
+- **解釈と提示**: `isFinal`を含む完全な出力を保存し、`startTime`を入力MP4内の該当音声へ戻るためだけに使う。採用する発話は実際の音声で聞き直し、対応する出来事はソース動画で確認する。
+- **限界**: 認識文だけで話者、技、命中、意図、因果関係を確定しない。時刻は入力MP4基準であり、元録画または試合基準へ自動的に読み替えない。音声トラックなしや認識失敗を、発話が存在しなかった証拠にしない。
+- **次の調査**: 発話に対応する場面全体は`extract-clip`、動作順序は`frame-burst`、細部は`precise-frame`で確かめる。
+
 ## 命中、回避、中断、動作順序を確かめる
 
 - **症状**: 誰が技を使い誰に当たったか、攻撃が回避・中断されたか、重なる動作のどれが先かを通常の静止画では確定できない。

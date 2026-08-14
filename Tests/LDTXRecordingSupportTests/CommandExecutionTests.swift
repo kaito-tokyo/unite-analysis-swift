@@ -56,6 +56,7 @@ private func registeredCommands(
 
 @Test func analysisCommandNamesHaveExplicitVersions() {
   let names = [
+    ASRCommand.configuration.commandName,
     DetectMatches.configuration.commandName,
     DetectChromaEvents.configuration.commandName,
     AudioPeaks.configuration.commandName,
@@ -65,10 +66,11 @@ private func registeredCommands(
     RecognizeDraftLoadout.configuration.commandName,
     RecognizeBlindLoadout.configuration.commandName,
   ].compactMap { $0 }
-  #expect(names.count == 8)
+  #expect(names.count == 9)
   #expect(
     Set(names) == [
-      "audio-peaks-v1", "detect-chroma-events-v1", "detect-matches-v1", "event-detect-v1",
+      "asr-v1", "audio-peaks-v1", "detect-chroma-events-v1", "detect-matches-v1",
+      "event-detect-v1",
       "ocr-v1", "recognize-blind-loadout-v1", "recognize-draft-loadout-v1", "scan-result-v1",
     ])
   #expect(
@@ -78,6 +80,15 @@ private func registeredCommands(
 }
 
 @Test func versionedAnalysisCommandsParseAsTheirConcreteTypes() throws {
+  let installer = try #require(
+    UniteAnalysisSwiftCommand.parseAsRoot([
+      "install-asr-assets-v1", "--language", "ja-JP",
+    ]) as? InstallASRAssets)
+  #expect(installer.language == "ja-JP")
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "asr-v1", "--input", "commentary.m4a", "--config", "asr.json",
+    ]) is ASRCommand)
   #expect(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "detect-matches-v1", "--input", "recording.ldtxrecord", "--layout", "layout.json",
@@ -117,7 +128,7 @@ private func registeredCommands(
 
 @Test func unversionedAnalysisCommandNamesAreRejected() {
   let names = [
-    "audio-peaks", "detect-chroma-events", "detect-matches", "event-detect", "ocr",
+    "asr", "audio-peaks", "detect-chroma-events", "detect-matches", "event-detect", "ocr",
     "recognize-blind-loadout", "recognize-draft-loadout", "scan-result",
   ]
   for name in names {
@@ -129,6 +140,8 @@ private func registeredCommands(
 
 @Test func unversionedAnalysisSchemaBasenamesAreRejectedBySchemaCommand() async throws {
   let basenames = [
+    "asr.input.schema.json",
+    "asr.output.schema.json",
     "audio-peaks.output.schema.json",
     "chroma-events.output.schema.json",
     "event-detect.input.schema.json",
@@ -147,6 +160,78 @@ private func registeredCommands(
       for try await _ in command.outputRecords() {}
     }
   }
+}
+
+@Test func asrConfigurationRejectsUnknownKeysAndInvalidSchema() {
+  let documents = [
+    #"{"language":"ja-JP"}"#,
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/asr-v1.input.schema.json","language":"ja-JP","extra":true}"#,
+    #"{"$schema":"https://example.com/asr.json","language":"ja-JP"}"#,
+  ]
+  for document in documents {
+    #expect(throws: DecodingError.self) {
+      _ = try JSONDecoder().decode(ASRConfiguration.self, from: Data(document.utf8))
+    }
+  }
+}
+
+@Test func asrConfigurationValidatesContextualStrings() throws {
+  let configuration = ASRConfiguration(
+    language: "ja-JP", contextualStrings: ["エースバーン", "ユナイト技"])
+  #expect(try configuration.validatedContextualStrings() == ["エースバーン", "ユナイト技"])
+
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(language: "ja-JP", contextualStrings: ["技", "技"])
+      .validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(language: "ja-JP", contextualStrings: [" 技 "])
+      .validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(language: "ja-JP", contextualStrings: ["top\nbottom"])
+      .validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(
+      language: "ja-JP", contextualStrings: [String(repeating: "e\u{301}", count: 51)]
+    ).validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(
+      language: "ja-JP", contextualStrings: [String(repeating: "あ", count: 101)]
+    ).validatedContextualStrings()
+  }
+  #expect(throws: ValidationError.self) {
+    _ = try ASRConfiguration(
+      language: "ja-JP",
+      contextualStrings: Array(repeating: "term", count: 101)
+    ).validatedContextualStrings()
+  }
+}
+
+@Test func asrAssetInstallationOutputIsMachineReadable() throws {
+  let output = ASRAssetInstallationOutput(
+    requestedLanguage: "ja-JP", resolvedLanguage: "ja_JP", status: "installed")
+  let object = try #require(
+    JSONSerialization.jsonObject(with: prettyPrintedJSONData(output)) as? [String: Any])
+  #expect(object["requestedLanguage"] as? String == "ja-JP")
+  #expect(object["resolvedLanguage"] as? String == "ja_JP")
+  #expect(object["status"] as? String == "installed")
+}
+
+@Test func asrOutputEncodesVersionedMachineReadableTiming() throws {
+  let output = ASROutput(
+    input: "/tmp/commentary.m4a", requestedLanguage: "ja-JP", resolvedLanguage: "ja-JP",
+    contextualStrings: ["ユナイト技"],
+    results: [.init(text: "テスト", startTime: 1.25, duration: 0.5, isFinal: true)])
+  let object = try #require(
+    JSONSerialization.jsonObject(with: prettyPrintedJSONData(output)) as? [String: Any])
+  #expect(object["$schema"] as? String == ASROutput.schemaURL)
+  let results = try #require(object["results"] as? [[String: Any]])
+  #expect(results.first?["startTime"] as? Double == 1.25)
+  #expect(results.first?["duration"] as? Double == 0.5)
+  #expect(results.first?["isFinal"] as? Bool == true)
 }
 
 @Test func detectMatchesParsesPersistentOutputOptions() throws {
@@ -391,6 +476,16 @@ func writingCommandsParseForceFlag(commandName: String) throws {
     _ = try await executeForMCP(parsed)
   }
   #expect(try Data(contentsOf: output) == Data("original\n".utf8))
+}
+
+@Test func mcpRejectsSpeechAssetInstallation() async throws {
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "install-asr-assets-v1", "--language", "ja-JP",
+  ])
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    _ = try await executeForMCP(parsed)
+  }
 }
 
 @Test func mcpDetectMatchesRejectsExistingOutputBeforeDecoding() async throws {

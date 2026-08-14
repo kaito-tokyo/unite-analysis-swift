@@ -46,6 +46,27 @@ private func reviewSkillText(_ relativePath: String) throws -> String {
   #expect(skill.contains("### この対話契約の非目標"))
 }
 
+@Test func matchReviewUsesASRAsOptionalNavigationEvidence() throws {
+  let workflow = try reviewSkillText("references/recording-workflow.md")
+  let tools = try reviewSkillText("references/tools.md")
+
+  #expect(workflow.contains("`asr-v1`を使う。全試合で必須にせず"))
+  #expect(workflow.contains("asr-v1.input.schema.json"))
+  #expect(workflow.contains("asr-v1.output.schema.json"))
+  #expect(workflow.contains("Apple管理のSpeech assetを導入する`install-asr-assets-v1`"))
+  #expect(workflow.contains("確認済みの公式名称だけを最大100件まで渡し"))
+  #expect(workflow.contains("`startTime`と`duration`は入力MP4基準"))
+  #expect(workflow.contains("`isFinal`が`true`でも認識内容の正しさを保証しない"))
+  #expect(workflow.contains("認識テキストだけで、発話者"))
+  #expect(workflow.contains("自動的に導入しない"))
+  #expect(workflow.contains("人間が導入を明示的に選んだ場合だけ"))
+  #expect(workflow.contains("エージェントは`install-asr-assets-v1`を呼び出さない"))
+
+  #expect(tools.contains("## 録音された発話やアナウンスから場面を探す"))
+  #expect(tools.contains("時刻付きテキスト索引"))
+  #expect(tools.contains("音声トラックなしや認識失敗を、発話が存在しなかった証拠にしない"))
+}
+
 @Test func allyReactionWindowsRequireFeasibilityAndRevision() throws {
   let skill = try reviewSkillText("SKILL.md")
   let model = try reviewSkillText("references/reaction-windows.md")
