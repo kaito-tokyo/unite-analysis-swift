@@ -212,10 +212,7 @@ extension FrameBurst {
 private func renderFrameBurst(
   job: FrameBurstJob, media: RecordingMediaContext, outputURL: URL, quality: Double, force: Bool
 ) async throws {
-  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw UniteAnalysisSwiftToolError.message(
-      "Output collision: \(outputURL.path). Pass --force to overwrite.")
-  }
+  try validateOutputPath(outputURL, force: force)
   let spec = media.spec
   let extractor = media.extractor
   let requestedTime = CMTimeAdd(
@@ -276,9 +273,8 @@ private func renderFrameBurst(
   guard let image = context.makeImage(), let firstPTS, let lastPTS else {
     throw UniteAnalysisSwiftToolError.message("Could not finalize frame burst image")
   }
-  try FileManager.default.createDirectory(
-    at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-  try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
+  try VideoFrameSupport.writeBaselineJPEG(
+    image, to: outputURL, quality: quality, force: force)
   FileHandle.standardError.write(
     Data(
       "unite-analysis-swift: frame burst requested PTS \(canonicalSeconds(requestedTime.seconds))s, first PTS \(canonicalSeconds(firstPTS.seconds))s, last PTS \(canonicalSeconds(lastPTS.seconds))s\n"

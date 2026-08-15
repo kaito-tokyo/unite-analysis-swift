@@ -94,10 +94,7 @@ func extractClip(
   guard outputURL.pathExtension.lowercased() == "mp4" else {
     throw UniteAnalysisSwiftToolError.message("Output path must have the .mp4 extension")
   }
-  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw UniteAnalysisSwiftToolError.message(
-      "Output collision: \(outputURL.path). Pass --force to replace.")
-  }
+  try validateOutputPath(outputURL, force: force)
 
   let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
   if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
@@ -136,11 +133,7 @@ func extractClip(
         .utf8))
   try await session.export(to: temporaryURL, as: .mp4)
   try validateNetworkOptimizedMP4(at: temporaryURL)
-  if FileManager.default.fileExists(atPath: outputURL.path) {
-    _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
-  } else {
-    try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
-  }
+  try OutputFileWriter.install(temporaryURL, at: outputURL, force: force)
   return outputURL.path
 }
 

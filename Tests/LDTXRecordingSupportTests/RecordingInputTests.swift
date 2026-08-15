@@ -72,3 +72,42 @@ private func temporaryDirectory() throws -> URL {
     try LDTXRecordingBundle.formatV2MainMediaURL(in: bundle)
       == bundle.appendingPathComponent("main.fragmented.mp4"))
 }
+
+@Test func outputFileWriterRejectsDestinationCreatedAfterPreflight() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("output.json")
+  let temporary = OutputFileWriter.temporaryURL(for: output)
+  try Data("candidate\n".utf8).write(to: temporary)
+  try Data("raced\n".utf8).write(to: output)
+
+  #expect(throws: OutputFileError.self) {
+    try OutputFileWriter.install(temporary, at: output, force: false)
+  }
+  #expect(try Data(contentsOf: output) == Data("raced\n".utf8))
+}
+
+@Test func outputFileWriterReplacesExistingDestinationWhenForced() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("output.json")
+  try Data("original\n".utf8).write(to: output)
+
+  try OutputFileWriter.write(Data("replacement\n".utf8), to: output, force: true)
+
+  #expect(try Data(contentsOf: output) == Data("replacement\n".utf8))
+}
+
+@Test func forcedOutputReplacementPreservesDestinationPermissions() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("output.json")
+  try Data("original\n".utf8).write(to: output)
+  try FileManager.default.setAttributes(
+    [.posixPermissions: 0o600], ofItemAtPath: output.path)
+
+  try OutputFileWriter.write(Data("replacement\n".utf8), to: output, force: true)
+
+  let attributes = try FileManager.default.attributesOfItem(atPath: output.path)
+  #expect(attributes[.posixPermissions] as? NSNumber == NSNumber(value: 0o600))
+}

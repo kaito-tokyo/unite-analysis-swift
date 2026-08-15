@@ -181,9 +181,10 @@ public enum ChromaEventDetector {
     outputURL: URL,
     force: Bool
   ) throws {
-    guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-      throw ChromaEventError.message(
-        "Output already exists: \(outputURL.path). Pass --force to overwrite.")
+    do {
+      try OutputFileWriter.validate(outputURL, force: force)
+    } catch let error as OutputFileError {
+      throw ChromaEventError.message(error.description)
     }
     guard fps.isFinite, fps > 0 else {
       throw ChromaEventError.message("fps must be positive and finite")
@@ -250,9 +251,11 @@ public enum ChromaEventDetector {
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try FileManager.default.createDirectory(
-      at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try encoder.encode(result).write(to: outputURL, options: .atomic)
+    do {
+      try OutputFileWriter.write(encoder.encode(result), to: outputURL, force: force)
+    } catch let error as OutputFileError {
+      throw ChromaEventError.message(error.description)
+    }
   }
 
   package struct ChromaPlane {
