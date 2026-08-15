@@ -15,6 +15,8 @@ public enum SampleFrameSequenceError: Error, CustomStringConvertible {
 }
 
 public enum SampleFrameSequence {
+  public static let maximumSampleCount = 10_000
+
   public static func sampleOffsets(duration: Double, fps: Double) throws -> [Double] {
     guard duration.isFinite, duration > 0 else {
       throw SampleFrameSequenceError.message("duration must be positive and finite")
@@ -23,8 +25,9 @@ public enum SampleFrameSequence {
       throw SampleFrameSequenceError.message("fps must be positive and finite")
     }
     let sampleCount = ceil(duration * fps)
-    guard sampleCount <= Double(Int.max) else {
-      throw SampleFrameSequenceError.message("duration and fps produce too many samples")
+    guard sampleCount <= Double(maximumSampleCount) else {
+      throw SampleFrameSequenceError.message(
+        "duration and fps must produce at most \(maximumSampleCount) samples")
     }
     return (0..<Int(sampleCount)).map { Double($0) / fps }
   }

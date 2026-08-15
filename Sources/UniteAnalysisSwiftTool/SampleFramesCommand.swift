@@ -22,7 +22,7 @@ struct SampleFrames: ParsableCommand {
 
       FILTERS. --crop-x, --crop-y, --crop-width, and --crop-height map to FFmpeg crop=width:height:x:y in native main-video pixels. --fps maps to fps=fps. --scale-x and --scale-y are the exact output width and height and map to scale=scale-x:scale-y. A differing aspect ratio is intentionally stretched.
 
-      TIMING. The complete record-spec match is sampled at index / fps, beginning at 0. AVAssetImageGenerator and FFmpeg may select adjacent source frames; approximate timing compatibility is sufficient.
+      TIMING. The complete record-spec match is sampled at index / fps, beginning at 0, with at most 10,000 generated frames. AVAssetImageGenerator and FFmpeg may select adjacent source frames; approximate timing compatibility is sufficient.
 
       OUTPUT. --output must contain exactly one %06d placeholder and no other % character, directly matching an FFmpeg image-sequence output pattern. Numbering begins at 1. Output is baseline 8-bit RGB JPEG. --quality accepts a finite value from 0 through 1 and defaults to 0.95. Every collision is checked before decoding. Without --force, an existing output is an error. --force overwrites every generated path. Written paths go to standard output; requested match times and actual source PTS values go to standard error.
 
@@ -41,7 +41,8 @@ struct SampleFrames: ParsableCommand {
   @Option(help: "Crop top edge; maps to crop y.") var cropY: Int
   @Option(help: "Crop width; maps to crop width.") var cropWidth: Int
   @Option(help: "Crop height; maps to crop height.") var cropHeight: Int
-  @Option(help: "Positive sampling rate; maps to the fps filter.") var fps: Double
+  @Option(help: "Positive sampling rate producing at most 10,000 frames; maps to the fps filter.")
+  var fps: Double
   @Option(help: "Exact output width; maps to scale width.") var scaleX: Int
   @Option(help: "Exact output height; maps to scale height.") var scaleY: Int
   @Option(help: "JPEG sequence pattern containing exactly one %06d placeholder.")
