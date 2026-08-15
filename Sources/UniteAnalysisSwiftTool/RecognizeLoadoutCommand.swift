@@ -284,7 +284,7 @@ private func diagnosticNames(matchFormat: String) -> [String] {
   return allyHeld + allyBattle + enemyBattle
 }
 
-private func resolvingSymlinkComponents(in url: URL) throws -> URL {
+package func resolvingSymlinkComponents(in url: URL) throws -> URL {
   var pending = Array(url.standardizedFileURL.pathComponents.dropFirst())
   var resolved = URL(fileURLWithPath: "/", isDirectory: true)
   var followedLinks = 0

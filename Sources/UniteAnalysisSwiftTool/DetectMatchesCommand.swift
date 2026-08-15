@@ -20,11 +20,13 @@ struct DetectMatches: ParsableCommand {
 
       DETECTION. Strict MM:SS observations produce standard-match start candidates. A lone 10:00 is insufficient. Consistent candidates are clustered despite missing samples; discontinuous OCR values are retained as excluded diagnostics. A later independently corroborated reset creates another match.
 
-      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. Existing output requires --force. Matches end at start + 600 seconds. Surrendered matches and nonstandard modes are not inferred. The result is a candidate contract and is not written into LDTX-managed directories. If persisted inside a recording, use _PokemonUniteAnalysis.
+      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. --audit-id accepts a canonical lowercase UUID and atomically writes a managed audit directory at _PokemonUniteAnalysis/audits/<id> containing match-detection.json and deterministic source-video JPEG pages. --output and --audit-id are mutually exclusive. Cells show timer ROI, requested and actual timestamps, OCR text, confidence, disposition, and diagnostic reason. Existing outputs require --force. Matches end at start + 600 seconds.
 
       SCHEMAS. Print the contracts with `unite-analysis-swift schema match-layout-v1.schema.json` and `unite-analysis-swift schema match-detection-v1.output.schema.json`.
 
-      LIMITS. Timer contact-sheet rendering is not yet implemented. Diagnostics retain every sampled OCR string and confidence for deterministic machine audit. Surrendered matches and nonstandard modes are not inferred.
+      AUDIT BOUNDARY. The optional contact sheet is generated from decoded source-video frames for human review only. It is never read by match detection and does not add JPEG round-trips to the detection path. Zero observations produce a labeled empty audit artifact.
+
+      LIMITS. Surrendered matches and nonstandard modes are not inferred.
       """.reflowedHelp()
   )
 
@@ -40,7 +42,10 @@ struct DetectMatches: ParsableCommand {
   @Option(help: "Optional JSON output path; stdout always receives the same result.")
   var output: String?
 
-  @Flag(help: "Allow --output to replace an existing file atomically.")
+  @Option(help: "Canonical lowercase UUID for a managed timer audit directory.")
+  var auditId: String?
+
+  @Flag(help: "Allow --output or the managed audit directory to be replaced atomically.")
   var force = false
 
   struct Output: Encodable, Sendable {
@@ -52,10 +57,11 @@ struct DetectMatches: ParsableCommand {
     let gameScreen: GameScreenRectangle
     let matches: [DetectedMatch]
     let diagnostics: [MatchTimerDiagnostic]
+    let auditContactSheet: MatchTimerAuditContactSheetResult?
 
     private enum CodingKeys: String, CodingKey {
       case schema = "$schema"
-      case source, mainMediaFile, layoutId, gameScreen, matches, diagnostics
+      case source, mainMediaFile, layoutId, gameScreen, matches, diagnostics, auditContactSheet
     }
   }
 
@@ -64,6 +70,20 @@ struct DetectMatches: ParsableCommand {
   }
 
   private func result() async throws -> Output {
+    try validateOutputPath(output.map(resolvePath), force: force)
+    if output != nil, auditId != nil {
+      throw UniteAnalysisSwiftToolError.message(
+        "--output and --audit-id are mutually exclusive")
+    }
+    let validatedAuditId: String?
+    if let auditId {
+      guard let uuid = UUID(uuidString: auditId), uuid.uuidString.lowercased() == auditId else {
+        throw UniteAnalysisSwiftToolError.message("--audit-id must be a canonical lowercase UUID")
+      }
+      validatedAuditId = auditId
+    } else {
+      validatedAuditId = nil
+    }
     let recordingURL = resolvePath(input).standardizedFileURL
     guard recordingURL.pathExtension == "ldtxrecord" else {
       throw UniteAnalysisSwiftToolError.message("--input must be a .ldtxrecord directory")
@@ -123,10 +143,79 @@ struct DetectMatches: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
     let detection = MatchTimerDetection(records: records, recordingDuration: videoDuration)
-    return .init(
+    let auditResult: MatchTimerAuditContactSheetResult?
+    var stagedAuditDirectory: URL?
+    var finalAuditDirectory: URL?
+    if let auditId = validatedAuditId {
+      let auditsDirectory = recordingURL.appendingPathComponent("_PokemonUniteAnalysis/audits")
+      let finalDirectory = auditsDirectory.appendingPathComponent(auditId, isDirectory: true)
+      try validateManagedAuditDestination(finalDirectory, force: force)
+      try FileManager.default.createDirectory(
+        at: auditsDirectory, withIntermediateDirectories: true)
+      let stagedDirectory = auditsDirectory.appendingPathComponent(
+        ".\(auditId).\(UUID().uuidString).staged")
+      try FileManager.default.createDirectory(
+        at: stagedDirectory, withIntermediateDirectories: true)
+      stagedAuditDirectory = stagedDirectory
+      finalAuditDirectory = finalDirectory
+      do {
+        let rendered = try await MatchTimerAuditContactSheet.render(
+          videoURL: mediaURL, gameScreen: gameScreen, layout: matchLayout,
+          diagnostics: detection.diagnostics,
+          outputPrefixURL: stagedDirectory.appendingPathComponent("pages/page"),
+          force: force)
+        auditResult = .init(
+          auditId: auditId,
+          outputs: rendered.outputs.map { "pages/" + URL(fileURLWithPath: $0).lastPathComponent },
+          observationCount: rendered.observationCount, columns: rendered.columns,
+          pageCount: rendered.pageCount)
+      } catch {
+        try? FileManager.default.removeItem(at: stagedDirectory)
+        throw UniteAnalysisSwiftToolError.message(String(describing: error))
+      }
+    } else {
+      auditResult = nil
+    }
+    let result = Output(
       source: "videoOCR", mainMediaFile: mainMediaFile, layoutId: matchLayout.layoutId,
       gameScreen: gameScreen,
-      matches: detection.matches, diagnostics: detection.diagnostics)
+      matches: detection.matches, diagnostics: detection.diagnostics,
+      auditContactSheet: auditResult)
+    if let stagedAuditDirectory, let finalAuditDirectory {
+      do {
+        try prettyPrintedJSONData(result).write(
+          to: stagedAuditDirectory.appendingPathComponent("match-detection.json"))
+        try installManagedAuditDirectory(
+          stagedAuditDirectory, at: finalAuditDirectory, force: force)
+      } catch {
+        try? FileManager.default.removeItem(at: stagedAuditDirectory)
+        throw UniteAnalysisSwiftToolError.message(String(describing: error))
+      }
+    }
+    return result
+  }
+}
+
+package func validateManagedAuditDestination(_ url: URL, force: Bool) throws {
+  guard FileManager.default.fileExists(atPath: url.path) else { return }
+  var isDirectory: ObjCBool = false
+  guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+    isDirectory.boolValue
+  else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Managed audit destination is not a directory: \(url.path)")
+  }
+  guard force else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Audit already exists: \(url.path). Pass --force to overwrite.")
+  }
+}
+
+package func installManagedAuditDirectory(_ staged: URL, at output: URL, force: Bool) throws {
+  if force, FileManager.default.fileExists(atPath: output.path) {
+    _ = try FileManager.default.replaceItemAt(output, withItemAt: staged)
+  } else {
+    try FileManager.default.moveItem(at: staged, to: output)
   }
 }
 

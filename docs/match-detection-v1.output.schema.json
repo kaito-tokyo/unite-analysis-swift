@@ -134,6 +134,51 @@
           }
         }
       }
+    },
+    "auditContactSheet": {
+      "description": "Optional human-only timer audit artifact generated from source-video frames. It is never an input to detection.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "auditId",
+        "outputs",
+        "observationCount",
+        "columns",
+        "pageCount"
+      ],
+      "properties": {
+        "auditId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^pages/page-[0-9]{6}\\.jpg$"
+          }
+        },
+        "observationCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "pageCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
     }
   },
   "$defs": {

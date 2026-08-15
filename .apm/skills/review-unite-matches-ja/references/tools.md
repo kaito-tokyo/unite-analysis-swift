@@ -10,7 +10,7 @@
 
 - **使うツール**: `detect-matches-v1`。LDTX Visionメタデータには依存せず、recording format v2の主映像を直接順次デコードして試合タイマーをOCRする。
 - **レイアウト**: `--layout`には同梱の[ja.20260811.match.timer.json](ja.20260811.match.timer.json)を指定する。レイアウトIDとコマンドのバージョンは別の契約であり、エンジン選択をJSON内で行わない。
-- **再現例**: `.ldtxrecord`ルートから`unite-analysis-swift detect-matches-v1 --input . --layout <skill-root>/references/ja.20260811.match.timer.json`を実行する。`<skill-root>`はインストール済みSkillのルート絶対パスへ置き換える。このコマンドは試合別`record-spec.json`を作る前に使うため、`--record-spec`を指定しない。
+- **再現例**: `.ldtxrecord`ルートから`unite-analysis-swift detect-matches-v1 --input . --layout <skill-root>/references/ja.20260811.match.timer.json --audit-id <canonical-lowercase-uuid>`を実行する。`<skill-root>`はインストール済みSkillのルート絶対パスへ置き換える。JSONと監査ページは`_PokemonUniteAnalysis/audits/<audit-id>/`へ一体として保存される。このコマンドは試合別`record-spec.json`を作る前に使うため、`--record-spec`を指定しない。監査用contact sheetは採用・除外された全タイマー観測を人間が確認するためだけに使い、機械検出へ入力しない。
 - **限界**: 標準10分試合だけを候補化する。降参および特殊モードの終了は推測しない。
 
 ## 長い録画から候補時刻を探す

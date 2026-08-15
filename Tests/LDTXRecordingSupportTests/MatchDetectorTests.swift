@@ -184,6 +184,135 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.diagnostics.dropFirst().allSatisfy { $0.reason == "invalidMMSS" })
 }
 
+@Test func timerAuditDefinitionOrdersEveryDiagnosticDeterministically() {
+  let detection = MatchTimerDetection(records: [
+    timer(105_000, "invalid"), timer(100_000, "10:00"), timer(110_000, "09:50"),
+  ])
+  let definition = MatchTimerAuditContactSheetDefinition(diagnostics: detection.diagnostics)
+  #expect(definition.cells.map(\.recordingTimelineMilliseconds) == [100_000, 105_000, 110_000])
+  #expect(definition.cells.map(\.output) == ["10:00", "invalid", "09:50"])
+  #expect(definition.cells.map(\.disposition) == ["accepted", "excluded", "accepted"])
+  #expect(definition.cells[1].reason == "invalidMMSS")
+}
+
+@Test func timerAuditRendersZeroObservationArtifactAndProtectsExistingOutput() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let output = directory.appendingPathComponent("timer-audit.jpg")
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL,
+    layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 900, y: 20, width: 120, height: 60)))
+  let result = try await MatchTimerAuditContactSheet.render(
+    videoURL: directory.appendingPathComponent("unused.mp4"),
+    gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+    diagnostics: [], outputPrefixURL: output, force: false)
+  #expect(result.outputs == [output.path + "-000001.jpg"])
+  #expect(result.observationCount == 0)
+  #expect(result.columns == 1)
+  #expect(result.pageCount == 1)
+  #expect(FileManager.default.fileExists(atPath: result.outputs[0]))
+  await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try await MatchTimerAuditContactSheet.render(
+      videoURL: directory.appendingPathComponent("unused.mp4"),
+      gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+      diagnostics: [], outputPrefixURL: output, force: false)
+  }
+}
+
+@Test func timerAuditInstallationRollsBackEarlierPages() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  let staged = (1...2).map { directory.appendingPathComponent("staged-\($0).jpg") }
+  let outputs = (1...2).map { directory.appendingPathComponent("output-\($0).jpg") }
+  for url in staged { try Data("staged".utf8).write(to: url) }
+  try Data("collision".utf8).write(to: outputs[1])
+
+  #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try MatchTimerAuditContactSheet.installStagedPages(staged, at: outputs, force: false)
+  }
+  #expect(!FileManager.default.fileExists(atPath: outputs[0].path))
+  #expect(try Data(contentsOf: outputs[1]) == Data("collision".utf8))
+}
+
+@Test func forcedTimerAuditInstallationRestoresEarlierPages() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  let staged = (1...2).map { directory.appendingPathComponent("staged-\($0).jpg") }
+  let outputs = (1...2).map { directory.appendingPathComponent("output-\($0).jpg") }
+  try Data("new".utf8).write(to: staged[0])
+  for (index, url) in outputs.enumerated() {
+    try Data("old-\(index)".utf8).write(to: url)
+  }
+
+  #expect(throws: (any Swift.Error).self) {
+    try MatchTimerAuditContactSheet.installStagedPages(staged, at: outputs, force: true)
+  }
+  #expect(try Data(contentsOf: outputs[0]) == Data("old-0".utf8))
+  #expect(try Data(contentsOf: outputs[1]) == Data("old-1".utf8))
+}
+
+@Test func forcedTimerAuditRemovesDifferentlyCasedObsoletePages() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  let values = try directory.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
+  guard values.volumeSupportsCaseSensitiveNames != true else { return }
+  let obsolete = directory.appendingPathComponent("Audit-000002.jpg")
+  try Data("obsolete".utf8).write(to: obsolete)
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL, layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 900, y: 20, width: 120, height: 60)))
+
+  _ = try await MatchTimerAuditContactSheet.render(
+    videoURL: directory.appendingPathComponent("unused.mp4"),
+    gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+    diagnostics: [], outputPrefixURL: directory.appendingPathComponent("audit"), force: true)
+  #expect(!FileManager.default.fileExists(atPath: obsolete.path))
+}
+
+@Test func timerAuditRejectsDirectoryDestinationWhenForced() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let prefix = directory.appendingPathComponent("audit")
+  let destination = MatchTimerAuditContactSheet.pageOutputURL(prefix: prefix, index: 1)
+  try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+  try Data("evidence".utf8).write(to: destination.appendingPathComponent("evidence.txt"))
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL, layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 900, y: 20, width: 120, height: 60)))
+
+  await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try await MatchTimerAuditContactSheet.render(
+      videoURL: directory.appendingPathComponent("unused.mp4"),
+      gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+      diagnostics: [], outputPrefixURL: prefix, force: true)
+  }
+  #expect(
+    FileManager.default.fileExists(atPath: destination.appendingPathComponent("evidence.txt").path))
+}
+
+@Test func timerAuditRejectsOversizedDerivedDimensions() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL, layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 0, y: 0, width: 1, height: 1080)))
+
+  await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try await MatchTimerAuditContactSheet.render(
+      videoURL: directory.appendingPathComponent("unused.mp4"),
+      gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+      diagnostics: [], outputPrefixURL: directory.appendingPathComponent("audit"), force: false)
+  }
+}
+
 @Test func gameScreenRectangleDefaultsAndPartialFields() throws {
   #expect(
     try GameScreenRectangle.resolve(customFields: [:], videoWidth: 1632, videoHeight: 918)
