@@ -162,15 +162,6 @@ public final class VideoFrameExtractor {
     }
   }
 
-  public func extractFrames(
-    at times: [CMTime],
-    handler: (_ index: Int, _ image: CGImage) throws -> Void
-  ) throws {
-    try extractFrames(at: times) { index, image, _ in
-      try handler(index, image)
-    }
-  }
-
   /// Decodes the first source sample at or after each requested time.
   /// The presentation time identifies the decoded sample rather than the request.
   public func extractFrames(

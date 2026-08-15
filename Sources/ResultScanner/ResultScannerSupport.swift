@@ -7,11 +7,6 @@ import Foundation
 import ImageIO
 import Vision
 
-struct Arguments {
-  var input: String
-  var output: String?
-}
-
 package enum ScannerError: Error, CustomStringConvertible {
   case message(String)
 
@@ -797,21 +792,4 @@ public enum ResultScannerRunner {
     return result
   }
 
-  public static func run(
-    input: String,
-    type: ResultScreenType,
-    ocrOptions: [String: OCRRecognitionOptions],
-    output: String? = nil
-  ) throws {
-    let result = try scan(input: input, type: type, ocrOptions: ocrOptions)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-    let data = try encoder.encode(result)
-    if let output {
-      try data.write(to: URL(fileURLWithPath: output), options: .atomic)
-    } else {
-      FileHandle.standardOutput.write(data)
-      FileHandle.standardOutput.write(Data("\n".utf8))
-    }
-  }
 }

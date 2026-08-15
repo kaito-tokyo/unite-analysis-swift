@@ -351,17 +351,6 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
   #expect(OCRInput.readingOrder(observations).map(\.text) == ["B", "C", "A"])
 }
 
-@Test func scanResultDoesNotFallbackToUnrelatedOCRRegions() {
-  #expect(throws: ScannerError.self) {
-    try ResultScannerRunner.run(
-      input: "missing.jpg",
-      type: .summary,
-      ocrOptions: [
-        "unrelated-region": OCRRecognitionOptions(recognitionLanguages: ["ja-JP"])
-      ])
-  }
-}
-
 private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   let writer = try AVAssetWriter(url: url, fileType: .mp4)
   let input = AVAssetWriterInput(
