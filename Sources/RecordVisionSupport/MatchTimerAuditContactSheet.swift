@@ -66,7 +66,8 @@ public enum MatchTimerAuditContactSheet {
       : stride(from: 0, to: definition.cells.count, by: observationsPerPage).map {
         Array(definition.cells[$0..<min($0 + observationsPerPage, definition.cells.count)])
       }
-    let outputURLs = pages.indices.map { pageOutputURL(prefix: outputPrefixURL, index: $0 + 1) }
+    let outputURLs = pageOutputURLs(
+      prefix: outputPrefixURL, observationCount: definition.cells.count)
     if !force,
       let collision = outputURLs.first(where: {
         FileManager.default.fileExists(atPath: $0.path)
@@ -90,6 +91,7 @@ public enum MatchTimerAuditContactSheet {
         cellHeight: cellHeight, columns: columns, width: width, height: height,
         outputURL: outputURLs[pageIndex], quality: quality, force: force)
     }
+    if force { try removeObsoletePages(prefix: outputPrefixURL, keeping: Set(outputURLs)) }
     return .init(
       outputs: outputURLs.map(\.path), observationCount: definition.cells.count,
       columns: min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count)),
@@ -165,6 +167,24 @@ public enum MatchTimerAuditContactSheet {
 
   public static func pageOutputURL(prefix: URL, index: Int) -> URL {
     URL(fileURLWithPath: String(format: "%@-%06d.jpg", prefix.path, index))
+  }
+
+  public static func pageOutputURLs(prefix: URL, observationCount: Int) -> [URL] {
+    let count = max(1, Int(ceil(Double(observationCount) / Double(observationsPerPage))))
+    return (1...count).map { pageOutputURL(prefix: prefix, index: $0) }
+  }
+
+  private static func removeObsoletePages(prefix: URL, keeping: Set<URL>) throws {
+    let directory = prefix.deletingLastPathComponent()
+    let escaped = NSRegularExpression.escapedPattern(for: prefix.lastPathComponent)
+    let expression = try NSRegularExpression(pattern: "^\(escaped)-[0-9]{6}\\.jpg$")
+    for url in try FileManager.default.contentsOfDirectory(
+      at: directory, includingPropertiesForKeys: nil)
+    where !keeping.contains(url.standardizedFileURL)
+      && expression.firstMatch(
+        in: url.lastPathComponent,
+        range: NSRange(url.lastPathComponent.startIndex..., in: url.lastPathComponent)) != nil
+    { try FileManager.default.removeItem(at: url) }
   }
 
   private static func drawLabel(

@@ -141,6 +141,15 @@ struct DetectMatches: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
     let detection = MatchTimerDetection(records: records, recordingDuration: videoDuration)
+    if let output = output.map(resolvePath), let auditContactSheetPrefix {
+      let pages = MatchTimerAuditContactSheet.pageOutputURLs(
+        prefix: resolvePath(auditContactSheetPrefix),
+        observationCount: detection.diagnostics.count)
+      guard !pages.map(\.standardizedFileURL).contains(output.standardizedFileURL) else {
+        throw UniteAnalysisSwiftToolError.message(
+          "--output must not collide with an audit contact sheet page")
+      }
+    }
     let auditResult: MatchTimerAuditContactSheetResult?
     if let auditContactSheetPrefix {
       do {
