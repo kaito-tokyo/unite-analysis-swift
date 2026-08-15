@@ -207,17 +207,17 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   let result = try await MatchTimerAuditContactSheet.render(
     videoURL: directory.appendingPathComponent("unused.mp4"),
     gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
-    diagnostics: [], outputURL: output, force: false)
-  #expect(result.output == output.path)
+    diagnostics: [], outputPrefixURL: output, force: false)
+  #expect(result.outputs == [output.path + "-000001.jpg"])
   #expect(result.observationCount == 0)
   #expect(result.columns == 1)
-  #expect(result.rows == 1)
-  #expect(FileManager.default.fileExists(atPath: output.path))
+  #expect(result.pageCount == 1)
+  #expect(FileManager.default.fileExists(atPath: result.outputs[0]))
   await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
     try await MatchTimerAuditContactSheet.render(
       videoURL: directory.appendingPathComponent("unused.mp4"),
       gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
-      diagnostics: [], outputURL: output, force: false)
+      diagnostics: [], outputPrefixURL: output, force: false)
   }
 }
 

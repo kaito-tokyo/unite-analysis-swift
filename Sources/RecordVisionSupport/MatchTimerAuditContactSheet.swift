@@ -35,40 +35,72 @@ public struct MatchTimerAuditContactSheetDefinition: Equatable, Sendable {
 }
 
 public struct MatchTimerAuditContactSheetResult: Codable, Equatable, Sendable {
-  public let output: String
+  public let outputs: [String]
   public let observationCount: Int
   public let columns: Int
-  public let rows: Int
+  public let pageCount: Int
 }
 
 public enum MatchTimerAuditContactSheet {
   private static let cellWidth = 320
   private static let labelHeight = 78
   private static let gutter = 4
+  public static let observationsPerPage = 120
 
   public static func render(
     videoURL: URL,
     gameScreen: GameScreenRectangle,
     layout: MatchTimerLayout,
     diagnostics: [MatchTimerDiagnostic],
-    outputURL: URL,
+    outputPrefixURL: URL,
     quality: Double = 0.85,
     force: Bool
   ) async throws -> MatchTimerAuditContactSheetResult {
     guard quality.isFinite, (0...1).contains(quality) else {
       throw Error.message("Timer audit JPEG quality must be between 0 and 1")
     }
-    guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-      throw Error.message("Output already exists: \(outputURL.path). Pass --force to overwrite.")
-    }
     let definition = MatchTimerAuditContactSheetDefinition(diagnostics: diagnostics)
-    let columns = min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count))
-    let rows = max(1, Int(ceil(Double(definition.cells.count) / Double(columns))))
+    let pages =
+      definition.cells.isEmpty
+      ? [[]]
+      : stride(from: 0, to: definition.cells.count, by: observationsPerPage).map {
+        Array(definition.cells[$0..<min($0 + observationsPerPage, definition.cells.count)])
+      }
+    let outputURLs = pages.indices.map { pageOutputURL(prefix: outputPrefixURL, index: $0 + 1) }
+    if !force,
+      let collision = outputURLs.first(where: {
+        FileManager.default.fileExists(atPath: $0.path)
+      })
+    {
+      throw Error.message("Output already exists: \(collision.path). Pass --force to overwrite.")
+    }
     let timer = MatchTimerVideoOCR.timerRectangle(gameScreen: gameScreen, layout: layout)
     let imageHeight = max(60, Int((Double(cellWidth) * timer.height / timer.width).rounded()))
     let cellHeight = imageHeight + labelHeight
-    let width = columns * cellWidth + max(0, columns - 1) * gutter
-    let height = rows * cellHeight + max(0, rows - 1) * gutter
+    let extractor =
+      definition.cells.isEmpty ? nil : try await VideoFrameExtractor(videoURL: videoURL)
+    for (pageIndex, cells) in pages.enumerated() {
+      try Task.checkCancellation()
+      let columns = min(MatchTimerAuditContactSheetDefinition.columns, max(1, cells.count))
+      let rows = max(1, Int(ceil(Double(cells.count) / Double(columns))))
+      let width = columns * cellWidth + max(0, columns - 1) * gutter
+      let height = rows * cellHeight + max(0, rows - 1) * gutter
+      try renderPage(
+        cells: cells, extractor: extractor, timer: timer, imageHeight: imageHeight,
+        cellHeight: cellHeight, columns: columns, width: width, height: height,
+        outputURL: outputURLs[pageIndex], quality: quality, force: force)
+    }
+    return .init(
+      outputs: outputURLs.map(\.path), observationCount: definition.cells.count,
+      columns: min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count)),
+      pageCount: pages.count)
+  }
+
+  private static func renderPage(
+    cells: [MatchTimerAuditContactSheetDefinition.Cell], extractor: VideoFrameExtractor?,
+    timer: CGRect, imageHeight: Int, cellHeight: Int, columns: Int, width: Int, height: Int,
+    outputURL: URL, quality: Double, force: Bool
+  ) throws {
     guard
       let context = CGContext(
         data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -77,17 +109,18 @@ public enum MatchTimerAuditContactSheet {
     context.setFillColor(CGColor(red: 0.055, green: 0.071, blue: 0.09, alpha: 1))
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
 
-    if definition.cells.isEmpty {
+    if cells.isEmpty {
       drawText(
         "No timer observations", at: CGPoint(x: 16, y: CGFloat(height / 2) - 8),
         size: 18, color: CGColor(gray: 1, alpha: 1), context: context)
     } else {
-      let extractor = try await VideoFrameExtractor(videoURL: videoURL)
-      let times = definition.cells.map {
-        CMTime(value: $0.recordingTimelineMilliseconds, timescale: 1_000)
+      guard let extractor else { throw Error.message("Missing timer audit video extractor") }
+      let times = cells.map {
+        CMTime(value: max(0, $0.recordingTimelineMilliseconds - 1), timescale: 1_000)
       }
       try extractor.extractFrames(at: times) { index, frame, actualTime in
-        let cell = definition.cells[index]
+        try Task.checkCancellation()
+        let cell = cells[index]
         let column = index % columns
         let row = index / columns
         let x = column * (cellWidth + gutter)
@@ -112,14 +145,26 @@ public enum MatchTimerAuditContactSheet {
       ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp.jpg")
     defer { try? FileManager.default.removeItem(at: temporaryURL) }
     try VideoFrameSupport.writeBaselineJPEG(image, to: temporaryURL, quality: quality)
-    if FileManager.default.fileExists(atPath: outputURL.path) {
+    if force, FileManager.default.fileExists(atPath: outputURL.path) {
       _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
-    } else {
+    } else if force {
       try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
+    } else {
+      do {
+        try FileManager.default.linkItem(at: temporaryURL, to: outputURL)
+        try FileManager.default.removeItem(at: temporaryURL)
+      } catch {
+        if FileManager.default.fileExists(atPath: outputURL.path) {
+          throw Error.message(
+            "Output already exists: \(outputURL.path). Pass --force to overwrite.")
+        }
+        throw error
+      }
     }
-    return .init(
-      output: outputURL.path, observationCount: definition.cells.count, columns: columns, rows: rows
-    )
+  }
+
+  public static func pageOutputURL(prefix: URL, index: Int) -> URL {
+    URL(fileURLWithPath: String(format: "%@-%06d.jpg", prefix.path, index))
   }
 
   private static func drawLabel(

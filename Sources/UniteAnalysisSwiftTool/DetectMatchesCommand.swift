@@ -43,7 +43,7 @@ struct DetectMatches: ParsableCommand {
   var output: String?
 
   @Option(help: "Optional JPEG path for the human-only timer audit contact sheet.")
-  var auditContactSheet: String?
+  var auditContactSheetPrefix: String?
 
   @Flag(help: "Allow --output to replace an existing file atomically.")
   var force = false
@@ -71,9 +71,12 @@ struct DetectMatches: ParsableCommand {
 
   private func result() async throws -> Output {
     try validateOutputPath(output.map(resolvePath), force: force)
-    try validateOutputPath(auditContactSheet.map(resolvePath), force: force)
+    let firstAuditPage = auditContactSheetPrefix.map {
+      MatchTimerAuditContactSheet.pageOutputURL(prefix: resolvePath($0), index: 1)
+    }
+    try validateOutputPath(firstAuditPage, force: force)
     if let output = output.map(resolvePath),
-      let audit = auditContactSheet.map(resolvePath),
+      let audit = firstAuditPage,
       output.standardizedFileURL == audit.standardizedFileURL
     {
       throw UniteAnalysisSwiftToolError.message(
@@ -139,11 +142,11 @@ struct DetectMatches: ParsableCommand {
     }
     let detection = MatchTimerDetection(records: records, recordingDuration: videoDuration)
     let auditResult: MatchTimerAuditContactSheetResult?
-    if let auditContactSheet {
+    if let auditContactSheetPrefix {
       do {
         auditResult = try await MatchTimerAuditContactSheet.render(
           videoURL: mediaURL, gameScreen: gameScreen, layout: matchLayout,
-          diagnostics: detection.diagnostics, outputURL: resolvePath(auditContactSheet),
+          diagnostics: detection.diagnostics, outputPrefixURL: resolvePath(auditContactSheetPrefix),
           force: force)
       } catch {
         throw UniteAnalysisSwiftToolError.message(String(describing: error))

@@ -410,12 +410,12 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
 
   let result = try await MatchTimerAuditContactSheet.render(
     videoURL: videoURL, gameScreen: .init(x: 0, y: 0, width: 16, height: 16),
-    layout: layout, diagnostics: detection.diagnostics, outputURL: outputURL, force: false)
+    layout: layout, diagnostics: detection.diagnostics, outputPrefixURL: outputURL, force: false)
 
   #expect(result.observationCount == 1)
   #expect(result.columns == 1)
-  #expect(result.rows == 1)
-  #expect((try Data(contentsOf: outputURL)).count > 0)
+  #expect(result.pageCount == 1)
+  #expect((try Data(contentsOf: URL(fileURLWithPath: result.outputs[0]))).count > 0)
 }
 
 @Test func audioPeakInputUsesFixedV2MainMediaWithoutMainMixMetadata() throws {
