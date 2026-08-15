@@ -288,6 +288,19 @@ private func audioPeakTestBundle(info: [String: Any], files: [String]) throws ->
   #expect(try SampleFrameSequence.sampleOffsets(duration: 1, fps: 4) == [0, 0.25, 0.5, 0.75])
 }
 
+@Test func sampleFrameOffsetsRejectMoreThanMaximumCount() throws {
+  #expect(
+    throws: SampleFrameSequenceError.self,
+    performing: {
+      try SampleFrameSequence.sampleOffsets(
+        duration: 600, fps: Double(SampleFrameSequence.maximumSampleCount) / 600 + 1)
+    })
+  #expect(
+    try SampleFrameSequence.sampleOffsets(
+      duration: 600, fps: Double(SampleFrameSequence.maximumSampleCount) / 600
+    ).count == SampleFrameSequence.maximumSampleCount)
+}
+
 @Test func namedOCROptionsIgnoreUnrelatedFields() throws {
   let data = Data(
     """

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import AVFoundation
 import ArgumentParser
 import Foundation
 import MCP
@@ -22,6 +23,14 @@ private struct RegisteredCommand {
   let path: [String]
   let type: ParsableCommand.Type
   let isLeaf: Bool
+}
+
+@Test func sampleFrameTimesRejectRoundedDuplicates() throws {
+  let start = CMTime(value: 0, timescale: 600)
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try sampleFrameTimes(start: start, offsets: [0, 0.000_001])
+  }
+  #expect(try sampleFrameTimes(start: start, offsets: [0, 0.000_1]).count == 2)
 }
 
 private func registeredCommands(

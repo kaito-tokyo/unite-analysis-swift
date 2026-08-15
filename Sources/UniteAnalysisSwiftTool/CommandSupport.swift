@@ -369,6 +369,18 @@ struct SampleFramesRequest {
   }
 }
 
+func sampleFrameTimes(start: CMTime, offsets: [Double]) throws -> [CMTime] {
+  var seen: Set<CMTime> = []
+  return try offsets.map { offset in
+    let time = CMTimeAdd(start, CMTime(seconds: offset, preferredTimescale: 60_000))
+    guard seen.insert(time).inserted else {
+      throw UniteAnalysisSwiftToolError.message(
+        "sample-frames fps produces duplicate media times at 1/60000-second precision")
+    }
+    return time
+  }
+}
+
 func cwdURL() -> URL {
   URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
 }
@@ -583,22 +595,20 @@ func renderSampleFrames(
   try request.validate()
   let offsets = try SampleFrameSequence.sampleOffsets(duration: spec.duration, fps: request.fps)
   let absolutePattern = resolvePath(request.outputPattern).path
-  var requestsByTime: [CMTime: OutputRequest] = [:]
+  let times = try sampleFrameTimes(start: start, offsets: offsets)
+  var requests: [OutputRequest] = []
   for (index, offset) in offsets.enumerated() {
     let frameNumber = String(format: "%06d", index + 1)
     let outputURL = URL(
       fileURLWithPath: absolutePattern.replacingOccurrences(of: "%06d", with: frameNumber)
     ).standardizedFileURL
     try validateOutputPath(outputURL, force: force)
-    let time = CMTimeAdd(start, CMTime(seconds: offset, preferredTimescale: 60_000))
-    requestsByTime[time] = OutputRequest(outputURL: outputURL, requestedInmatch: offset)
+    requests.append(OutputRequest(outputURL: outputURL, requestedInmatch: offset))
   }
-  let times = requestsByTime.keys.sorted { CMTimeCompare($0, $1) < 0 }
   var outputs: [String] = []
   try await extractor.extractApproximateFrames(at: times) { index, frame, actualTime in
     try Task.checkCancellation()
-    let time = times[index]
-    guard let outputRequest = requestsByTime[time] else { return }
+    let outputRequest = requests[index]
     let cropped = try VideoFrameSupport.cropped(frame, rect: request.source.rect)
     let resized = try VideoFrameSupport.resized(
       cropped, width: request.scaleX, height: request.scaleY)
