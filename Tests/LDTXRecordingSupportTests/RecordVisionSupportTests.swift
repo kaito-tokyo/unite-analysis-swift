@@ -744,6 +744,9 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
     ordered.map(\.lastPathComponent) == [
       "frame-000001.jpg", "frame-000002.jpg", "frame-000003.JPEG",
     ])
+  let sequence = try ChromaEventDetector.validatedJPEGSequence(in: directory)
+  #expect(sequence.imageURLs == ordered)
+  #expect(sequence.sequenceIndices == [1, 2, 3])
   let output = directory.appendingPathComponent("events.json")
   try ChromaEventDetector.run(
     inputSampleDirectoryURL: directory, fps: 2, outputURL: output, force: false)

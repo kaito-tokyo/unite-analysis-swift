@@ -127,6 +127,12 @@ public struct ChromaEventResult: Codable, Equatable, Sendable {
 /// as a scalar score so ordinary threshold-filter commands can consume this result directly.
 public enum ChromaEventDetector {
   public static func jpegURLs(in directoryURL: URL) throws -> [URL] {
+    try validatedJPEGSequence(in: directoryURL).imageURLs
+  }
+
+  package static func validatedJPEGSequence(
+    in directoryURL: URL
+  ) throws -> (imageURLs: [URL], sequenceIndices: [Int]) {
     var isDirectory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory),
       isDirectory.boolValue
@@ -138,8 +144,7 @@ public enum ChromaEventDetector {
     )
     .filter { ["jpg", "jpeg"].contains($0.pathExtension.lowercased()) }
     .sorted { $0.lastPathComponent < $1.lastPathComponent }
-    _ = try sequenceIndices(for: urls)
-    return urls
+    return (urls, try sequenceIndices(for: urls))
   }
 
   package static func sequenceIndices(for imageURLs: [URL]) throws -> [Int] {
@@ -183,13 +188,14 @@ public enum ChromaEventDetector {
     guard fps.isFinite, fps > 0 else {
       throw ChromaEventError.message("fps must be positive and finite")
     }
-    let imageURLs = try jpegURLs(in: inputSampleDirectoryURL)
+    let sequence = try validatedJPEGSequence(in: inputSampleDirectoryURL)
+    let imageURLs = sequence.imageURLs
     guard imageURLs.count >= 2 else {
       throw ChromaEventError.message(
         "JPEG input directory must contain at least two .jpg or .jpeg files: \(inputSampleDirectoryURL.path)"
       )
     }
-    let sequenceIndices = try sequenceIndices(for: imageURLs)
+    let sequenceIndices = sequence.sequenceIndices
     var sampledWidth = 0
     var sampledHeight = 0
     var previous: ChromaPlane?
