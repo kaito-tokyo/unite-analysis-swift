@@ -43,11 +43,6 @@ SPDX-License-Identifier: Apache-2.0
         padding: 1rem;
         white-space: pre;
       }
-
-      .note {
-        border-inline-start: 0.25rem solid #b8860b;
-        padding-inline-start: 1rem;
-      }
     </style>
   </head>
   <body>
@@ -95,25 +90,12 @@ SOURCE_SHA="$(gh api \
 
 gh attestation verify "$PACKAGE" \
   --repo kaito-tokyo/unite-analysis-swift \
-  --predicate-type https://in-toto.io/attestation/link/v0.3 \
   --signer-workflow \
-    kaito-tokyo/unite-analysis-swift/.github/workflows/release.yml \
+    kaito-tokyo/unite-analysis-swift/.github/workflows/swift.yml \
   --source-ref "refs/tags/${TAG}" \
   --source-digest "$SOURCE_SHA" \
   --signer-digest "$SOURCE_SHA" \
   --deny-self-hosted-runners</code></pre>
-
-      <aside class="note">
-        <p>
-          <strong>Why can verification return HTTP 404?</strong>
-          <code>gh attestation verify</code> assumes the predicate type
-          <code>https://slsa.dev/provenance/v1</code> by default. Unite Analysis
-          uses <code>https://in-toto.io/attestation/link/v0.3</code> for its
-          notarized installer claim. Omitting the
-          <code>--predicate-type</code> option filters out the existing
-          attestation and can produce a 404 response.
-        </p>
-      </aside>
 
       <h2>Verify Apple signing and notarization</h2>
       <pre><code>pkgutil --check-signature "$PACKAGE"
