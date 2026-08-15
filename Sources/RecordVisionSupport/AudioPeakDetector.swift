@@ -301,9 +301,13 @@ public enum AudioPeakDetector {
   package static func normalizedRiseScores(
     blockEnergies: [Int64], samplesPerBlock: Int
   ) -> [Double] {
+    precondition(
+      slowBlockCount.isMultiple(of: fastBlockCount),
+      "slowBlockCount must be a multiple of fastBlockCount")
     guard blockEnergies.count >= slowBlockCount, samplesPerBlock > 0 else {
       return Array(repeating: 0, count: blockEnergies.count)
     }
+    let fastToSlowScale = Int64(slowBlockCount / fastBlockCount)
     let fullScale = Double(Int16.max) * Double(Int16.max)
     let denominator = Double(slowBlockCount * samplesPerBlock) * fullScale
     var scores = Array(repeating: 0.0, count: blockEnergies.count)
@@ -316,7 +320,7 @@ public enum AudioPeakDetector {
       for offset in 0..<slowBlockCount {
         slowSum += blockEnergies[index - offset]
       }
-      let scaledRise = 4 * fastSum - slowSum
+      let scaledRise = fastToSlowScale * fastSum - slowSum
       if scaledRise > 0 {
         scores[index] = Double(scaledRise) / denominator
       }
