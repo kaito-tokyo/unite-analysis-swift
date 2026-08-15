@@ -51,12 +51,14 @@ public enum OutputFileWriter {
   }
 
   private static func installForced(_ temporaryURL: URL, at outputURL: URL) throws {
+    var lastReplacementError: Error?
     for _ in 0..<8 {
       do {
         _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
         return
       } catch {
-        guard !FileManager.default.fileExists(atPath: outputURL.path) else { throw error }
+        lastReplacementError = error
+        if FileManager.default.fileExists(atPath: outputURL.path) { continue }
       }
 
       let result = renameExclusively(temporaryURL, to: outputURL)
@@ -66,7 +68,7 @@ public enum OutputFileWriter {
         throw posixError(errorNumber, path: outputURL.path)
       }
     }
-    throw posixError(EBUSY, path: outputURL.path)
+    throw lastReplacementError ?? posixError(EBUSY, path: outputURL.path)
   }
 
   private static func renameExclusively(_ sourceURL: URL, to destinationURL: URL) -> Int32 {
