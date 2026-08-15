@@ -178,10 +178,12 @@ jobs:
           fi
           component_root="$RUNNER_TEMP/installer-root"
           component_package="$RUNNER_TEMP/unite-analysis-swift-component.pkg"
+          resources_directory="$RUNNER_TEMP/installer-resources"
           artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$(uname -m).pkg"
           installer_package="$RUNNER_TEMP/$artifact_name"
-          install -d "$component_root"
+          install -d "$component_root" "$resources_directory"
           cp -R "$APP_PATH" "$component_root/"
+          install -m 644 LICENSE "$resources_directory/"
           COPYFILE_DISABLE=1 pkgbuild \
             --root "$component_root" \
             --component-plist pkg/Components.plist \
@@ -192,7 +194,7 @@ jobs:
           productbuild \
             --distribution pkg/Distribution.xml \
             --package-path "$RUNNER_TEMP" \
-            --resources . \
+            --resources "$resources_directory" \
             --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
             "$installer_package"
           pkgutil --check-signature "$installer_package"
