@@ -88,6 +88,11 @@ public enum MatchTimerAuditContactSheet {
     let extractor =
       definition.cells.isEmpty ? nil : try await VideoFrameExtractor(videoURL: videoURL)
     let columns = min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count))
+    let stagedURLs = outputURLs.map { outputURL in
+      outputURL.deletingLastPathComponent().appendingPathComponent(
+        ".\(outputURL.lastPathComponent).\(UUID().uuidString).staged.jpg")
+    }
+    defer { for url in stagedURLs { try? FileManager.default.removeItem(at: url) } }
     for (pageIndex, cells) in pages.enumerated() {
       try Task.checkCancellation()
       let rows = max(1, Int(ceil(Double(cells.count) / Double(columns))))
@@ -96,7 +101,10 @@ public enum MatchTimerAuditContactSheet {
       try renderPage(
         cells: cells, extractor: extractor, timer: timer, imageHeight: imageHeight,
         cellHeight: cellHeight, columns: columns, width: width, height: height,
-        outputURL: outputURLs[pageIndex], quality: quality, force: force)
+        outputURL: stagedURLs[pageIndex], quality: quality, force: true)
+    }
+    for index in outputURLs.indices {
+      try installStagedPage(stagedURLs[index], at: outputURLs[index], force: force)
     }
     if force { try removeObsoletePages(prefix: outputPrefixURL, keeping: Set(outputURLs)) }
     return .init(
@@ -128,7 +136,8 @@ public enum MatchTimerAuditContactSheet {
       var frames: [Int64: (CGImage, CMTime)] = [:]
       try extractor.extractFrames(at: times) { index, frame, actualTime in
         try Task.checkCancellation()
-        frames[milliseconds[index]] = (frame, actualTime)
+        let crop = try autoreleasepool { try VideoFrameSupport.cropped(frame, rect: timer) }
+        frames[milliseconds[index]] = (crop, actualTime)
       }
       for (index, cell) in cells.enumerated() {
         try Task.checkCancellation()
@@ -139,10 +148,9 @@ public enum MatchTimerAuditContactSheet {
         let row = index / columns
         let x = column * (cellWidth + gutter)
         let y = height - (row + 1) * cellHeight - row * gutter
-        let crop = try VideoFrameSupport.cropped(frame, rect: timer)
         context.interpolationQuality = .high
         context.draw(
-          crop,
+          frame,
           in: CGRect(x: x, y: y + labelHeight, width: cellWidth, height: imageHeight))
         drawLabel(
           cell, actualMilliseconds: Int64((actualTime.seconds * 1_000).rounded()),
@@ -179,6 +187,25 @@ public enum MatchTimerAuditContactSheet {
 
   public static func pageOutputURL(prefix: URL, index: Int) -> URL {
     URL(fileURLWithPath: String(format: "%@-%06d.jpg", prefix.path, index))
+  }
+
+  private static func installStagedPage(_ stagedURL: URL, at outputURL: URL, force: Bool) throws {
+    if force, FileManager.default.fileExists(atPath: outputURL.path) {
+      _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: stagedURL)
+    } else if force {
+      try FileManager.default.moveItem(at: stagedURL, to: outputURL)
+    } else {
+      do {
+        try FileManager.default.linkItem(at: stagedURL, to: outputURL)
+        try FileManager.default.removeItem(at: stagedURL)
+      } catch {
+        if FileManager.default.fileExists(atPath: outputURL.path) {
+          throw Error.message(
+            "Output already exists: \(outputURL.path). Pass --force to overwrite.")
+        }
+        throw error
+      }
+    }
   }
 
   public static func pageOutputURLs(prefix: URL, observationCount: Int) -> [URL] {
