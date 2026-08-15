@@ -115,7 +115,7 @@ extension AudioPeaks {
         "record-spec duration must be a positive finite value")
     }
 
-    let bundleURL = try recordingBundle(above: recordSpecURL)
+    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
     if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
     {
       RecordVisionInputLogger.unfinishedRecording(bundleURL)

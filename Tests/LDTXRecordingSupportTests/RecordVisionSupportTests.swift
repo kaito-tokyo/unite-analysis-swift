@@ -444,7 +444,7 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
       ],
     ],
     files: ["main-mix.m4a"])
-  #expect(throws: AudioPeakDetectorError.self) {
+  #expect(throws: RecordingInputError.self) {
     try AudioPeakDetector.audioURL(in: bundle)
   }
   do {
@@ -453,7 +453,7 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   } catch {
     #expect(
       String(describing: error)
-        == "audio-peaks-v1 requires LDTX recording format version 2: \(bundle.appendingPathComponent("Info.plist").path)"
+        == "LDTX recording format version 2 is required: \(bundle.appendingPathComponent("Info.plist").path)"
     )
   }
 }
