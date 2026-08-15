@@ -43,8 +43,10 @@ public struct MatchTimerAuditContactSheetResult: Codable, Equatable, Sendable {
 
 public enum MatchTimerAuditContactSheet {
   private static let cellWidth = 320
-  private static let labelHeight = 78
   private static let gutter = 4
+  private static let labelLineHeight = 22
+  private static let maximumJPEGDimension = 65_535
+  private static let maximumBitmapPixels = 128_000_000
   public static let observationsPerPage = 120
 
   public static func render(
@@ -79,12 +81,32 @@ public enum MatchTimerAuditContactSheet {
     {
       throw Error.message("Output already exists: \(collision.path). Pass --force to overwrite.")
     }
+    if force {
+      for outputURL in outputURLs where FileManager.default.fileExists(atPath: outputURL.path) {
+        guard try outputURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true
+        else {
+          throw Error.message("Audit page destination is not a regular file: \(outputURL.path)")
+        }
+      }
+    }
     let timer = MatchTimerVideoOCR.timerRectangle(gameScreen: gameScreen, layout: layout)
     guard timer.width.isFinite, timer.height.isFinite, timer.width > 0, timer.height > 0 else {
       throw Error.message("Resolved timer rectangle must be finite and positive")
     }
-    let imageHeight = max(60, Int((Double(cellWidth) * timer.height / timer.width).rounded()))
-    let cellHeight = imageHeight + labelHeight
+    let imageHeightValue = max(60, (Double(cellWidth) * timer.height / timer.width).rounded())
+    let maximumLabelLines =
+      definition.cells.map { labelLines($0, actualMilliseconds: 0).count }.max() ?? 1
+    let labelHeightValue = Double(maximumLabelLines * labelLineHeight + 12)
+    let cellHeightValue = imageHeightValue + labelHeightValue
+    guard imageHeightValue.isFinite, cellHeightValue.isFinite,
+      imageHeightValue <= Double(maximumJPEGDimension),
+      cellHeightValue <= Double(maximumJPEGDimension)
+    else {
+      throw Error.message("Timer audit cell dimensions exceed the supported JPEG size")
+    }
+    let imageHeight = Int(imageHeightValue)
+    let labelHeight = Int(labelHeightValue)
+    let cellHeight = Int(cellHeightValue)
     let extractor =
       definition.cells.isEmpty ? nil : try await VideoFrameExtractor(videoURL: videoURL)
     let columns = min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count))
@@ -98,9 +120,13 @@ public enum MatchTimerAuditContactSheet {
       let rows = max(1, Int(ceil(Double(cells.count) / Double(columns))))
       let width = columns * cellWidth + max(0, columns - 1) * gutter
       let height = rows * cellHeight + max(0, rows - 1) * gutter
+      guard height <= maximumJPEGDimension, width * height <= maximumBitmapPixels else {
+        throw Error.message("Timer audit page dimensions exceed the supported image size")
+      }
       try renderPage(
         cells: cells, extractor: extractor, timer: timer, imageHeight: imageHeight,
-        cellHeight: cellHeight, columns: columns, width: width, height: height,
+        labelHeight: labelHeight, cellHeight: cellHeight, columns: columns, width: width,
+        height: height,
         outputURL: stagedURLs[pageIndex], quality: quality, force: true)
     }
     try installStagedPages(stagedURLs, at: outputURLs, force: force)
@@ -112,8 +138,8 @@ public enum MatchTimerAuditContactSheet {
 
   private static func renderPage(
     cells: [MatchTimerAuditContactSheetDefinition.Cell], extractor: VideoFrameExtractor?,
-    timer: CGRect, imageHeight: Int, cellHeight: Int, columns: Int, width: Int, height: Int,
-    outputURL: URL, quality: Double, force: Bool
+    timer: CGRect, imageHeight: Int, labelHeight: Int, cellHeight: Int, columns: Int, width: Int,
+    height: Int, outputURL: URL, quality: Double, force: Bool
   ) throws {
     guard
       let context = CGContext(
@@ -261,21 +287,46 @@ public enum MatchTimerAuditContactSheet {
         ? CGColor(red: 0.055, green: 0.31, blue: 0.18, alpha: 1)
         : CGColor(red: 0.36, green: 0.08, blue: 0.08, alpha: 1))
     context.fill(frame)
-    let confidence =
-      cell.confidence.map {
-        String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), $0)
-      } ?? "null"
-    let selected = cell.output.isEmpty ? "<no text>" : cell.output
-    let lines = [
-      "requested \(format(milliseconds: cell.recordingTimelineMilliseconds))  actual \(format(milliseconds: actualMilliseconds))",
-      "OCR \(selected)  confidence \(confidence)",
-      "\(cell.disposition): \(cell.reason)",
-    ]
+    let lines = labelLines(cell, actualMilliseconds: actualMilliseconds)
     for (index, line) in lines.enumerated() {
       drawText(
         line, at: CGPoint(x: frame.minX + 6, y: frame.maxY - 20 - CGFloat(index * 22)),
         size: 12, color: CGColor(gray: 1, alpha: 1), context: context)
     }
+  }
+
+  private static func labelLines(
+    _ cell: MatchTimerAuditContactSheetDefinition.Cell, actualMilliseconds: Int64
+  ) -> [String] {
+    let confidence =
+      cell.confidence.map {
+        String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), $0)
+      } ?? "null"
+    let selected = cell.output.isEmpty ? "<no text>" : cell.output
+    return [
+      "requested \(format(milliseconds: cell.recordingTimelineMilliseconds))  actual \(format(milliseconds: actualMilliseconds))",
+      "OCR \(selected)",
+      "confidence \(confidence)",
+      "\(cell.disposition): \(cell.reason)",
+    ].flatMap(wrapLabelLine)
+  }
+
+  private static func wrapLabelLine(_ line: String) -> [String] {
+    let font = CTFontCreateWithName("Menlo" as CFString, 12, nil)
+    let attributed = NSAttributedString(
+      string: line, attributes: [kCTFontAttributeName as NSAttributedString.Key: font])
+    guard attributed.length > 0 else { return [""] }
+    let typesetter = CTTypesetterCreateWithAttributedString(attributed)
+    let string = line as NSString
+    var lines: [String] = []
+    var offset = 0
+    repeat {
+      let count = max(
+        1, CTTypesetterSuggestLineBreak(typesetter, offset, Double(cellWidth - 12)))
+      lines.append(string.substring(with: NSRange(location: offset, length: count)))
+      offset += count
+    } while offset < attributed.length
+    return lines
   }
 
   private static func drawText(

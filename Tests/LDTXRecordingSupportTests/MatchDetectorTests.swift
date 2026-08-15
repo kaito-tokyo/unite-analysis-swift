@@ -237,6 +237,44 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(try Data(contentsOf: outputs[1]) == Data("collision".utf8))
 }
 
+@Test func timerAuditRejectsDirectoryDestinationWhenForced() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let prefix = directory.appendingPathComponent("audit")
+  let destination = MatchTimerAuditContactSheet.pageOutputURL(prefix: prefix, index: 1)
+  try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+  try Data("evidence".utf8).write(to: destination.appendingPathComponent("evidence.txt"))
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL, layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 900, y: 20, width: 120, height: 60)))
+
+  await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try await MatchTimerAuditContactSheet.render(
+      videoURL: directory.appendingPathComponent("unused.mp4"),
+      gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+      diagnostics: [], outputPrefixURL: prefix, force: true)
+  }
+  #expect(
+    FileManager.default.fileExists(atPath: destination.appendingPathComponent("evidence.txt").path))
+}
+
+@Test func timerAuditRejectsOversizedDerivedDimensions() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL, layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 0, y: 0, width: 1, height: 1080)))
+
+  await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try await MatchTimerAuditContactSheet.render(
+      videoURL: directory.appendingPathComponent("unused.mp4"),
+      gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+      diagnostics: [], outputPrefixURL: directory.appendingPathComponent("audit"), force: false)
+  }
+}
+
 @Test func gameScreenRectangleDefaultsAndPartialFields() throws {
   #expect(
     try GameScreenRectangle.resolve(customFields: [:], videoWidth: 1632, videoHeight: 918)
