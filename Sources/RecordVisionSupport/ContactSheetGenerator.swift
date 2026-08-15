@@ -8,6 +8,7 @@ import CoreMedia
 import CoreText
 import Foundation
 import JavaScriptCore
+import JavaScriptCoreSupport
 import LDTXRecordingSupport
 
 public enum ContactSheetGeneratorError: Error, CustomStringConvertible {
@@ -217,6 +218,14 @@ public struct ContactSheetDefinition: Codable {
 }
 
 public enum DrawTextScriptEngine {
+  package static let executionTimeLimit: TimeInterval = 0.1
+
+  private static let terminateTimedOutScript: UASJavaScriptShouldTerminateCallback = {
+    _, callbackContext in
+    callbackContext?.assumingMemoryBound(to: Bool.self).pointee = true
+    return true
+  }
+
   public static func evaluate(
     script: String,
     recordSpecURL: URL,
@@ -288,15 +297,35 @@ public enum DrawTextScriptEngine {
         "width": videoWidth, "height": videoHeight, "frameRate": videoFrameRate,
         "duration": videoDuration,
       ], forKeyedSubscript: "VIDEO" as NSString)
-    let result = context.evaluateScript(script)
-    if let exception = context.exception {
+    var timedOut = false
+    var resultString: String?
+    var failureMessage: String?
+    withUnsafeMutablePointer(to: &timedOut) { timedOutPointer in
+      UASSetJavaScriptExecutionTimeLimit(
+        context.jsGlobalContextRef, executionTimeLimit, terminateTimedOutScript, timedOutPointer)
+      defer { UASClearJavaScriptExecutionTimeLimit(context.jsGlobalContextRef) }
+      let result = context.evaluateScript(script)
+      guard !timedOutPointer.pointee else { return }
+      if let exception = context.exception {
+        let description = exception.toString()
+        guard !timedOutPointer.pointee else { return }
+        failureMessage = "drawText script failed: \(description ?? "unknown error")"
+        return
+      }
+      guard let result, !result.isUndefined, !result.isNull else {
+        failureMessage = "drawText script must return a value"
+        return
+      }
+      resultString = result.toString() ?? ""
+    }
+    if timedOut {
       throw ContactSheetGeneratorError.message(
-        "drawText script failed: \(exception.toString() ?? "unknown error")")
+        "drawText script timed out after \(executionTimeLimit) seconds")
     }
-    guard let result, !result.isUndefined, !result.isNull else {
-      throw ContactSheetGeneratorError.message("drawText script must return a value")
+    if let failureMessage {
+      throw ContactSheetGeneratorError.message(failureMessage)
     }
-    return result.toString() ?? ""
+    return resultString ?? ""
   }
 
   private static func recordingBundle(above recordSpecURL: URL) throws -> URL {

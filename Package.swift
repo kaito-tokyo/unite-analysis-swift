@@ -172,7 +172,12 @@ let package = Package(
       name: "ResultScannerSupport",
       path: "Sources/ResultScanner"
     ),
-    .target(name: "RecordVisionSupport", dependencies: ["LDTXRecordingSupport"]),
+    .target(
+      name: "JavaScriptCoreSupport",
+      linkerSettings: [.linkedFramework("JavaScriptCore")]),
+    .target(
+      name: "RecordVisionSupport",
+      dependencies: ["JavaScriptCoreSupport", "LDTXRecordingSupport"]),
     .target(name: "UniteAnalysisConfiguration"),
     .target(
       name: "UniteAnalysisSwiftCommands",
