@@ -33,12 +33,30 @@
         "result": {
           "type": "object",
           "required": [
-            "output"
+            "output",
+            "decodedFrameCount",
+            "firstPresentationTimestamp",
+            "lastPresentationTimestamp",
+            "coveredDuration"
           ],
+          "additionalProperties": false,
           "properties": {
             "output": {
               "type": "string",
               "minLength": 1
+            },
+            "decodedFrameCount": {
+              "const": 60
+            },
+            "firstPresentationTimestamp": {
+              "type": "number"
+            },
+            "lastPresentationTimestamp": {
+              "type": "number"
+            },
+            "coveredDuration": {
+              "type": "number",
+              "minimum": 0
             }
           }
         }

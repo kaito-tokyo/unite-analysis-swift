@@ -13,21 +13,19 @@ import RecordVisionSupport
 struct FrameBurstJob: Decodable {
   static let maximumOutputDimension = 32_768
   static let maximumOutputPixels = 64_000_000
-  static let maximumFrameCount = 600
+  static let frameCount = 60
+  static let columns = 5
+  static let rows = 12
+  static let gutter = 4
 
   let jobId: String
   let matchTimestamp: Double
   let source: FrameSource
-  let frameCount: Int
-  let decimate: Int?
-  let labelFrames: Bool?
-  let columns: Int
   let cellWidth: Int
   let output: String
 
   private enum CodingKeys: String, CodingKey, CaseIterable {
-    case jobId, matchTimestamp, source, frameCount, decimate, labelFrames, columns, cellWidth,
-      output
+    case jobId, matchTimestamp, source, cellWidth, output
   }
 
   init(from decoder: Decoder) throws {
@@ -38,16 +36,9 @@ struct FrameBurstJob: Decodable {
     jobId = try container.decode(String.self, forKey: .jobId)
     matchTimestamp = try container.decode(Double.self, forKey: .matchTimestamp)
     source = try container.decode(FrameSource.self, forKey: .source)
-    frameCount = try container.decode(Int.self, forKey: .frameCount)
-    decimate = try container.decodeIfPresent(Int.self, forKey: .decimate)
-    labelFrames = try container.decodeIfPresent(Bool.self, forKey: .labelFrames)
-    columns = try container.decode(Int.self, forKey: .columns)
     cellWidth = try container.decode(Int.self, forKey: .cellWidth)
     output = try container.decode(String.self, forKey: .output)
   }
-
-  var decimation: Int { decimate ?? 1 }
-  var labelsFrames: Bool { labelFrames ?? false }
 
   func validate() throws {
     guard !jobId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -57,24 +48,12 @@ struct FrameBurstJob: Decodable {
       throw UniteAnalysisSwiftToolError.message("matchTimestamp must be finite")
     }
     try source.validate()
-    guard (1...Self.maximumFrameCount).contains(frameCount) else {
-      throw UniteAnalysisSwiftToolError.message(
-        "frameCount must be from 1 through \(Self.maximumFrameCount)")
-    }
-    guard decimation > 0 else {
-      throw UniteAnalysisSwiftToolError.message("decimate must be positive")
-    }
-    guard columns > 0 else {
-      throw UniteAnalysisSwiftToolError.message("columns must be positive")
-    }
     guard cellWidth > 0 else {
       throw UniteAnalysisSwiftToolError.message("cellWidth must be positive")
     }
-    guard columns <= Self.maximumOutputDimension,
-      cellWidth <= Self.maximumOutputDimension
-    else {
+    guard cellWidth <= Self.maximumOutputDimension else {
       throw UniteAnalysisSwiftToolError.message(
-        "columns and cellWidth must not exceed \(Self.maximumOutputDimension)")
+        "cellWidth must not exceed \(Self.maximumOutputDimension)")
     }
     guard !output.isEmpty else {
       throw UniteAnalysisSwiftToolError.message("output must not be empty")
@@ -88,14 +67,15 @@ struct FrameBurstJob: Decodable {
       throw UniteAnalysisSwiftToolError.message("Derived cell height is too large")
     }
     let cellHeight = max(1, Int(scaledHeight.rounded()))
-    let retainedCount = (frameCount - 1) / decimation + 1
-    let rows = (retainedCount - 1) / columns + 1
-    let gutter = 4
-    let (cellWidthTotal, cellWidthOverflow) = columns.multipliedReportingOverflow(by: cellWidth)
-    let (gutterWidth, gutterWidthOverflow) = (columns - 1).multipliedReportingOverflow(by: gutter)
+    let (cellWidthTotal, cellWidthOverflow) = Self.columns.multipliedReportingOverflow(
+      by: cellWidth)
+    let (gutterWidth, gutterWidthOverflow) = (Self.columns - 1).multipliedReportingOverflow(
+      by: Self.gutter)
     let (width, widthOverflow) = cellWidthTotal.addingReportingOverflow(gutterWidth)
-    let (cellHeightTotal, cellHeightOverflow) = rows.multipliedReportingOverflow(by: cellHeight)
-    let (gutterHeight, gutterHeightOverflow) = (rows - 1).multipliedReportingOverflow(by: gutter)
+    let (cellHeightTotal, cellHeightOverflow) = Self.rows.multipliedReportingOverflow(
+      by: cellHeight)
+    let (gutterHeight, gutterHeightOverflow) = (Self.rows - 1).multipliedReportingOverflow(
+      by: Self.gutter)
     let (height, heightOverflow) = cellHeightTotal.addingReportingOverflow(gutterHeight)
     guard !cellWidthOverflow, !gutterWidthOverflow, !widthOverflow,
       !cellHeightOverflow, !gutterHeightOverflow, !heightOverflow,
@@ -110,15 +90,42 @@ struct FrameBurstJob: Decodable {
       throw UniteAnalysisSwiftToolError.message(
         "Frame burst pixel count exceeds \(Self.maximumOutputPixels)")
     }
-    return (cellHeight, rows, width, height)
+    return (cellHeight, Self.rows, width, height)
   }
+}
+
+struct FrameBurstTiming: Equatable {
+  let decodedFrameCount: Int
+  let firstPresentationTimestamp: Double
+  let lastPresentationTimestamp: Double
+  let coveredDuration: Double
+}
+
+func frameBurstTiming(decodedFrameCount: Int, firstPTS: CMTime?, lastPTS: CMTime?) throws
+  -> FrameBurstTiming
+{
+  guard decodedFrameCount == FrameBurstJob.frameCount, let firstPTS, let lastPTS else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Frame burst requires exactly \(FrameBurstJob.frameCount) consecutive decoded frames")
+  }
+  return FrameBurstTiming(
+    decodedFrameCount: decodedFrameCount,
+    firstPresentationTimestamp: firstPTS.seconds,
+    lastPresentationTimestamp: lastPTS.seconds,
+    coveredDuration: CMTimeSubtract(lastPTS, firstPTS).seconds)
 }
 
 struct FrameBurstJobOutput: Encodable {
   static let schemaURL =
     "https://kaito-tokyo.github.io/unite-analysis-swift/frame-burst.output.schema.json"
 
-  struct Result: Encodable { let output: String }
+  struct Result: Encodable {
+    let output: String
+    let decodedFrameCount: Int
+    let firstPresentationTimestamp: Double
+    let lastPresentationTimestamp: Double
+    let coveredDuration: Double
+  }
 
   let schema = schemaURL
   let jobId: String
@@ -138,21 +145,21 @@ struct FrameBurst: ParsableCommand {
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
-      INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, matchTimestamp, source, frameCount, columns, cellWidth, and output. decimate is optional and defaults to 1. labelFrames optionally overlays each retained source index and actual match-relative timestamp. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
+      INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, matchTimestamp, source, cellWidth, and output. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
 
       COMPLETE jobs.jsonl EXAMPLE.
 
-      {"jobId":"absol-499.2","matchTimestamp":499.2,"source":{"x":0,"y":0,"width":1632,"height":918},"frameCount":60,"decimate":2,"labelFrames":true,"columns":8,"cellWidth":320,"output":"_PokemonUniteAnalysis/matches/match-01/frame-bursts/absol-499.2.jpg"}
+      {"jobId":"absol-499.2","matchTimestamp":499.2,"source":{"x":0,"y":0,"width":1632,"height":918},"cellWidth":320,"output":"_PokemonUniteAnalysis/matches/match-01/frame-bursts/absol-499.2.jpg"}
 
       JOB-ID. jobId is a required non-empty caller-defined correlation string and must be unique within the input stream. It is returned unchanged and is never used to derive the output filename.
 
-      PURPOSE. Use frame bursts to inspect sub-second motion such as facing changes, aim corrections, move startup, and hit confirmation. Every source-video sample is decoded in sequence; the command does not issue approximate seeks for individual cells.
+      PURPOSE. Use frame bursts to verify sub-second motion after locating a narrow interval with contact-sheet or extract-clip. Every artifact contains exactly 60 consecutive source frames; longer scene exploration belongs to contact-sheet and continuous playback belongs to extract-clip.
 
-      DECIMATION. frameCount is the number of consecutive source samples decoded and therefore defines the covered time span. decimate N retains source indices 0, N, 2N, and so on for display without changing that decoded span. Frames fill left to right and then top to bottom. Cell height is derived from source and cellWidth without distortion. A fixed 4px magenta gutter separates cells.
+      LAYOUT. All 60 decoded frames are rendered left to right and then top to bottom in five columns by twelve rows. Every cell is labeled with its zero-based source index and actual match-relative timestamp. Cell height is derived from source and cellWidth without distortion. A fixed 4px magenta gutter separates cells.
 
       TIMING. matchTimestamp is relative to match start. The first cell is the first decoded source sample at or after that time; every following cell is the next decoded video sample. Requested, first, and last source PTS are written to stderr.
 
-      OUTPUT. Each job writes one baseline 8-bit RGB JPEG. One JSON response line containing jobId, ok, and either result.output or error is written to stdout before the next job is read. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Existing output is rejected unless --force is supplied. stdout contains JSONL responses only.
+      OUTPUT. Each job writes one baseline 8-bit RGB JPEG. Success metadata reports the decoded frame count, first and last actual source presentation timestamps, and covered duration. A job fails if 60 frames are not available. One JSON response line containing jobId, ok, and either result or error is written to stdout before the next job is read. One failed job does not stop later jobs or make the process fail; callers must inspect ok on every response. Existing output is rejected unless --force is supplied. stdout contains JSONL responses only.
 
       SCHEMAS. Print the per-line input schema with `unite-analysis-swift schema frame-burst.schema.json` and the response schema with `unite-analysis-swift schema frame-burst.output.schema.json`.
       """.reflowedHelp()
@@ -194,11 +201,19 @@ extension FrameBurst {
           let job = try JSONDecoder().decode(FrameBurstJob.self, from: line.data)
           try job.validate()
           let outputURL = resolvePath(job.output)
-          try await renderFrameBurst(
+          let timing = try await renderFrameBurst(
             job: job, media: media, outputURL: outputURL,
             quality: command.quality, force: command.force)
           continuation.yield(
-            .success(FrameBurstJobOutput(jobId: job.jobId, result: .init(output: outputURL.path))))
+            .success(
+              FrameBurstJobOutput(
+                jobId: job.jobId,
+                result: .init(
+                  output: outputURL.path,
+                  decodedFrameCount: timing.decodedFrameCount,
+                  firstPresentationTimestamp: timing.firstPresentationTimestamp,
+                  lastPresentationTimestamp: timing.lastPresentationTimestamp,
+                  coveredDuration: timing.coveredDuration))))
         } catch {
           continuation.yield(
             .failure(.init(line: line.number, jobId: recoveredJobId, error: error)))
@@ -211,7 +226,7 @@ extension FrameBurst {
 
 private func renderFrameBurst(
   job: FrameBurstJob, media: RecordingMediaContext, outputURL: URL, quality: Double, force: Bool
-) async throws {
+) async throws -> FrameBurstTiming {
   try validateOutputPath(outputURL, force: force)
   let spec = media.spec
   let extractor = media.extractor
@@ -225,7 +240,7 @@ private func renderFrameBurst(
   let layout = try job.layoutDimensions()
   let cellHeight = layout.cellHeight
   let rows = layout.rows
-  let gutter = 4
+  let gutter = FrameBurstJob.gutter
   let width = layout.width
   let height = layout.height
   guard
@@ -236,7 +251,7 @@ private func renderFrameBurst(
   context.setFillColor(CGColor(red: 0.063, green: 0.094, blue: 0.125, alpha: 1))
   context.fill(CGRect(x: 0, y: 0, width: width, height: height))
   context.setFillColor(CGColor(red: 1, green: 0, blue: 1, alpha: 1))
-  for column in 1..<job.columns {
+  for column in 1..<FrameBurstJob.columns {
     let x = column * job.cellWidth + (column - 1) * gutter
     context.fill(CGRect(x: x, y: 0, width: gutter, height: height))
   }
@@ -247,38 +262,40 @@ private func renderFrameBurst(
 
   var firstPTS: CMTime?
   var lastPTS: CMTime?
-  try extractor.extractConsecutiveFrames(startingAt: requestedTime, count: job.frameCount) {
+  var decodedFrameCount = 0
+  try extractor.extractConsecutiveFrames(startingAt: requestedTime, count: FrameBurstJob.frameCount)
+  {
     index, frame, presentationTime in
+    decodedFrameCount += 1
     firstPTS = firstPTS ?? presentationTime
     lastPTS = presentationTime
-    guard index.isMultiple(of: job.decimation) else { return }
     let cropped = try VideoFrameSupport.cropped(frame, rect: job.source.rect)
-    let outputIndex = index / job.decimation
-    let column = outputIndex % job.columns
-    let row = outputIndex / job.columns
+    let column = index % FrameBurstJob.columns
+    let row = index / FrameBurstJob.columns
     let destination = CGRect(
       x: column * (job.cellWidth + gutter),
       y: height - (row + 1) * cellHeight - row * gutter,
       width: job.cellWidth, height: cellHeight)
     context.interpolationQuality = .high
     context.draw(cropped, in: destination)
-    if job.labelsFrames {
-      drawFrameBurstLabel(
-        sourceIndex: index,
-        actualInmatch: presentationTime.seconds
-          - Double(spec.startPTS.value) / Double(spec.startPTS.timescale),
-        in: destination, context: context)
-    }
+    drawFrameBurstLabel(
+      sourceIndex: index,
+      actualInmatch: presentationTime.seconds
+        - Double(spec.startPTS.value) / Double(spec.startPTS.timescale),
+      in: destination, context: context)
   }
-  guard let image = context.makeImage(), let firstPTS, let lastPTS else {
+  let timing = try frameBurstTiming(
+    decodedFrameCount: decodedFrameCount, firstPTS: firstPTS, lastPTS: lastPTS)
+  guard let image = context.makeImage() else {
     throw UniteAnalysisSwiftToolError.message("Could not finalize frame burst image")
   }
   try VideoFrameSupport.writeBaselineJPEG(
     image, to: outputURL, quality: quality, force: force)
   FileHandle.standardError.write(
     Data(
-      "unite-analysis-swift: frame burst requested PTS \(canonicalSeconds(requestedTime.seconds))s, first PTS \(canonicalSeconds(firstPTS.seconds))s, last PTS \(canonicalSeconds(lastPTS.seconds))s\n"
+      "unite-analysis-swift: frame burst requested PTS \(canonicalSeconds(requestedTime.seconds))s, first PTS \(canonicalSeconds(timing.firstPresentationTimestamp))s, last PTS \(canonicalSeconds(timing.lastPresentationTimestamp))s\n"
         .utf8))
+  return timing
 }
 
 private func drawFrameBurstLabel(
@@ -294,9 +311,7 @@ private func drawFrameBurstLabel(
   context.setFillColor(CGColor(gray: 0, alpha: 0.8))
   context.fill(band)
   let font = CTFontCreateWithName("Menlo" as CFString, fontSize, nil)
-  let text = String(
-    format: "F%04d  %+.3fs", locale: Locale(identifier: "en_US_POSIX"), sourceIndex,
-    actualInmatch)
+  let text = frameBurstLabel(sourceIndex: sourceIndex, actualInmatch: actualInmatch)
   let line = CTLineCreateWithAttributedString(
     NSAttributedString(
       string: text,
@@ -306,4 +321,10 @@ private func drawFrameBurstLabel(
       ]))
   context.textPosition = CGPoint(x: destination.minX + 4, y: destination.minY + 4)
   CTLineDraw(line, context)
+}
+
+func frameBurstLabel(sourceIndex: Int, actualInmatch: Double) -> String {
+  String(
+    format: "F%04d  %+.3fs", locale: Locale(identifier: "en_US_POSIX"), sourceIndex,
+    actualInmatch)
 }
