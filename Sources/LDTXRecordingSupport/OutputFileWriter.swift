@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import Darwin
 import Foundation
 
 public enum OutputFileError: Error, CustomStringConvertible {
@@ -36,23 +37,26 @@ public enum OutputFileWriter {
   public static func install(_ temporaryURL: URL, at outputURL: URL, force: Bool) throws {
     try FileManager.default.createDirectory(
       at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    if force {
-      if FileManager.default.fileExists(atPath: outputURL.path) {
-        _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
-      } else {
-        try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
+    let result = temporaryURL.withUnsafeFileSystemRepresentation { temporaryPath in
+      outputURL.withUnsafeFileSystemRepresentation { outputPath in
+        guard let temporaryPath, let outputPath else {
+          errno = EINVAL
+          return Int32(-1)
+        }
+        if force {
+          return Darwin.rename(temporaryPath, outputPath)
+        }
+        return renameatx_np(AT_FDCWD, temporaryPath, AT_FDCWD, outputPath, UInt32(RENAME_EXCL))
       }
-      return
     }
-    do {
-      try FileManager.default.linkItem(at: temporaryURL, to: outputURL)
-      try FileManager.default.removeItem(at: temporaryURL)
-    } catch {
-      if FileManager.default.fileExists(atPath: outputURL.path) {
-        throw OutputFileError.alreadyExists(outputURL.path)
-      }
-      throw error
+    guard result != 0 else { return }
+    let errorNumber = errno
+    if !force, errorNumber == EEXIST {
+      throw OutputFileError.alreadyExists(outputURL.path)
     }
+    throw NSError(
+      domain: NSPOSIXErrorDomain, code: Int(errorNumber),
+      userInfo: [NSFilePathErrorKey: outputURL.path])
   }
 
   public static func temporaryURL(for outputURL: URL, suffix: String = ".tmp") -> URL {
