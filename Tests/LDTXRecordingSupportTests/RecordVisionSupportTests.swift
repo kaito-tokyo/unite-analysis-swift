@@ -856,6 +856,27 @@ func contactSheetRejectsInvalidRecordDuration(duration: Double) {
   #expect(AudioPeakDetector.minimumNormalizedRise == 0.000_005)
   #expect(AudioPeakDetector.minimumPeakSeparation == 0.75)
   #expect(AudioPeakDetector.peakDilation == 0.5)
+  #expect(AudioPeakDetector.slowBlockCount.isMultiple(of: AudioPeakDetector.fastBlockCount))
+}
+
+@Test func audioPeakDetectorDerivesFastWindowScale() {
+  var energies = Array(repeating: Int64(10), count: AudioPeakDetector.slowBlockCount)
+  for index in energies.indices.suffix(AudioPeakDetector.fastBlockCount) {
+    energies[index] = 20
+  }
+  let scale = AudioPeakDetector.slowBlockCount / AudioPeakDetector.fastBlockCount
+  let fastSum = Int64(AudioPeakDetector.fastBlockCount * 20)
+  let slowSum = Int64(
+    AudioPeakDetector.fastBlockCount * 20
+      + (AudioPeakDetector.slowBlockCount - AudioPeakDetector.fastBlockCount) * 10)
+  let expected =
+    Double(Int64(scale) * fastSum - slowSum)
+    / (Double(AudioPeakDetector.slowBlockCount) * pow(Double(Int16.max), 2))
+
+  let scores = AudioPeakDetector.normalizedRiseScores(
+    blockEnergies: energies, samplesPerBlock: 1)
+
+  #expect(abs(scores.last! - expected) < 0.000_000_000_001)
 }
 
 @Test func audioPeakDetectorZeroFillsMissingGridBlocks() {
