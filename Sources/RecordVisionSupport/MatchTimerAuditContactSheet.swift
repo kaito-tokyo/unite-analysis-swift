@@ -237,18 +237,55 @@ public enum MatchTimerAuditContactSheet {
   ) throws {
     precondition(stagedURLs.count == outputURLs.count)
     var installedURLs: [URL] = []
+    var attemptedIndices: [Int] = []
+    var backupURLs: [Int: URL] = [:]
+    defer { for url in backupURLs.values { try? FileManager.default.removeItem(at: url) } }
+    if force {
+      for index in outputURLs.indices
+      where FileManager.default.fileExists(atPath: outputURLs[index].path) {
+        let backupURL = outputURLs[index].deletingLastPathComponent().appendingPathComponent(
+          ".\(outputURLs[index].lastPathComponent).\(UUID().uuidString).backup")
+        try FileManager.default.linkItem(at: outputURLs[index], to: backupURL)
+        backupURLs[index] = backupURL
+      }
+    }
     do {
       for index in outputURLs.indices {
+        attemptedIndices.append(index)
         try installStagedPage(stagedURLs[index], at: outputURLs[index], force: force)
         installedURLs.append(outputURLs[index])
       }
-    } catch {
-      if !force {
-        for url in installedURLs.reversed() {
-          try? FileManager.default.removeItem(at: url)
+    } catch let installationError {
+      if force {
+        do {
+          for index in attemptedIndices.reversed() {
+            if let backupURL = backupURLs[index] {
+              if FileManager.default.fileExists(atPath: outputURLs[index].path) {
+                try FileManager.default.removeItem(at: outputURLs[index])
+              }
+              try FileManager.default.moveItem(at: backupURL, to: outputURLs[index])
+              backupURLs[index] = nil
+            } else if installedURLs.contains(outputURLs[index]) {
+              try FileManager.default.removeItem(at: outputURLs[index])
+            }
+          }
+        } catch {
+          throw Error.message(
+            "Timer audit installation failed and rollback also failed: \(installationError); \(error)"
+          )
+        }
+      } else {
+        do {
+          for url in installedURLs.reversed() {
+            try FileManager.default.removeItem(at: url)
+          }
+        } catch {
+          throw Error.message(
+            "Timer audit installation failed and rollback also failed: \(installationError); \(error)"
+          )
         }
       }
-      throw error
+      throw installationError
     }
   }
 
@@ -259,20 +296,40 @@ public enum MatchTimerAuditContactSheet {
 
   private static func removeObsoletePages(prefix: URL, keeping: Set<URL>) throws {
     let directory = prefix.deletingLastPathComponent()
-    let escaped = NSRegularExpression.escapedPattern(for: prefix.lastPathComponent)
-    let expression = try NSRegularExpression(pattern: "^\(escaped)-[0-9]{6}\\.jpg$")
+    let caseSensitive =
+      try directory.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
+      .volumeSupportsCaseSensitiveNames ?? true
+    let normalizedPrefix = normalizedFilename(
+      prefix.lastPathComponent, caseSensitive: caseSensitive)
+    let keepingFilenames = Set(
+      keeping.map { normalizedFilename($0.lastPathComponent, caseSensitive: caseSensitive) })
     for url in try FileManager.default.contentsOfDirectory(
       at: directory, includingPropertiesForKeys: [.isRegularFileKey])
-    where !keeping.contains(url.standardizedFileURL)
-      && expression.firstMatch(
-        in: url.lastPathComponent,
-        range: NSRange(url.lastPathComponent.startIndex..., in: url.lastPathComponent)) != nil
+    where !keepingFilenames.contains(
+      normalizedFilename(url.lastPathComponent, caseSensitive: caseSensitive))
+      && isAuditPageFilename(
+        url.lastPathComponent, normalizedPrefix: normalizedPrefix, caseSensitive: caseSensitive)
     {
       guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
         throw Error.message("Obsolete audit page path is not a regular file: \(url.path)")
       }
       try FileManager.default.removeItem(at: url)
     }
+  }
+
+  private static func normalizedFilename(_ value: String, caseSensitive: Bool) -> String {
+    let normalized = value.decomposedStringWithCanonicalMapping
+    return caseSensitive ? normalized : normalized.lowercased()
+  }
+
+  private static func isAuditPageFilename(
+    _ filename: String, normalizedPrefix: String, caseSensitive: Bool
+  ) -> Bool {
+    let normalized = normalizedFilename(filename, caseSensitive: caseSensitive)
+    let expectedPrefix = normalizedPrefix + "-"
+    guard normalized.hasPrefix(expectedPrefix), normalized.hasSuffix(".jpg") else { return false }
+    let digits = normalized.dropFirst(expectedPrefix.count).dropLast(4)
+    return digits.count == 6 && digits.allSatisfy { $0.isASCII && $0.isNumber }
   }
 
   private static func drawLabel(

@@ -67,6 +67,14 @@ import Testing
   }
 }
 
+@Test func matchDetectionOutputCannotContainAuditPages() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  let page = directory.appendingPathComponent("audit-000001.jpg")
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try validateDistinctMatchDetectionOutputs(outputURL: directory, auditPageURLs: [page])
+  }
+}
+
 @Test func networkOptimizedMP4PlacesMoovBeforeMdat() throws {
   let optimized =
     mp4Atom("ftyp", payloadSize: 4) + mp4Atom("moov", payloadSize: 8)

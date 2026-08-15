@@ -174,9 +174,13 @@ package func validateDistinctMatchDetectionOutputs(outputURL: URL, auditPageURLs
   let pageKeys = try auditPageURLs.map {
     try filesystemPathKey($0, volumeReferenceURL: volumeReferenceURL)
   }
-  guard !pageKeys.contains(outputKey) else {
+  let contains: ([String], [String]) -> Bool = { ancestor, descendant in
+    ancestor.count <= descendant.count
+      && Array(descendant.prefix(ancestor.count)) == ancestor
+  }
+  guard !pageKeys.contains(where: { contains(outputKey, $0) || contains($0, outputKey) }) else {
     throw UniteAnalysisSwiftToolError.message(
-      "--output must not collide with an audit contact sheet page")
+      "--output must not overlap an audit contact sheet page path")
   }
 }
 
