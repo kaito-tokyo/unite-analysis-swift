@@ -484,27 +484,34 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
 }
 
 @Test func drawTextScriptTimesOutInsteadOfBlocking() throws {
-  let start = ContinuousClock.now
-  do {
-    _ = try DrawTextScriptEngine.evaluate(
-      script: "while (true) {}",
-      index: 0,
-      inmatch: 1,
-      beforeStart: nil,
-      afterEnd: nil,
-      matchDuration: 600,
-      recordMatchId: "record-01",
-      videoWidth: 1920,
-      videoHeight: 1080,
-      videoFrameRate: 60,
-      videoDuration: 681.383333)
-    Issue.record("Expected an unbounded drawText script to time out")
-  } catch {
-    #expect(
-      String(describing: error)
-        == "drawText script timed out after \(DrawTextScriptEngine.executionTimeLimit) seconds")
+  let unboundedScripts = [
+    "while (true) {}",
+    "({ toString() { while (true) {} } })",
+    "throw ({ toString() { while (true) {} } })",
+  ]
+  for script in unboundedScripts {
+    let start = ContinuousClock.now
+    do {
+      _ = try DrawTextScriptEngine.evaluate(
+        script: script,
+        index: 0,
+        inmatch: 1,
+        beforeStart: nil,
+        afterEnd: nil,
+        matchDuration: 600,
+        recordMatchId: "record-01",
+        videoWidth: 1920,
+        videoHeight: 1080,
+        videoFrameRate: 60,
+        videoDuration: 681.383333)
+      Issue.record("Expected an unbounded drawText script to time out")
+    } catch {
+      #expect(
+        String(describing: error)
+          == "drawText script timed out after \(DrawTextScriptEngine.executionTimeLimit) seconds")
+    }
+    #expect(start.duration(to: .now) < .seconds(2))
   }
-  #expect(start.duration(to: .now) < .seconds(2))
 
   let value = try DrawTextScriptEngine.evaluate(
     script: "FRAME.index + 1",

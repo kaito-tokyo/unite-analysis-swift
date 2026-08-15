@@ -298,24 +298,34 @@ public enum DrawTextScriptEngine {
         "duration": videoDuration,
       ], forKeyedSubscript: "VIDEO" as NSString)
     var timedOut = false
-    let result = withUnsafeMutablePointer(to: &timedOut) { timedOutPointer in
+    var resultString: String?
+    var failureMessage: String?
+    withUnsafeMutablePointer(to: &timedOut) { timedOutPointer in
       UASSetJavaScriptExecutionTimeLimit(
         context.jsGlobalContextRef, executionTimeLimit, terminateTimedOutScript, timedOutPointer)
       defer { UASClearJavaScriptExecutionTimeLimit(context.jsGlobalContextRef) }
-      return context.evaluateScript(script)
+      let result = context.evaluateScript(script)
+      guard !timedOutPointer.pointee else { return }
+      if let exception = context.exception {
+        let description = exception.toString()
+        guard !timedOutPointer.pointee else { return }
+        failureMessage = "drawText script failed: \(description ?? "unknown error")"
+        return
+      }
+      guard let result, !result.isUndefined, !result.isNull else {
+        failureMessage = "drawText script must return a value"
+        return
+      }
+      resultString = result.toString() ?? ""
     }
     if timedOut {
       throw ContactSheetGeneratorError.message(
         "drawText script timed out after \(executionTimeLimit) seconds")
     }
-    if let exception = context.exception {
-      throw ContactSheetGeneratorError.message(
-        "drawText script failed: \(exception.toString() ?? "unknown error")")
+    if let failureMessage {
+      throw ContactSheetGeneratorError.message(failureMessage)
     }
-    guard let result, !result.isUndefined, !result.isNull else {
-      throw ContactSheetGeneratorError.message("drawText script must return a value")
-    }
-    return result.toString() ?? ""
+    return resultString ?? ""
   }
 
   private static func recordingBundle(above recordSpecURL: URL) throws -> URL {
