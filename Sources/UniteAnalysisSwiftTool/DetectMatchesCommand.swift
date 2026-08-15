@@ -145,12 +145,7 @@ struct DetectMatches: ParsableCommand {
       let pages = MatchTimerAuditContactSheet.pageOutputURLs(
         prefix: resolvePath(auditContactSheetPrefix),
         observationCount: detection.diagnostics.count)
-      let canonicalOutput = try resolvingSymlinkComponents(in: output)
-      let canonicalPages = try pages.map { try resolvingSymlinkComponents(in: $0) }
-      guard !canonicalPages.contains(canonicalOutput) else {
-        throw UniteAnalysisSwiftToolError.message(
-          "--output must not collide with an audit contact sheet page")
-      }
+      try validateDistinctMatchDetectionOutputs(outputURL: output, auditPageURLs: pages)
     }
     let auditResult: MatchTimerAuditContactSheetResult?
     if let auditContactSheetPrefix {
@@ -170,6 +165,18 @@ struct DetectMatches: ParsableCommand {
       gameScreen: gameScreen,
       matches: detection.matches, diagnostics: detection.diagnostics,
       auditContactSheet: auditResult)
+  }
+}
+
+package func validateDistinctMatchDetectionOutputs(outputURL: URL, auditPageURLs: [URL]) throws {
+  guard let volumeReferenceURL = auditPageURLs.first else { return }
+  let outputKey = try filesystemPathKey(outputURL, volumeReferenceURL: volumeReferenceURL)
+  let pageKeys = try auditPageURLs.map {
+    try filesystemPathKey($0, volumeReferenceURL: volumeReferenceURL)
+  }
+  guard !pageKeys.contains(outputKey) else {
+    throw UniteAnalysisSwiftToolError.message(
+      "--output must not collide with an audit contact sheet page")
   }
 }
 

@@ -359,6 +359,24 @@ package func validateDistinctLoadoutOutputs(
   }
 }
 
+package func filesystemPathKey(_ url: URL, volumeReferenceURL: URL) throws -> [String] {
+  let normalizedURL = try resolvingSymlinkComponents(in: url)
+  var existingAncestor = try resolvingSymlinkComponents(in: volumeReferenceURL)
+  while !FileManager.default.fileExists(atPath: existingAncestor.path) {
+    let parent = existingAncestor.deletingLastPathComponent()
+    guard parent != existingAncestor else { break }
+    existingAncestor = parent
+  }
+  let volumeValues = try existingAncestor.resourceValues(forKeys: [
+    .volumeSupportsCaseSensitiveNamesKey
+  ])
+  let caseSensitive = volumeValues.volumeSupportsCaseSensitiveNames ?? true
+  return normalizedURL.standardized.pathComponents.map { component in
+    let normalized = component.decomposedStringWithCanonicalMapping
+    return caseSensitive ? normalized : normalized.lowercased()
+  }
+}
+
 package func prepareDiagnosticDirectory(
   _ directory: URL?, matchFormat: String, force: Bool
 ) throws {

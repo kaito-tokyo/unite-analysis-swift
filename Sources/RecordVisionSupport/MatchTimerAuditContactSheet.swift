@@ -103,9 +103,7 @@ public enum MatchTimerAuditContactSheet {
         cellHeight: cellHeight, columns: columns, width: width, height: height,
         outputURL: stagedURLs[pageIndex], quality: quality, force: true)
     }
-    for index in outputURLs.indices {
-      try installStagedPage(stagedURLs[index], at: outputURLs[index], force: force)
-    }
+    try installStagedPages(stagedURLs, at: outputURLs, force: force)
     if force { try removeObsoletePages(prefix: outputPrefixURL, keeping: Set(outputURLs)) }
     return .init(
       outputs: outputURLs.map(\.path), observationCount: definition.cells.count,
@@ -205,6 +203,26 @@ public enum MatchTimerAuditContactSheet {
         }
         throw error
       }
+    }
+  }
+
+  package static func installStagedPages(
+    _ stagedURLs: [URL], at outputURLs: [URL], force: Bool
+  ) throws {
+    precondition(stagedURLs.count == outputURLs.count)
+    var installedURLs: [URL] = []
+    do {
+      for index in outputURLs.indices {
+        try installStagedPage(stagedURLs[index], at: outputURLs[index], force: force)
+        installedURLs.append(outputURLs[index])
+      }
+    } catch {
+      if !force {
+        for url in installedURLs.reversed() {
+          try? FileManager.default.removeItem(at: url)
+        }
+      }
+      throw error
     }
   }
 

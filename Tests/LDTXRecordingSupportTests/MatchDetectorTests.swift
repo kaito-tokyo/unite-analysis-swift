@@ -221,6 +221,22 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   }
 }
 
+@Test func timerAuditInstallationRollsBackEarlierPages() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  let staged = (1...2).map { directory.appendingPathComponent("staged-\($0).jpg") }
+  let outputs = (1...2).map { directory.appendingPathComponent("output-\($0).jpg") }
+  for url in staged { try Data("staged".utf8).write(to: url) }
+  try Data("collision".utf8).write(to: outputs[1])
+
+  #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try MatchTimerAuditContactSheet.installStagedPages(staged, at: outputs, force: false)
+  }
+  #expect(!FileManager.default.fileExists(atPath: outputs[0].path))
+  #expect(try Data(contentsOf: outputs[1]) == Data("collision".utf8))
+}
+
 @Test func gameScreenRectangleDefaultsAndPartialFields() throws {
   #expect(
     try GameScreenRectangle.resolve(customFields: [:], videoWidth: 1632, videoHeight: 918)
