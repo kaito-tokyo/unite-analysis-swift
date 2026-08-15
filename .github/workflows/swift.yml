@@ -4,33 +4,28 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Swift CI
+name: Swift
 
 on:
   workflow_call:
     inputs:
-      app-name:
-        description: Name of the macOS app bundle
-        type: string
-      upload-artifacts:
-        description: Package, attest, and upload release products
+      release-build:
+        description: Builds, signs, notarizes, attests, and uploads the release package.
+        required: false
         type: boolean
         default: false
     outputs:
-      UNSIGNED_ARM64_ARTIFACT_NAME:
-        description: Name of the uploaded unsigned release archive
-        value: ${{ jobs.swift-ci.outputs.UNSIGNED_ARM64_ARTIFACT_NAME }}
+      artifact:
+        description: Name of the uploaded notarized installer package.
+        value: ${{ jobs.swift-ci.outputs.artifact }}
 
 jobs:
   swift-ci:
     runs-on: macos-26
-    timeout-minutes: 20
-    env:
-      APP_NAME: ${{ inputs.app-name }}
-      UNSIGNED_ARM64_ARTIFACT_NAME: unite-analysis-swift-unsigned-macOS-arm64-${{ github.run_id }}.tar.gz
+    environment: ${{ inputs.release-build && 'release-macos' || null }}
+    timeout-minutes: 60
     outputs:
-      UNSIGNED_ARM64_ARTIFACT_NAME: ${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}
-
+      artifact: ${{ steps.release-package.outputs.artifact_name }}
     steps:
       - name: Print Xcode version
         id: xcode
@@ -87,64 +82,159 @@ jobs:
           path: .build
           key: ${{ steps.swiftpm-cache.outputs.cache-primary-key }}
 
-      - name: Create job temp directory
-        id: job-temp
-        if: inputs.upload-artifacts
-        shell: bash --noprofile --norc -euo pipefail {0}
-        run: |
-          JOB_TEMP="$RUNNER_TEMP/$GITHUB_JOB-$GITHUB_RUN_ID"
-          mkdir -p "$JOB_TEMP"
-          printf 'JOB_TEMP=%s\n' "$JOB_TEMP" >>"$GITHUB_OUTPUT"
-
-      - name: Assemble unsigned app bundle
-        id: assemble-app
-        if: inputs.upload-artifacts
+      - name: Assemble app bundle
+        id: app
+        if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          APP_PATH: ${{ steps.job-temp.outputs.JOB_TEMP }}/${{ env.APP_NAME }}
+          APP_PATH: ${{ runner.temp }}/Kaito-Tokyo Unite Analysis.app
         run: |
           bin_path="$(swift build --show-bin-path -c release)"
           install -d "$APP_PATH"
           cp -R Contents "$APP_PATH/"
-          cd "$APP_PATH/Contents"
-          install -d MacOS
+          install -d "$APP_PATH/Contents/MacOS"
           install -m 755 \
             "$bin_path/unite-analysis-swift" \
             "$bin_path/unite-analysis-model-tool" \
-            MacOS/
-          install -m 644 "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/NOTICE" Resources/
-          cp -R "$GITHUB_WORKSPACE/LICENSES" Resources/
-          printf 'APP_PATH=%s\n' "$APP_PATH" >>"$GITHUB_OUTPUT"
+            "$APP_PATH/Contents/MacOS/"
+          install -m 644 LICENSE NOTICE "$APP_PATH/Contents/Resources/"
+          cp -R LICENSES "$APP_PATH/Contents/Resources/"
+          printf 'app_path=%s\n' "$APP_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Create unsigned pkg artifacts
-        id: pkg-artifacts
-        if: inputs.upload-artifacts
+      - name: Validate app bundle
+        if: inputs.release-build
+        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+        env:
+          APP_PATH: ${{ steps.app.outputs.app_path }}
+          DESCRIPTORS_PATH: ${{ steps.app.outputs.app_path }}/Contents/Resources/descriptors.pb
+          LICENSE_PATH: ${{ steps.app.outputs.app_path }}/Contents/Resources/LICENSE
+          LICENSES_PATH: ${{ steps.app.outputs.app_path }}/Contents/Resources/LICENSES
+          MODEL_TOOL_BINARY_PATH: ${{ steps.app.outputs.app_path }}/Contents/MacOS/unite-analysis-model-tool
+          NOTICE_PATH: ${{ steps.app.outputs.app_path }}/Contents/Resources/NOTICE
+          RUNTIME_BINARY_PATH: ${{ steps.app.outputs.app_path }}/Contents/MacOS/unite-analysis-swift
+        run: |
+          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH, $env:LICENSE_PATH, $env:NOTICE_PATH, (Join-Path $env:APP_PATH 'Contents/Info.plist'))) {
+              if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
+                  throw "Build product $productPath is missing."
+              }
+          }
+          if (-not (Test-Path -LiteralPath $env:LICENSES_PATH -PathType Container)) {
+              throw "Build product $env:LICENSES_PATH is missing."
+          }
+
+          if ($env:GITHUB_REF_TYPE -ne 'tag') {
+              throw 'A release build must run for a tag.'
+          }
+          $expectedVersion = $env:GITHUB_REF_NAME.Substring(1)
+          $versions = @(
+              (& $env:RUNTIME_BINARY_PATH --version).Trim()
+              (& $env:MODEL_TOOL_BINARY_PATH --version).Trim()
+              (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:APP_PATH 'Contents/Info.plist')).Trim()
+          )
+          foreach ($version in $versions) {
+              if ($version -ne $expectedVersion) {
+                  throw "Build product version $version does not match tag version $expectedVersion."
+              }
+          }
+
+      - name: Set up Apple code signing
+        if: inputs.release-build
+        uses: kaito-tokyo/setup-apple-codesigning@b9f7d7c6819fe6f6bb44694b75963918dcbddd27 # v1.0.0
+        with:
+          MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
+          MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+
+      - name: Sign app bundle
+        if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          JOB_TEMP: ${{ steps.job-temp.outputs.JOB_TEMP }}
-          UNSIGNED_ARM64_ARTIFACT_PATH: ${{ steps.job-temp.outputs.JOB_TEMP }}/${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}
+          APP_PATH: ${{ steps.app.outputs.app_path }}
+          MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
         run: |
-          COPYFILE_DISABLE=1 tar -czf "$UNSIGNED_ARM64_ARTIFACT_PATH" \
-            -C "$JOB_TEMP" \
-            "$APP_NAME" \
-            -C "$GITHUB_WORKSPACE" \
-            LICENSE \
-            pkg/Components.plist \
-            pkg/Distribution.xml
-          printf 'UNSIGNED_ARM64_ARTIFACT_PATH=%s\n' "$UNSIGNED_ARM64_ARTIFACT_PATH" >>"$GITHUB_OUTPUT"
+          if [[ -z "$MACOS_SIGNING_APPLICATION_IDENTITY" ]]; then
+            echo 'MACOS_SIGNING_APPLICATION_IDENTITY is not configured.' >&2
+            exit 1
+          fi
+          for binary_path in \
+            "$APP_PATH/Contents/MacOS/unite-analysis-swift" \
+            "$APP_PATH/Contents/MacOS/unite-analysis-model-tool"; do
+            codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$binary_path"
+            codesign --verify --strict --verbose=2 "$binary_path"
+          done
+          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$APP_PATH"
+          codesign --verify --strict --verbose=2 "$APP_PATH"
 
-      - name: Attest unsigned pkg artifacts
-        if: inputs.upload-artifacts
+      - name: Package signed installer
+        id: release-package
+        if: inputs.release-build
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          APP_PATH: ${{ steps.app.outputs.app_path }}
+          MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
+        run: |
+          if [[ -z "$MACOS_SIGNING_INSTALLER_IDENTITY" ]]; then
+            echo 'MACOS_SIGNING_INSTALLER_IDENTITY is not configured.' >&2
+            exit 1
+          fi
+          component_root="$RUNNER_TEMP/installer-root"
+          component_package="$RUNNER_TEMP/unite-analysis-swift-component.pkg"
+          resources_directory="$RUNNER_TEMP/installer-resources"
+          artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$(uname -m).pkg"
+          installer_package="$RUNNER_TEMP/$artifact_name"
+          install -d "$component_root" "$resources_directory"
+          cp -R "$APP_PATH" "$component_root/"
+          install -m 644 LICENSE "$resources_directory/"
+          COPYFILE_DISABLE=1 pkgbuild \
+            --root "$component_root" \
+            --component-plist pkg/Components.plist \
+            --identifier tokyo.kaito.unite-analysis-swift \
+            --version "${GITHUB_REF_NAME#v}" \
+            --install-location /Applications \
+            "$component_package"
+          productbuild \
+            --distribution pkg/Distribution.xml \
+            --package-path "$RUNNER_TEMP" \
+            --resources "$resources_directory" \
+            --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
+            "$installer_package"
+          pkgutil --check-signature "$installer_package"
+          printf 'artifact_name=%s\n' "$artifact_name" >> "$GITHUB_OUTPUT"
+          printf 'artifact_path=%s\n' "$installer_package" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize and staple installer
+        if: inputs.release-build
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          APP_STORE_CONNECT_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER }}
+          APP_STORE_CONNECT_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          INSTALLER_PACKAGE_PATH: ${{ steps.release-package.outputs.artifact_path }}
+        run: |
+          key_path="$(mktemp)"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s' "$APP_STORE_CONNECT_KEY_BASE64" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
+          xcrun notarytool submit "$INSTALLER_PACKAGE_PATH" \
+            --key "$key_path" \
+            --key-id "$APP_STORE_CONNECT_KEY_ID" \
+            --issuer "$APP_STORE_CONNECT_ISSUER" \
+            --wait
+          xcrun stapler staple "$INSTALLER_PACKAGE_PATH"
+          xcrun stapler validate "$INSTALLER_PACKAGE_PATH"
+          pkgutil --check-signature "$INSTALLER_PACKAGE_PATH"
+          spctl --assess --type install --verbose=2 "$INSTALLER_PACKAGE_PATH"
+
+      - name: Attest notarized installer package
+        if: inputs.release-build
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: |
-            ${{ steps.pkg-artifacts.outputs.UNSIGNED_ARM64_ARTIFACT_PATH }}
+          subject-path: ${{ steps.release-package.outputs.artifact_path }}
 
-      - name: Upload unsigned ARM64 artifacts
-        if: inputs.upload-artifacts
+      - name: Upload installer package
+        if: inputs.release-build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: ${{ steps.pkg-artifacts.outputs.UNSIGNED_ARM64_ARTIFACT_PATH }}
+          path: ${{ steps.release-package.outputs.artifact_path }}
           archive: false
           if-no-files-found: error
           retention-days: 30

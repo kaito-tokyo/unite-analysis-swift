@@ -24,11 +24,5 @@ jobs:
 
   swift-ci:
     permissions:
-      artifact-metadata: write
-      attestations: write
       contents: read
-      id-token: write
     uses: ./.github/workflows/swift.yml
-    with:
-      app-name: Kaito-Tokyo Unite Analysis.app
-      upload-artifacts: true

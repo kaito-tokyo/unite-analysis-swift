@@ -16,23 +16,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: false
 
-env:
-  PKG_PREDICATE_TYPE: https://in-toto.io/attestation/link/v0.3
-  UNSIGNED_APP_NAME: Kaito-Tokyo Unite Analysis.app
-
 jobs:
   validate-release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
+    timeout-minutes: 10
     permissions:
-      actions: read
-      checks: read
       contents: read
-
-    outputs:
-      swift_run_id: ${{ steps.swift-run.outputs.run_id }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,7 +39,6 @@ jobs:
           if ($tagReference.object.type -ne 'tag') {
               throw "Release tag $env:GITHUB_REF_NAME must be an annotated tag."
           }
-
           $tag = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($tagReference.object.sha)" | ConvertFrom-Json
           if ($tag.tag -ne $env:GITHUB_REF_NAME) {
               throw "Annotated tag name $($tag.tag) does not match $env:GITHUB_REF_NAME."
@@ -61,7 +49,6 @@ jobs:
           if (-not $tag.verification.verified -or $tag.verification.reason -ne 'valid') {
               throw "Release tag $env:GITHUB_REF_NAME does not have a valid signature: $($tag.verification.reason)."
           }
-
           $payloadSeparator = $tag.verification.payload.IndexOf("`n`n")
           if ($payloadSeparator -lt 0) {
               throw "Release tag $env:GITHUB_REF_NAME has an invalid signed payload."
@@ -95,333 +82,35 @@ jobs:
         run: |
           git fetch --no-tags origin main
           $mergeBase = (git merge-base $env:GITHUB_SHA origin/main).Trim()
-
           if ($mergeBase -ne $env:GITHUB_SHA) {
               throw "Release commit $env:GITHUB_SHA is not contained in main."
           }
 
-      - name: Wait for successful main push
-        id: swift-run
-        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $runId = $null
-          foreach ($attempt in 1..60) {
-              $runId = gh run list --workflow push-main.yml --branch main --commit $env:GITHUB_SHA --event push --limit 1 --json databaseId --jq '.[0].databaseId'
-              if (-not [string]::IsNullOrWhiteSpace($runId)) {
-                  break
-              }
-              Start-Sleep -Seconds 5
-          }
-          if ([string]::IsNullOrWhiteSpace($runId)) {
-              throw "Main push run was not found for release commit $env:GITHUB_SHA."
-          }
-          gh run watch $runId --compact --exit-status
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "run_id=$runId" -Encoding utf8
-
-  sign-release:
+  check:
     needs: validate-release
-    runs-on: macos-26
-    environment: release-macos
-    timeout-minutes: 60
-    env:
-      APP_STORE_CONNECT_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER }}
-      APP_STORE_CONNECT_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
-      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-      MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
-      MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
-      MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
-      MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
-      UNSIGNED_ARM64_ARTIFACT_NAME: unite-analysis-swift-unsigned-macOS-arm64-${{ needs.validate-release.outputs.swift_run_id }}.tar.gz
-
     permissions:
-      actions: read
+      contents: read
+    uses: ./.github/workflows/check.yml
+
+  build:
+    needs: [validate-release, check]
+    uses: ./.github/workflows/swift.yml
+    permissions:
       artifact-metadata: write
       attestations: write
       contents: read
       id-token: write
-
-    outputs:
-      installer_package_name: ${{ steps.package.outputs.installer_package_name }}
-
-    steps:
-      - name: Download release build
-        id: download-release-build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}
-          path: ${{ runner.temp }}/release-build-download
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ needs.validate-release.outputs.swift_run_id }}
-
-      - name: Verify release build attestation
-        id: release-attestation
-        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
-        env:
-          DOWNLOAD_DIRECTORY: ${{ steps.download-release-build.outputs.download-path }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $signerWorkflow = "$env:GITHUB_REPOSITORY/.github/workflows/swift.yml"
-          $archivePath = Join-Path $env:DOWNLOAD_DIRECTORY $env:UNSIGNED_ARM64_ARTIFACT_NAME
-          if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-              throw 'Release products archive is missing.'
-          }
-          gh attestation verify $archivePath `
-              --repo $env:GITHUB_REPOSITORY `
-              --signer-workflow $signerWorkflow `
-              --source-ref refs/heads/main `
-              --source-digest $env:GITHUB_SHA `
-              --signer-digest $env:GITHUB_SHA `
-              --deny-self-hosted-runners
-          $archiveDigest = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "archive_sha256=$archiveDigest" -Encoding utf8
-
-      - name: Extract release build
-        id: release-build
-        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
-        env:
-          ARCHIVE_PATH: ${{ steps.download-release-build.outputs.download-path }}/${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}
-        run: |
-          $stagingDirectory = Join-Path $env:RUNNER_TEMP 'release-build'
-          New-Item -ItemType Directory -Path $stagingDirectory | Out-Null
-          tar -xzf $env:ARCHIVE_PATH -C $stagingDirectory
-
-          $appPath = Join-Path $stagingDirectory $env:UNSIGNED_APP_NAME
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "app_path=$appPath" -Encoding utf8
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "runtime_binary_path=$(Join-Path $appPath 'Contents/MacOS/unite-analysis-swift')" -Encoding utf8
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "model_tool_binary_path=$(Join-Path $appPath 'Contents/MacOS/unite-analysis-model-tool')" -Encoding utf8
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "staging_directory=$stagingDirectory" -Encoding utf8
-
-      - name: Validate release products
-        id: release-products
-        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
-        env:
-          RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
-          MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
-          APP_PATH: ${{ steps.release-build.outputs.app_path }}
-          DESCRIPTORS_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/descriptors.pb
-          LICENSE_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/LICENSE
-          LICENSES_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/LICENSES
-          NOTICE_PATH: ${{ steps.release-build.outputs.app_path }}/Contents/Resources/NOTICE
-          SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
-        run: |
-          foreach ($productPath in @($env:RUNTIME_BINARY_PATH, $env:MODEL_TOOL_BINARY_PATH, $env:DESCRIPTORS_PATH, $env:LICENSE_PATH, $env:NOTICE_PATH, (Join-Path $env:APP_PATH 'Contents/Info.plist'))) {
-              if (-not (Test-Path -LiteralPath $productPath -PathType Leaf)) {
-                  throw "Release product $productPath is missing."
-              }
-          }
-          if (-not (Test-Path -LiteralPath $env:LICENSES_PATH -PathType Container)) {
-              throw "Release product $env:LICENSES_PATH is missing."
-          }
-
-          chmod +x $env:RUNTIME_BINARY_PATH $env:MODEL_TOOL_BINARY_PATH
-          $expectedVersion = $env:GITHUB_REF_NAME.Substring(1)
-          $actualVersion = (& $env:RUNTIME_BINARY_PATH --version).Trim()
-          if ($actualVersion -ne $expectedVersion) {
-              throw "CLI version $actualVersion does not match tag version $expectedVersion."
-          }
-          $modelToolVersion = (& $env:MODEL_TOOL_BINARY_PATH --version).Trim()
-          if ($modelToolVersion -ne $expectedVersion) {
-              throw "Model tool version $modelToolVersion does not match tag version $expectedVersion."
-          }
-          $appVersion = (/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' (Join-Path $env:APP_PATH 'Contents/Info.plist')).Trim()
-          if ($appVersion -ne $expectedVersion) {
-              throw "App version $appVersion does not match tag version $expectedVersion."
-          }
-
-          $descriptorsDigest = (Get-FileHash -LiteralPath $env:DESCRIPTORS_PATH -Algorithm SHA256).Hash.ToLowerInvariant()
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "descriptors_sha256=$descriptorsDigest" -Encoding utf8
-
-      - name: Set up Apple code signing
-        uses: kaito-tokyo/setup-apple-codesigning@b9f7d7c6819fe6f6bb44694b75963918dcbddd27 # v1.0.0
-        with:
-          MACOS_SIGNING_CERT: ${{ env.MACOS_SIGNING_CERT }}
-          MACOS_SIGNING_CERT_PASSWORD: ${{ env.MACOS_SIGNING_CERT_PASSWORD }}
-
-      - name: Sign release executables
-        id: sign
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          RUNTIME_BINARY_PATH: ${{ steps.release-build.outputs.runtime_binary_path }}
-          MODEL_TOOL_BINARY_PATH: ${{ steps.release-build.outputs.model_tool_binary_path }}
-        run: |
-          if [[ -z "$MACOS_SIGNING_APPLICATION_IDENTITY" ]]; then
-            echo 'MACOS_SIGNING_APPLICATION_IDENTITY is not configured.' >&2
-            exit 1
-          fi
-
-          available_identities="$(security find-identity -v -p codesigning)"
-          if [[ "$available_identities" != *"\"$MACOS_SIGNING_APPLICATION_IDENTITY\""* ]]; then
-            echo "Signing identity $MACOS_SIGNING_APPLICATION_IDENTITY was not found." >&2
-            exit 1
-          fi
-
-          for binary_path in "$RUNTIME_BINARY_PATH" "$MODEL_TOOL_BINARY_PATH"; do
-            codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$binary_path"
-            codesign --verify --strict --verbose=2 "$binary_path"
-          done
-          {
-            printf 'runtime_signed_sha256=%s\n' "$(shasum -a 256 "$RUNTIME_BINARY_PATH" | awk '{print $1}')"
-            printf 'model_tool_signed_sha256=%s\n' "$(shasum -a 256 "$MODEL_TOOL_BINARY_PATH" | awk '{print $1}')"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Sign app bundle
-        id: app
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          APP_PATH: ${{ steps.release-build.outputs.app_path }}
-        run: |
-          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$APP_PATH"
-          codesign --verify --strict --verbose=2 "$APP_PATH"
-          printf 'app_path=%s\n' "$APP_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Package and sign installer
-        id: package
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          APP_PATH: ${{ steps.app.outputs.app_path }}
-          SOURCE_DIRECTORY: ${{ steps.release-build.outputs.staging_directory }}
-        run: |
-          if [[ -z "$MACOS_SIGNING_INSTALLER_IDENTITY" ]]; then
-            echo 'MACOS_SIGNING_INSTALLER_IDENTITY is not configured.' >&2
-            exit 1
-          fi
-
-          architecture="$(uname -m)"
-          artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$architecture"
-          component_root="$RUNNER_TEMP/installer-root"
-          component_package="$RUNNER_TEMP/unite-analysis-swift-component.pkg"
-          installer_package="$RUNNER_TEMP/$artifact_name.pkg"
-
-          install -d "$component_root"
-          cp -R "$APP_PATH" "$component_root/"
-          COPYFILE_DISABLE=1 pkgbuild \
-            --root "$component_root" \
-            --component-plist "$SOURCE_DIRECTORY/pkg/Components.plist" \
-            --identifier tokyo.kaito.unite-analysis-swift \
-            --version "${GITHUB_REF_NAME#v}" \
-            --install-location /Applications \
-            "$component_package"
-          productbuild \
-            --distribution "$SOURCE_DIRECTORY/pkg/Distribution.xml" \
-            --package-path "$RUNNER_TEMP" \
-            --resources "$SOURCE_DIRECTORY" \
-            --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
-            "$installer_package"
-          pkgutil --check-signature "$installer_package"
-          printf 'installer_package_name=%s.pkg\n' "$artifact_name" >> "$GITHUB_OUTPUT"
-          printf 'installer_package_path=%s\n' "$installer_package" >> "$GITHUB_OUTPUT"
-
-      - name: Notarize and staple installer
-        shell: bash --noprofile --norc -euo pipefail {0}
-        env:
-          INSTALLER_PACKAGE_PATH: ${{ steps.package.outputs.installer_package_path }}
-        run: |
-          key_path="$(mktemp)"
-          trap 'rm -f "$key_path"' EXIT
-          printf '%s' "$APP_STORE_CONNECT_KEY_BASE64" | base64 -D > "$key_path"
-          chmod 600 "$key_path"
-
-          xcrun notarytool submit "$INSTALLER_PACKAGE_PATH" \
-            --key "$key_path" \
-            --key-id "$APP_STORE_CONNECT_KEY_ID" \
-            --issuer "$APP_STORE_CONNECT_ISSUER" \
-            --wait
-          xcrun stapler staple "$INSTALLER_PACKAGE_PATH"
-          xcrun stapler validate "$INSTALLER_PACKAGE_PATH"
-          pkgutil --check-signature "$INSTALLER_PACKAGE_PATH"
-          spctl --assess --type install --verbose=2 "$INSTALLER_PACKAGE_PATH"
-
-      - name: Attest installer package
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: ${{ steps.package.outputs.installer_package_path }}
-          predicate-type: ${{ env.PKG_PREDICATE_TYPE }}
-          predicate: |
-            {
-              "name": "apple-notarized-installer-package",
-              "command": [],
-              "materials": [
-                {
-                  "name": "${{ env.UNSIGNED_ARM64_ARTIFACT_NAME }}",
-                  "digest": {
-                    "sha256": "${{ steps.release-attestation.outputs.archive_sha256 }}"
-                  }
-                },
-                {
-                  "name": "${{ github.repository }}",
-                  "uri": "git+${{ github.server_url }}/${{ github.repository }}@${{ github.sha }}",
-                  "digest": {
-                    "gitCommit": "${{ github.sha }}"
-                  }
-                }
-              ],
-              "byproducts": {
-                "signed_executables": [
-                  {
-                    "name": "unite-analysis-swift",
-                    "digest": {
-                      "sha256": "${{ steps.sign.outputs.runtime_signed_sha256 }}"
-                    }
-                  },
-                  {
-                    "name": "unite-analysis-model-tool",
-                    "digest": {
-                      "sha256": "${{ steps.sign.outputs.model_tool_signed_sha256 }}"
-                    }
-                  }
-                ],
-                "descriptor_database": {
-                    "name": "descriptors.pb",
-                    "digest": {
-                      "sha256": "${{ steps.release-products.outputs.descriptors_sha256 }}"
-                    }
-                },
-                "operations": [
-                  {
-                    "name": "apple-codesign",
-                    "tool": "codesign"
-                  },
-                  {
-                    "name": "build-installer-package",
-                    "tool": "pkgbuild-and-productbuild"
-                  },
-                  {
-                    "name": "apple-notarization",
-                    "tool": "notarytool"
-                  },
-                  {
-                    "name": "staple-notarization-ticket",
-                    "tool": "stapler"
-                  }
-                ]
-              },
-              "environment": {
-                "application_signing_identity": ${{ toJSON(vars.MACOS_SIGNING_APPLICATION_IDENTITY) }},
-                "installer_signing_identity": ${{ toJSON(vars.MACOS_SIGNING_INSTALLER_IDENTITY) }}
-              }
-            }
-
-      - name: Upload signed installer package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          path: ${{ steps.package.outputs.installer_package_path }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 30
+    with:
+      release-build: true
 
   draft-release:
-    needs: sign-release
+    needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-
     permissions:
       actions: read
       attestations: read
       contents: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -429,32 +118,31 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      - name: Download signed installer package
+      - name: Download installer package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.sign-release.outputs.installer_package_name }}
-          path: ${{ runner.temp }}/signed-release
+          name: ${{ needs.build.outputs.artifact }}
+          path: ${{ runner.temp }}/release-assets
 
       - name: Verify installer package attestation
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
-          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.installer_package_name }}
+          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/release-assets/${{ needs.build.outputs.artifact }}
         run: |
           gh attestation verify "$INSTALLER_PACKAGE_PATH" \
             --repo "$GITHUB_REPOSITORY" \
-            --predicate-type "$PKG_PREDICATE_TYPE" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/swift.yml" \
             --source-ref "$GITHUB_REF" \
             --source-digest "$GITHUB_SHA" \
             --signer-digest "$GITHUB_SHA" \
             --deny-self-hosted-runners
 
       - name: Create or update draft GitHub release
+        shell: bash --noprofile --norc -euo pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
-          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/signed-release/${{ needs.sign-release.outputs.installer_package_name }}
-        shell: bash --noprofile --norc -euo pipefail {0}
+          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/release-assets/${{ needs.build.outputs.artifact }}
         run: |
           git fetch --force --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-verification/tag"
           tag_sha="$(git rev-parse 'refs/release-verification/tag^{commit}')"
@@ -462,13 +150,16 @@ jobs:
             echo "Release tag $GITHUB_REF_NAME no longer points to $GITHUB_SHA." >&2
             exit 1
           fi
-
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" --clobber
-          else
+          is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [[ -z "$is_draft" ]]; then
             gh release create "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" \
               --draft \
               --generate-notes \
               --title "$GITHUB_REF_NAME" \
               --verify-tag
+          elif [[ "$is_draft" == 'true' ]]; then
+            gh release upload "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" --clobber
+          else
+            echo "Release $GITHUB_REF_NAME is already published." >&2
+            exit 1
           fi

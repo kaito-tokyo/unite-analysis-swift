@@ -59,9 +59,8 @@ When creating a commit, follow these rules:
 
 ## Skill review
 
-- Use the `Skill Audit` instructions in `.github/workflows/audit-skills.md` as the review criteria when reviewing changes under `.apm/skills/`.
-- Treat a Skill audit as the final Skill-review gate for the reviewed revision, not as GitHub pull request approval. Perform it only after implementation, validation, ordinary review, and requested corrections are complete.
-- In a local review, do not follow the workflow frontmatter or call its safe-output tools. Return an equivalent audit result in the current session unless the user explicitly requests a GitHub Check Run or pull request comment.
+- Skill Audit is temporarily disabled because its workflow is broken. Do not run or require a local or GitHub Skill Audit until a human explicitly re-enables it.
+- Continue ordinary implementation, validation, and review for changes under `.apm/skills/`. The criteria in `.github/workflows/audit-skills.md` may be consulted as non-gating review guidance, but do not follow its workflow frontmatter or call its safe-output tools.
 
 ## GitHub Agentic Workflows
 
