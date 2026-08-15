@@ -451,16 +451,6 @@ extension String {
   }
 }
 
-func recordingBundle(above recordSpecURL: URL) throws -> URL {
-  var candidate = recordSpecURL.deletingLastPathComponent()
-  while candidate.path != "/" {
-    if candidate.pathExtension == "ldtxrecord" { return candidate }
-    candidate.deleteLastPathComponent()
-  }
-  throw UniteAnalysisSwiftToolError.message(
-    "record-spec.json must be inside a .ldtxrecord bundle: \(recordSpecURL.path)")
-}
-
 func canonicalSeconds(_ value: Double) -> String {
   String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), value)
 }
@@ -479,7 +469,7 @@ struct RecordingMediaContext {
     guard spec.startPTS.timescale > 0 else {
       throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
     }
-    let bundleURL = try recordingBundle(above: recordSpecURL)
+    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
     let isFinalized = FileManager.default.fileExists(
       atPath: bundleURL.appendingPathComponent(".finalized").path)
     if !isFinalized {
@@ -598,7 +588,7 @@ func renderSampleFrames(
     throw UniteAnalysisSwiftToolError.message(
       "record-spec.json must have a positive startPTS timescale and duration")
   }
-  let bundleURL = try recordingBundle(above: recordSpecURL)
+  let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
   if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
     RecordVisionInputLogger.unfinishedRecording(bundleURL)
   }
@@ -676,7 +666,7 @@ func renderPreciseFrame(
   let requestedTime = CMTimeAdd(
     CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale),
     CMTime(seconds: offset, preferredTimescale: spec.startPTS.timescale))
-  let bundleURL = try recordingBundle(above: recordSpecURL)
+  let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
   if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
     RecordVisionInputLogger.unfinishedRecording(bundleURL)
   }

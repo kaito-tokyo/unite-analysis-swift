@@ -5,6 +5,7 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import LDTXRecordingSupport
 
 public enum AudioPeakDetectorError: Error, CustomStringConvertible {
   case message(String)
@@ -113,30 +114,7 @@ public enum AudioPeakDetector {
   package static let peakDilation = 0.5
 
   public static func audioURL(in bundleURL: URL) throws -> URL {
-    let infoURL = bundleURL.appendingPathComponent("Info.plist")
-    guard let data = try? Data(contentsOf: infoURL),
-      let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
-      let dictionary = plist as? [String: Any]
-    else {
-      throw AudioPeakDetectorError.message(
-        "Could not read LDTX recording metadata: \(infoURL.path)")
-    }
-
-    let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
-    guard formatVersion == 2 else {
-      throw AudioPeakDetectorError.message(
-        "audio-peaks-v1 requires LDTX recording format version 2: \(infoURL.path)")
-    }
-
-    // Recording format v2 defines the main media name independently of whether the redundant
-    // LDTXRecordingMainMediaFile metadata is present.
-    let relativePath = "main.fragmented.mp4"
-    let audioURL = bundleURL.appendingPathComponent(relativePath).standardizedFileURL
-    guard FileManager.default.fileExists(atPath: audioURL.path) else {
-      throw AudioPeakDetectorError.message(
-        "Recording format v2 main media file was not found: \(audioURL.path)")
-    }
-    return audioURL
+    try LDTXRecordingBundle.formatV2MainMediaURL(in: bundleURL)
   }
 
   public static func detect(

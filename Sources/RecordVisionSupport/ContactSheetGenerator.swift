@@ -243,7 +243,7 @@ public enum DrawTextScriptEngine {
     let record = try JSONDecoder().decode(
       RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
-    let bundleURL = try recordingBundle(above: recordSpecURL)
+    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
     if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
     {
       RecordVisionInputLogger.unfinishedRecording(bundleURL)
@@ -328,15 +328,6 @@ public enum DrawTextScriptEngine {
     return resultString ?? ""
   }
 
-  private static func recordingBundle(above recordSpecURL: URL) throws -> URL {
-    var candidate = recordSpecURL.deletingLastPathComponent()
-    while candidate.path != "/" {
-      if candidate.pathExtension == "ldtxrecord" { return candidate }
-      candidate.deleteLastPathComponent()
-    }
-    throw ContactSheetGeneratorError.message(
-      "record-spec.json must be inside a .ldtxrecord bundle: \(recordSpecURL.path)")
-  }
 }
 
 public enum ContactSheetGenerator {
@@ -360,7 +351,7 @@ public enum ContactSheetGenerator {
       throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
     }
     try validate(duration: recordSpec.duration)
-    let bundleURL = try recordingBundle(above: recordSpecURL)
+    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
     let isFinalized = FileManager.default.fileExists(
       atPath: bundleURL.appendingPathComponent(".finalized").path)
     if !isFinalized {
@@ -712,13 +703,4 @@ public enum ContactSheetGenerator {
     )
   }
 
-  private static func recordingBundle(above recordSpecURL: URL) throws -> URL {
-    var candidate = recordSpecURL.deletingLastPathComponent()
-    while candidate.path != "/" {
-      if candidate.pathExtension == "ldtxrecord" { return candidate }
-      candidate.deleteLastPathComponent()
-    }
-    throw ContactSheetGeneratorError.message(
-      "record-spec.json must be inside a .ldtxrecord bundle: \(recordSpecURL.path)")
-  }
 }

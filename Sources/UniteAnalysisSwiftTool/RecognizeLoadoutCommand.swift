@@ -108,7 +108,7 @@ private func loadoutInputs(
     guard let gameScreen = spec.videoComponents.first(where: { $0.name == "game-screen" }) else {
       throw ValidationError("record-spec.json has no game-screen video component")
     }
-    let bundle = try recordingBundle(above: recordSpecURL)
+    let bundle = try LDTXRecordingBundle.containing(recordSpecURL)
     if !FileManager.default.fileExists(atPath: bundle.appendingPathComponent(".finalized").path) {
       RecordVisionInputLogger.unfinishedRecording(bundle)
     }

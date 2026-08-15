@@ -5,6 +5,7 @@
 import AVFoundation
 import ArgumentParser
 import Foundation
+import LDTXRecordingSupport
 import RecordVisionSupport
 
 struct DetectMatches: ParsableCommand {
@@ -93,7 +94,7 @@ struct DetectMatches: ParsableCommand {
     else {
       throw UniteAnalysisSwiftToolError.message("Recording is not finalized: \(recordingURL.path)")
     }
-    let mediaURL = try detectMatchesVideoURL(in: recordingURL)
+    let mediaURL = try LDTXRecordingBundle.formatV2MainMediaURL(in: recordingURL)
     let mainMediaFile = mediaURL.lastPathComponent
     let asset = AVURLAsset(url: mediaURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
@@ -217,18 +218,4 @@ package func installManagedAuditDirectory(_ staged: URL, at output: URL, force: 
   } else {
     try FileManager.default.moveItem(at: staged, to: output)
   }
-}
-
-package func detectMatchesVideoURL(in recordingURL: URL) throws -> URL {
-  let plistURL = recordingURL.appendingPathComponent("Info.plist")
-  guard
-    let plist = try PropertyListSerialization.propertyList(
-      from: Data(contentsOf: plistURL), options: 0, format: nil) as? [String: Any],
-    plist["LDTXRecordingFormatVersion"] as? Int == 2
-  else { throw UniteAnalysisSwiftToolError.message("Invalid recording format v2 Info.plist") }
-  let mediaURL = recordingURL.appendingPathComponent("main.fragmented.mp4").standardizedFileURL
-  guard FileManager.default.fileExists(atPath: mediaURL.path) else {
-    throw UniteAnalysisSwiftToolError.message("Main media file not found: \(mediaURL.path)")
-  }
-  return mediaURL
 }

@@ -99,11 +99,11 @@ func extractClip(
       "Output collision: \(outputURL.path). Pass --force to replace.")
   }
 
-  let bundleURL = try recordingBundle(above: recordSpecURL)
+  let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
   if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
     RecordVisionInputLogger.unfinishedRecording(bundleURL)
   }
-  let videoURL = try extractClipVideoURL(in: bundleURL)
+  let videoURL = try LDTXRecordingBundle.formatV2MainMediaURL(in: bundleURL)
   RecordVisionInputLogger.sourceVideo(videoURL)
   let asset = AVURLAsset(url: videoURL)
   let assetDuration = try await asset.load(.duration)
@@ -210,26 +210,4 @@ package func validateNetworkOptimizedMP4(at url: URL) throws {
     throw UniteAnalysisSwiftToolError.message(
       "Exported MP4 is not network optimized: top-level moov follows mdat")
   }
-}
-
-package func extractClipVideoURL(in bundleURL: URL) throws -> URL {
-  let infoURL = bundleURL.appendingPathComponent("Info.plist")
-  guard let data = try? Data(contentsOf: infoURL),
-    let plist = try? PropertyListSerialization.propertyList(from: data, options: 0, format: nil),
-    let dictionary = plist as? [String: Any]
-  else {
-    throw UniteAnalysisSwiftToolError.message(
-      "Could not read LDTX recording metadata: \(infoURL.path)")
-  }
-  let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
-  guard formatVersion == 2 else {
-    throw UniteAnalysisSwiftToolError.message(
-      "extract-clip requires LDTX recording format version 2: \(infoURL.path)")
-  }
-  let videoURL = bundleURL.appendingPathComponent("main.fragmented.mp4").standardizedFileURL
-  guard FileManager.default.fileExists(atPath: videoURL.path) else {
-    throw UniteAnalysisSwiftToolError.message(
-      "Recording format v2 main media file was not found: \(videoURL.path)")
-  }
-  return videoURL
 }
