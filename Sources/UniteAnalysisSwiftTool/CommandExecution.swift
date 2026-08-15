@@ -85,6 +85,14 @@ package func executeCLI(
   case let command as DetectMatches:
     guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
+    try validateOutputPath(command.auditContactSheet.map(resolvePath), force: command.force)
+    if let output = command.output.map(resolvePath),
+      let audit = command.auditContactSheet.map(resolvePath),
+      output.standardizedFileURL == audit.standardizedFileURL
+    {
+      throw UniteAnalysisSwiftToolError.message(
+        "--output and --audit-contact-sheet must use different paths")
+    }
     for try await record in command.outputRecords() {
       let data = try prettyPrintedJSONData(record)
       if let output = command.output {

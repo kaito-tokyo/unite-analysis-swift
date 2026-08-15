@@ -184,6 +184,43 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(result.diagnostics.dropFirst().allSatisfy { $0.reason == "invalidMMSS" })
 }
 
+@Test func timerAuditDefinitionOrdersEveryDiagnosticDeterministically() {
+  let detection = MatchTimerDetection(records: [
+    timer(105_000, "invalid"), timer(100_000, "10:00"), timer(110_000, "09:50"),
+  ])
+  let definition = MatchTimerAuditContactSheetDefinition(diagnostics: detection.diagnostics)
+  #expect(definition.cells.map(\.recordingTimelineMilliseconds) == [100_000, 105_000, 110_000])
+  #expect(definition.cells.map(\.output) == ["10:00", "invalid", "09:50"])
+  #expect(definition.cells.map(\.disposition) == ["accepted", "excluded", "accepted"])
+  #expect(definition.cells[1].reason == "invalidMMSS")
+}
+
+@Test func timerAuditRendersZeroObservationArtifactAndProtectsExistingOutput() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let output = directory.appendingPathComponent("timer-audit.jpg")
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL,
+    layoutId: "test",
+    referenceSize: .init(width: 1920, height: 1080),
+    regions: .init(matchTimer: .init(x: 900, y: 20, width: 120, height: 60)))
+  let result = try await MatchTimerAuditContactSheet.render(
+    videoURL: directory.appendingPathComponent("unused.mp4"),
+    gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+    diagnostics: [], outputURL: output, force: false)
+  #expect(result.output == output.path)
+  #expect(result.observationCount == 0)
+  #expect(result.columns == 1)
+  #expect(result.rows == 1)
+  #expect(FileManager.default.fileExists(atPath: output.path))
+  await #expect(throws: MatchTimerAuditContactSheet.Error.self) {
+    try await MatchTimerAuditContactSheet.render(
+      videoURL: directory.appendingPathComponent("unused.mp4"),
+      gameScreen: .init(x: 0, y: 0, width: 1920, height: 1080), layout: layout,
+      diagnostics: [], outputURL: output, force: false)
+  }
+}
+
 @Test func gameScreenRectangleDefaultsAndPartialFields() throws {
   #expect(
     try GameScreenRectangle.resolve(customFields: [:], videoWidth: 1632, videoHeight: 918)

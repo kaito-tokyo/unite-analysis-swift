@@ -237,12 +237,13 @@ private func registeredCommands(
 @Test func detectMatchesParsesPersistentOutputOptions() throws {
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
     "detect-matches-v1", "--input", "recording.ldtxrecord", "--layout", "layout.json",
-    "--output", "matches.json", "--force",
+    "--output", "matches.json", "--audit-contact-sheet", "timer-audit.jpg", "--force",
   ])
   let command = try #require(parsed as? DetectMatches)
   #expect(command.input == "recording.ldtxrecord")
   #expect(command.layout == "layout.json")
   #expect(command.output == "matches.json")
+  #expect(command.auditContactSheet == "timer-audit.jpg")
   #expect(command.force)
 }
 

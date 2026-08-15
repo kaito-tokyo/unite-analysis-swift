@@ -393,6 +393,31 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   #expect(writer.status == .completed)
 }
 
+@Test func timerAuditRendersSourceVideoObservation() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let videoURL = directory.appendingPathComponent("main.fragmented.mp4")
+  let outputURL = directory.appendingPathComponent("timer-audit.jpg")
+  try await writeSilentVideoWithoutAudio(to: videoURL)
+  let detection = MatchTimerDetection(records: [
+    .init(recordingTimelineMilliseconds: 0, output: "")
+  ])
+  let layout = MatchTimerLayout(
+    schema: MatchTimerLayout.schemaURL, layoutId: "test",
+    referenceSize: .init(width: 16, height: 16),
+    regions: .init(matchTimer: .init(x: 0, y: 0, width: 16, height: 16)))
+
+  let result = try await MatchTimerAuditContactSheet.render(
+    videoURL: videoURL, gameScreen: .init(x: 0, y: 0, width: 16, height: 16),
+    layout: layout, diagnostics: detection.diagnostics, outputURL: outputURL, force: false)
+
+  #expect(result.observationCount == 1)
+  #expect(result.columns == 1)
+  #expect(result.rows == 1)
+  #expect((try Data(contentsOf: outputURL)).count > 0)
+}
+
 @Test func audioPeakInputUsesFixedV2MainMediaWithoutMainMixMetadata() throws {
   let bundle = try audioPeakTestBundle(
     info: [

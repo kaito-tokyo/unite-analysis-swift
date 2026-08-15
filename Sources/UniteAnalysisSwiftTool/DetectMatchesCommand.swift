@@ -20,11 +20,13 @@ struct DetectMatches: ParsableCommand {
 
       DETECTION. Strict MM:SS observations produce standard-match start candidates. A lone 10:00 is insufficient. Consistent candidates are clustered despite missing samples; discontinuous OCR values are retained as excluded diagnostics. A later independently corroborated reset creates another match.
 
-      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. Existing output requires --force. Matches end at start + 600 seconds. Surrendered matches and nonstandard modes are not inferred. The result is a candidate contract and is not written into LDTX-managed directories. If persisted inside a recording, use _PokemonUniteAnalysis.
+      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. --audit-contact-sheet optionally writes a deterministic source-video JPEG containing every timer ROI, requested and actual recording timestamps, selected OCR string, confidence, accepted/excluded disposition, and diagnostic reason. Existing outputs require --force. Matches end at start + 600 seconds. Surrendered matches and nonstandard modes are not inferred. Outputs are never written into LDTX-managed directories. If persisted inside a recording, use _PokemonUniteAnalysis.
 
       SCHEMAS. Print the contracts with `unite-analysis-swift schema match-layout-v1.schema.json` and `unite-analysis-swift schema match-detection-v1.output.schema.json`.
 
-      LIMITS. Timer contact-sheet rendering is not yet implemented. Diagnostics retain every sampled OCR string and confidence for deterministic machine audit. Surrendered matches and nonstandard modes are not inferred.
+      AUDIT BOUNDARY. The optional contact sheet is generated from decoded source-video frames for human review only. It is never read by match detection and does not add JPEG round-trips to the detection path. Zero observations produce a labeled empty audit artifact.
+
+      LIMITS. Surrendered matches and nonstandard modes are not inferred.
       """.reflowedHelp()
   )
 
@@ -40,6 +42,9 @@ struct DetectMatches: ParsableCommand {
   @Option(help: "Optional JSON output path; stdout always receives the same result.")
   var output: String?
 
+  @Option(help: "Optional JPEG path for the human-only timer audit contact sheet.")
+  var auditContactSheet: String?
+
   @Flag(help: "Allow --output to replace an existing file atomically.")
   var force = false
 
@@ -52,10 +57,11 @@ struct DetectMatches: ParsableCommand {
     let gameScreen: GameScreenRectangle
     let matches: [DetectedMatch]
     let diagnostics: [MatchTimerDiagnostic]
+    let auditContactSheet: MatchTimerAuditContactSheetResult?
 
     private enum CodingKeys: String, CodingKey {
       case schema = "$schema"
-      case source, mainMediaFile, layoutId, gameScreen, matches, diagnostics
+      case source, mainMediaFile, layoutId, gameScreen, matches, diagnostics, auditContactSheet
     }
   }
 
@@ -64,6 +70,15 @@ struct DetectMatches: ParsableCommand {
   }
 
   private func result() async throws -> Output {
+    try validateOutputPath(output.map(resolvePath), force: force)
+    try validateOutputPath(auditContactSheet.map(resolvePath), force: force)
+    if let output = output.map(resolvePath),
+      let audit = auditContactSheet.map(resolvePath),
+      output.standardizedFileURL == audit.standardizedFileURL
+    {
+      throw UniteAnalysisSwiftToolError.message(
+        "--output and --audit-contact-sheet must use different paths")
+    }
     let recordingURL = resolvePath(input).standardizedFileURL
     guard recordingURL.pathExtension == "ldtxrecord" else {
       throw UniteAnalysisSwiftToolError.message("--input must be a .ldtxrecord directory")
@@ -123,10 +138,24 @@ struct DetectMatches: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
     let detection = MatchTimerDetection(records: records, recordingDuration: videoDuration)
+    let auditResult: MatchTimerAuditContactSheetResult?
+    if let auditContactSheet {
+      do {
+        auditResult = try await MatchTimerAuditContactSheet.render(
+          videoURL: mediaURL, gameScreen: gameScreen, layout: matchLayout,
+          diagnostics: detection.diagnostics, outputURL: resolvePath(auditContactSheet),
+          force: force)
+      } catch {
+        throw UniteAnalysisSwiftToolError.message(String(describing: error))
+      }
+    } else {
+      auditResult = nil
+    }
     return .init(
       source: "videoOCR", mainMediaFile: mainMediaFile, layoutId: matchLayout.layoutId,
       gameScreen: gameScreen,
-      matches: detection.matches, diagnostics: detection.diagnostics)
+      matches: detection.matches, diagnostics: detection.diagnostics,
+      auditContactSheet: auditResult)
   }
 }
 
