@@ -57,6 +57,9 @@ public enum MatchTimerAuditContactSheet {
     force: Bool
   ) async throws -> MatchTimerAuditContactSheetResult {
     try layout.validate()
+    guard gameScreen.width > 0, gameScreen.height > 0 else {
+      throw Error.message("Game-screen dimensions must be positive")
+    }
     guard quality.isFinite, (0...1).contains(quality) else {
       throw Error.message("Timer audit JPEG quality must be between 0 and 1")
     }
@@ -77,6 +80,9 @@ public enum MatchTimerAuditContactSheet {
       throw Error.message("Output already exists: \(collision.path). Pass --force to overwrite.")
     }
     let timer = MatchTimerVideoOCR.timerRectangle(gameScreen: gameScreen, layout: layout)
+    guard timer.width.isFinite, timer.height.isFinite, timer.width > 0, timer.height > 0 else {
+      throw Error.message("Resolved timer rectangle must be finite and positive")
+    }
     let imageHeight = max(60, Int((Double(cellWidth) * timer.height / timer.width).rounded()))
     let cellHeight = imageHeight + labelHeight
     let extractor =
@@ -117,12 +123,18 @@ public enum MatchTimerAuditContactSheet {
         size: 18, color: CGColor(gray: 1, alpha: 1), context: context)
     } else {
       guard let extractor else { throw Error.message("Missing timer audit video extractor") }
-      let times = cells.map {
-        CMTime(value: max(0, $0.recordingTimelineMilliseconds - 1), timescale: 1_000)
-      }
+      let milliseconds = Array(Set(cells.map(\.recordingTimelineMilliseconds))).sorted()
+      let times = milliseconds.map { CMTime(value: max(0, $0 - 1), timescale: 1_000) }
+      var frames: [Int64: (CGImage, CMTime)] = [:]
       try extractor.extractFrames(at: times) { index, frame, actualTime in
         try Task.checkCancellation()
-        let cell = cells[index]
+        frames[milliseconds[index]] = (frame, actualTime)
+      }
+      for (index, cell) in cells.enumerated() {
+        try Task.checkCancellation()
+        guard let (frame, actualTime) = frames[cell.recordingTimelineMilliseconds] else {
+          throw Error.message("Missing decoded timer audit frame")
+        }
         let column = index % columns
         let row = index / columns
         let x = column * (cellWidth + gutter)
@@ -179,12 +191,17 @@ public enum MatchTimerAuditContactSheet {
     let escaped = NSRegularExpression.escapedPattern(for: prefix.lastPathComponent)
     let expression = try NSRegularExpression(pattern: "^\(escaped)-[0-9]{6}\\.jpg$")
     for url in try FileManager.default.contentsOfDirectory(
-      at: directory, includingPropertiesForKeys: nil)
+      at: directory, includingPropertiesForKeys: [.isRegularFileKey])
     where !keeping.contains(url.standardizedFileURL)
       && expression.firstMatch(
         in: url.lastPathComponent,
         range: NSRange(url.lastPathComponent.startIndex..., in: url.lastPathComponent)) != nil
-    { try FileManager.default.removeItem(at: url) }
+    {
+      guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+        throw Error.message("Obsolete audit page path is not a regular file: \(url.path)")
+      }
+      try FileManager.default.removeItem(at: url)
+    }
   }
 
   private static func drawLabel(
