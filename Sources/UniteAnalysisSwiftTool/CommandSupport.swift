@@ -256,10 +256,7 @@ final class JSONLResponseWriter {
     outputURL = output.map(resolvePath)
     self.force = force
     try validateOutputPath(outputURL, force: force)
-    temporaryURL = outputURL.map { outputURL in
-      outputURL.deletingLastPathComponent().appendingPathComponent(
-        ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp")
-    }
+    temporaryURL = outputURL.map { OutputFileWriter.temporaryURL(for: $0) }
     encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     if let temporaryURL {
@@ -298,42 +295,26 @@ final class JSONLResponseWriter {
 }
 
 func validateOutputPath(_ outputURL: URL?, force: Bool) throws {
-  guard let outputURL else { return }
-  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw UniteAnalysisSwiftToolError.message(
-      "Output already exists: \(outputURL.path). Pass --force to overwrite.")
+  do {
+    try OutputFileWriter.validate(outputURL, force: force)
+  } catch let error as OutputFileError {
+    throw UniteAnalysisSwiftToolError.message(error.description)
   }
 }
 
 func writeOutputData(_ data: Data, to outputURL: URL, force: Bool) throws {
-  try validateOutputPath(outputURL, force: force)
-  try FileManager.default.createDirectory(
-    at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-  let temporaryURL = outputURL.deletingLastPathComponent().appendingPathComponent(
-    ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp")
-  defer { try? FileManager.default.removeItem(at: temporaryURL) }
-  try data.write(to: temporaryURL)
-  try installTemporaryOutput(temporaryURL, at: outputURL, force: force)
+  do {
+    try OutputFileWriter.write(data, to: outputURL, force: force)
+  } catch let error as OutputFileError {
+    throw UniteAnalysisSwiftToolError.message(error.description)
+  }
 }
 
 private func installTemporaryOutput(_ temporaryURL: URL, at outputURL: URL, force: Bool) throws {
-  if force {
-    if FileManager.default.fileExists(atPath: outputURL.path) {
-      _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
-    } else {
-      try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
-    }
-    return
-  }
   do {
-    try FileManager.default.linkItem(at: temporaryURL, to: outputURL)
-    try FileManager.default.removeItem(at: temporaryURL)
-  } catch {
-    if FileManager.default.fileExists(atPath: outputURL.path) {
-      throw UniteAnalysisSwiftToolError.message(
-        "Output already exists: \(outputURL.path). Pass --force to overwrite.")
-    }
-    throw error
+    try OutputFileWriter.install(temporaryURL, at: outputURL, force: force)
+  } catch let error as OutputFileError {
+    throw UniteAnalysisSwiftToolError.message(error.description)
   }
 }
 
@@ -551,14 +532,11 @@ func renderFrames(
   }
   var seenPaths = Set<String>()
   for request in requests {
-    guard
-      force
-        || (seenPaths.insert(request.url.path).inserted
-          && !FileManager.default.fileExists(atPath: request.url.path))
-    else {
+    guard force || seenPaths.insert(request.url.path).inserted else {
       throw UniteAnalysisSwiftToolError.message(
         "Output collision: \(request.url.path). Pass --force to overwrite.")
     }
+    try validateOutputPath(request.url, force: force)
   }
   let orderedRequests = requests.sorted { CMTimeCompare($0.time, $1.time) < 0 }
   try await extractor.extractApproximateFrames(at: orderedRequests.map(\.time)) {
@@ -566,7 +544,8 @@ func renderFrames(
     let request = orderedRequests[index]
     let image = try VideoFrameSupport.cropped(frame, rect: request.source.rect)
     let outputURL = request.url
-    try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
+    try VideoFrameSupport.writeBaselineJPEG(
+      image, to: outputURL, quality: quality, force: force)
     FileHandle.standardError.write(
       Data(
         "unite-analysis-swift: batch frame requested PTS \(canonicalSeconds(request.time.seconds))s, actual PTS \(canonicalSeconds(actualTime.seconds))s\n"
@@ -610,10 +589,7 @@ func renderSampleFrames(
     let outputURL = URL(
       fileURLWithPath: absolutePattern.replacingOccurrences(of: "%06d", with: frameNumber)
     ).standardizedFileURL
-    guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-      throw UniteAnalysisSwiftToolError.message(
-        "Output collision: \(outputURL.path). Pass --force to overwrite.")
-    }
+    try validateOutputPath(outputURL, force: force)
     let time = CMTimeAdd(start, CMTime(seconds: offset, preferredTimescale: 60_000))
     requestsByTime[time] = OutputRequest(outputURL: outputURL, requestedInmatch: offset)
   }
@@ -628,7 +604,8 @@ func renderSampleFrames(
       cropped, width: request.scaleX, height: request.scaleY)
     try FileManager.default.createDirectory(
       at: outputRequest.outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try VideoFrameSupport.writeBaselineJPEG(resized, to: outputRequest.outputURL, quality: quality)
+    try VideoFrameSupport.writeBaselineJPEG(
+      resized, to: outputRequest.outputURL, quality: quality, force: force)
     FileHandle.standardError.write(
       Data(
         "unite-analysis-swift: sample frame requested match time \(canonicalSeconds(outputRequest.requestedInmatch))s, actual PTS \(canonicalSeconds(actualTime.seconds))s\n"
@@ -646,10 +623,7 @@ func renderPreciseFrame(
   quality: Double,
   force: Bool
 ) async throws -> String {
-  guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-    throw UniteAnalysisSwiftToolError.message(
-      "Output collision: \(outputURL.path). Pass --force to overwrite.")
-  }
+  try validateOutputPath(outputURL, force: force)
   let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
   RecordVisionInputLogger.recordSpec(recordSpecURL)
   guard spec.startPTS.timescale > 0 else {
@@ -684,7 +658,8 @@ func renderPreciseFrame(
   let image = try VideoFrameSupport.cropped(frame.image, rect: source.rect)
   try FileManager.default.createDirectory(
     at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-  try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
+  try VideoFrameSupport.writeBaselineJPEG(
+    image, to: outputURL, quality: quality, force: force)
   FileHandle.standardError.write(
     Data(
       "unite-analysis-swift: precise frame requested PTS \(canonicalSeconds(requestedTime.seconds))s, decoded PTS \(canonicalSeconds(frame.presentationTime.seconds))s\n"

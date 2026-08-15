@@ -202,22 +202,7 @@ public enum MatchTimerAuditContactSheet {
       ".\(outputURL.lastPathComponent).\(UUID().uuidString).tmp.jpg")
     defer { try? FileManager.default.removeItem(at: temporaryURL) }
     try VideoFrameSupport.writeBaselineJPEG(image, to: temporaryURL, quality: quality)
-    if force, FileManager.default.fileExists(atPath: outputURL.path) {
-      _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
-    } else if force {
-      try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
-    } else {
-      do {
-        try FileManager.default.linkItem(at: temporaryURL, to: outputURL)
-        try FileManager.default.removeItem(at: temporaryURL)
-      } catch {
-        if FileManager.default.fileExists(atPath: outputURL.path) {
-          throw Error.message(
-            "Output already exists: \(outputURL.path). Pass --force to overwrite.")
-        }
-        throw error
-      }
-    }
+    try installStagedPage(temporaryURL, at: outputURL, force: force)
   }
 
   public static func pageOutputURL(prefix: URL, index: Int) -> URL {
@@ -225,21 +210,10 @@ public enum MatchTimerAuditContactSheet {
   }
 
   private static func installStagedPage(_ stagedURL: URL, at outputURL: URL, force: Bool) throws {
-    if force, FileManager.default.fileExists(atPath: outputURL.path) {
-      _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: stagedURL)
-    } else if force {
-      try FileManager.default.moveItem(at: stagedURL, to: outputURL)
-    } else {
-      do {
-        try FileManager.default.linkItem(at: stagedURL, to: outputURL)
-        try FileManager.default.removeItem(at: stagedURL)
-      } catch {
-        if FileManager.default.fileExists(atPath: outputURL.path) {
-          throw Error.message(
-            "Output already exists: \(outputURL.path). Pass --force to overwrite.")
-        }
-        throw error
-      }
+    do {
+      try OutputFileWriter.install(stagedURL, at: outputURL, force: force)
+    } catch let error as OutputFileError {
+      throw Error.message(error.description)
     }
   }
 

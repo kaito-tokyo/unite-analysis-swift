@@ -399,10 +399,7 @@ public enum ContactSheetGenerator {
   package static func run(
     definitionData: Data, prepared: PreparedInput, outputURL: URL, quality: Double, force: Bool
   ) async throws {
-    guard force || !FileManager.default.fileExists(atPath: outputURL.path) else {
-      throw ContactSheetGeneratorError.message(
-        "Output already exists: \(outputURL.path). Pass --force to overwrite.")
-    }
+    try OutputFileWriter.validate(outputURL, force: force)
     let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: definitionData)
     let recordSpec = prepared.recordSpec
     let frameOffsets = try validate(definition: definition)
@@ -495,9 +492,8 @@ public enum ContactSheetGenerator {
     guard let image = context.makeImage() else {
       throw ContactSheetGeneratorError.message("Could not finalize contact-sheet image")
     }
-    try FileManager.default.createDirectory(
-      at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try VideoFrameSupport.writeBaselineJPEG(image, to: outputURL, quality: quality)
+    try VideoFrameSupport.writeBaselineJPEG(
+      image, to: outputURL, quality: quality, force: force)
   }
 
   package static func validate(definition: ContactSheetDefinition) throws -> [Double] {

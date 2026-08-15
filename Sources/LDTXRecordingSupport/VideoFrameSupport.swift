@@ -280,13 +280,14 @@ public enum VideoFrameSupport {
     return resized
   }
 
-  public static func writeBaselineJPEG(_ image: CGImage, to url: URL, quality: Double) throws {
+  public static func baselineJPEGData(_ image: CGImage, quality: Double) throws -> Data {
+    let data = NSMutableData()
     guard
-      let destination = CGImageDestinationCreateWithURL(
-        url as CFURL, UTType.jpeg.identifier as CFString, 1, nil
+      let destination = CGImageDestinationCreateWithData(
+        data as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil
       )
     else {
-      throw VideoFrameSupportError.message("Could not create JPEG destination: \(url.path)")
+      throw VideoFrameSupportError.message("Could not create JPEG destination")
     }
     CGImageDestinationAddImage(
       destination, image,
@@ -295,18 +296,19 @@ public enum VideoFrameSupport {
         kCGImagePropertyJFIFIsProgressive: false,
       ] as CFDictionary)
     guard CGImageDestinationFinalize(destination) else {
-      throw VideoFrameSupportError.message("Could not write JPEG: \(url.path)")
+      throw VideoFrameSupportError.message("Could not write JPEG")
     }
     // ImageIO can add an EXIF orientation block even though this CGImage has
     // already been normalized. Remove APP1 metadata while preserving colour
     // profiles and other application segments.
-    try stripApplicationMetadata(from: url)
+    return try removingAPP1Metadata(from: data as Data)
   }
 
-  private static func stripApplicationMetadata(from url: URL) throws {
-    let source = try Data(contentsOf: url)
-    let result = try removingAPP1Metadata(from: source, sourceDescription: url.path)
-    try result.write(to: url, options: .atomic)
+  public static func writeBaselineJPEG(
+    _ image: CGImage, to url: URL, quality: Double, force: Bool = false
+  ) throws {
+    try OutputFileWriter.write(
+      baselineJPEGData(image, quality: quality), to: url, force: force)
   }
 
   package static func removingAPP1Metadata(

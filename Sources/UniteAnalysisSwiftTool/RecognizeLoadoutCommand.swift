@@ -203,15 +203,12 @@ private func writeLoadout(
   to outputURL: URL,
   force: Bool
 ) throws -> String {
-  try validateOutputPath(outputURL, force: force)
-  try FileManager.default.createDirectory(
-    at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
   let encoder = JSONEncoder()
   encoder.keyEncodingStrategy = .convertToSnakeCase
   encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
   var data = try encoder.encode(document)
   data.append(0x0A)
-  try data.write(to: outputURL, options: .atomic)
+  try writeOutputData(data, to: outputURL, force: force)
   return outputURL.path
 }
 
