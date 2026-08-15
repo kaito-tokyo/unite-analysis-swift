@@ -457,6 +457,31 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   }
 }
 
+@Test func scanResultDoesNotFallbackToUnrelatedOCRRegions() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+    UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let optionsURL = directory.appendingPathComponent("ocr-options.json")
+  try Data(
+    """
+    {
+      "$schema": "https://kaito-tokyo.github.io/unite-analysis-swift/ocr-options-v1.schema.json",
+      "unrelated-region": {
+        "recognitionLanguages": ["ja-JP"]
+      }
+    }
+    """.utf8
+  ).write(to: optionsURL)
+  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
+    "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", optionsURL.path,
+  ])
+
+  await #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try await executeCLI(parsed)
+  }
+}
+
 @Test func audioPeaksParsesPersistentOutputOptions() throws {
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
     "audio-peaks-v1", "--record-spec", "record-spec.json", "--output", "audio-peaks.json",
