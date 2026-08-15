@@ -35,10 +35,21 @@ public struct MatchTimerAuditContactSheetDefinition: Equatable, Sendable {
 }
 
 public struct MatchTimerAuditContactSheetResult: Codable, Equatable, Sendable {
+  public let auditId: String?
   public let outputs: [String]
   public let observationCount: Int
   public let columns: Int
   public let pageCount: Int
+
+  public init(
+    auditId: String? = nil, outputs: [String], observationCount: Int, columns: Int, pageCount: Int
+  ) {
+    self.auditId = auditId
+    self.outputs = outputs
+    self.observationCount = observationCount
+    self.columns = columns
+    self.pageCount = pageCount
+  }
 }
 
 public enum MatchTimerAuditContactSheet {
@@ -132,7 +143,7 @@ public enum MatchTimerAuditContactSheet {
     try installStagedPages(stagedURLs, at: outputURLs, force: force)
     if force { try removeObsoletePages(prefix: outputPrefixURL, keeping: Set(outputURLs)) }
     return .init(
-      outputs: outputURLs.map(\.path), observationCount: definition.cells.count,
+      auditId: nil, outputs: outputURLs.map(\.path), observationCount: definition.cells.count,
       columns: columns, pageCount: pages.count)
   }
 

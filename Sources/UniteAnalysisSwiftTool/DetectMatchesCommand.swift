@@ -20,7 +20,7 @@ struct DetectMatches: ParsableCommand {
 
       DETECTION. Strict MM:SS observations produce standard-match start candidates. A lone 10:00 is insufficient. Consistent candidates are clustered despite missing samples; discontinuous OCR values are retained as excluded diagnostics. A later independently corroborated reset creates another match.
 
-      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. --audit-contact-sheet-prefix writes deterministic source-video JPEG pages named <prefix>-000001.jpg and so on, with at most 120 observations per page. Cells show timer ROI, requested and actual timestamps, OCR text, confidence, disposition, and diagnostic reason. Existing outputs require --force. Matches end at start + 600 seconds. Outputs are never written into LDTX-managed directories. If persisted inside a recording, use _PokemonUniteAnalysis.
+      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. --audit-id accepts a canonical lowercase UUID and atomically writes a managed audit directory at _PokemonUniteAnalysis/audits/<id> containing match-detection.json and deterministic source-video JPEG pages. --output and --audit-id are mutually exclusive. Cells show timer ROI, requested and actual timestamps, OCR text, confidence, disposition, and diagnostic reason. Existing outputs require --force. Matches end at start + 600 seconds.
 
       SCHEMAS. Print the contracts with `unite-analysis-swift schema match-layout-v1.schema.json` and `unite-analysis-swift schema match-detection-v1.output.schema.json`.
 
@@ -42,10 +42,10 @@ struct DetectMatches: ParsableCommand {
   @Option(help: "Optional JSON output path; stdout always receives the same result.")
   var output: String?
 
-  @Option(help: "Optional JPEG path for the human-only timer audit contact sheet.")
-  var auditContactSheetPrefix: String?
+  @Option(help: "Canonical lowercase UUID for a managed timer audit directory.")
+  var auditId: String?
 
-  @Flag(help: "Allow --output to replace an existing file atomically.")
+  @Flag(help: "Allow --output or the managed audit directory to be replaced atomically.")
   var force = false
 
   struct Output: Encodable, Sendable {
@@ -71,16 +71,18 @@ struct DetectMatches: ParsableCommand {
 
   private func result() async throws -> Output {
     try validateOutputPath(output.map(resolvePath), force: force)
-    let firstAuditPage = auditContactSheetPrefix.map {
-      MatchTimerAuditContactSheet.pageOutputURL(prefix: resolvePath($0), index: 1)
-    }
-    try validateOutputPath(firstAuditPage, force: force)
-    if let output = output.map(resolvePath),
-      let audit = firstAuditPage,
-      output.standardizedFileURL == audit.standardizedFileURL
-    {
+    if output != nil, auditId != nil {
       throw UniteAnalysisSwiftToolError.message(
-        "--output and --audit-contact-sheet-prefix must use different paths")
+        "--output and --audit-id are mutually exclusive")
+    }
+    let validatedAuditId: String?
+    if let auditId {
+      guard let uuid = UUID(uuidString: auditId), uuid.uuidString.lowercased() == auditId else {
+        throw UniteAnalysisSwiftToolError.message("--audit-id must be a canonical lowercase UUID")
+      }
+      validatedAuditId = auditId
+    } else {
+      validatedAuditId = nil
     }
     let recordingURL = resolvePath(input).standardizedFileURL
     guard recordingURL.pathExtension == "ldtxrecord" else {
@@ -141,46 +143,79 @@ struct DetectMatches: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
     let detection = MatchTimerDetection(records: records, recordingDuration: videoDuration)
-    if let output = output.map(resolvePath), let auditContactSheetPrefix {
-      let pages = MatchTimerAuditContactSheet.pageOutputURLs(
-        prefix: resolvePath(auditContactSheetPrefix),
-        observationCount: detection.diagnostics.count)
-      try validateDistinctMatchDetectionOutputs(outputURL: output, auditPageURLs: pages)
-    }
     let auditResult: MatchTimerAuditContactSheetResult?
-    if let auditContactSheetPrefix {
+    var stagedAuditDirectory: URL?
+    var finalAuditDirectory: URL?
+    if let auditId = validatedAuditId {
+      let auditsDirectory = recordingURL.appendingPathComponent("_PokemonUniteAnalysis/audits")
+      let finalDirectory = auditsDirectory.appendingPathComponent(auditId, isDirectory: true)
+      try validateManagedAuditDestination(finalDirectory, force: force)
+      try FileManager.default.createDirectory(
+        at: auditsDirectory, withIntermediateDirectories: true)
+      let stagedDirectory = auditsDirectory.appendingPathComponent(
+        ".\(auditId).\(UUID().uuidString).staged")
+      try FileManager.default.createDirectory(
+        at: stagedDirectory, withIntermediateDirectories: true)
+      stagedAuditDirectory = stagedDirectory
+      finalAuditDirectory = finalDirectory
       do {
-        auditResult = try await MatchTimerAuditContactSheet.render(
+        let rendered = try await MatchTimerAuditContactSheet.render(
           videoURL: mediaURL, gameScreen: gameScreen, layout: matchLayout,
-          diagnostics: detection.diagnostics, outputPrefixURL: resolvePath(auditContactSheetPrefix),
+          diagnostics: detection.diagnostics,
+          outputPrefixURL: stagedDirectory.appendingPathComponent("pages/page"),
           force: force)
+        auditResult = .init(
+          auditId: auditId,
+          outputs: rendered.outputs.map { "pages/" + URL(fileURLWithPath: $0).lastPathComponent },
+          observationCount: rendered.observationCount, columns: rendered.columns,
+          pageCount: rendered.pageCount)
       } catch {
+        try? FileManager.default.removeItem(at: stagedDirectory)
         throw UniteAnalysisSwiftToolError.message(String(describing: error))
       }
     } else {
       auditResult = nil
     }
-    return .init(
+    let result = Output(
       source: "videoOCR", mainMediaFile: mainMediaFile, layoutId: matchLayout.layoutId,
       gameScreen: gameScreen,
       matches: detection.matches, diagnostics: detection.diagnostics,
       auditContactSheet: auditResult)
+    if let stagedAuditDirectory, let finalAuditDirectory {
+      do {
+        try prettyPrintedJSONData(result).write(
+          to: stagedAuditDirectory.appendingPathComponent("match-detection.json"))
+        try installManagedAuditDirectory(
+          stagedAuditDirectory, at: finalAuditDirectory, force: force)
+      } catch {
+        try? FileManager.default.removeItem(at: stagedAuditDirectory)
+        throw UniteAnalysisSwiftToolError.message(String(describing: error))
+      }
+    }
+    return result
   }
 }
 
-package func validateDistinctMatchDetectionOutputs(outputURL: URL, auditPageURLs: [URL]) throws {
-  guard let volumeReferenceURL = auditPageURLs.first else { return }
-  let outputKey = try filesystemPathKey(outputURL, volumeReferenceURL: volumeReferenceURL)
-  let pageKeys = try auditPageURLs.map {
-    try filesystemPathKey($0, volumeReferenceURL: volumeReferenceURL)
-  }
-  let contains: ([String], [String]) -> Bool = { ancestor, descendant in
-    ancestor.count <= descendant.count
-      && Array(descendant.prefix(ancestor.count)) == ancestor
-  }
-  guard !pageKeys.contains(where: { contains(outputKey, $0) || contains($0, outputKey) }) else {
+package func validateManagedAuditDestination(_ url: URL, force: Bool) throws {
+  guard FileManager.default.fileExists(atPath: url.path) else { return }
+  var isDirectory: ObjCBool = false
+  guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+    isDirectory.boolValue
+  else {
     throw UniteAnalysisSwiftToolError.message(
-      "--output must not overlap an audit contact sheet page path")
+      "Managed audit destination is not a directory: \(url.path)")
+  }
+  guard force else {
+    throw UniteAnalysisSwiftToolError.message(
+      "Audit already exists: \(url.path). Pass --force to overwrite.")
+  }
+}
+
+package func installManagedAuditDirectory(_ staged: URL, at output: URL, force: Bool) throws {
+  if force, FileManager.default.fileExists(atPath: output.path) {
+    _ = try FileManager.default.replaceItemAt(output, withItemAt: staged)
+  } else {
+    try FileManager.default.moveItem(at: staged, to: output)
   }
 }
 

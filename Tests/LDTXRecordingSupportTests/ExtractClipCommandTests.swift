@@ -49,32 +49,6 @@ import Testing
       == bundle.appendingPathComponent("main.fragmented.mp4"))
 }
 
-@Test func matchDetectionOutputsRespectVolumeCaseSensitivity() throws {
-  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-  defer { try? FileManager.default.removeItem(at: directory) }
-  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-  let page = directory.appendingPathComponent("audit-000001.jpg")
-  let differentlyCasedOutput = directory.appendingPathComponent("AUDIT-000001.JPG")
-  let values = try directory.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
-  if values.volumeSupportsCaseSensitiveNames == true {
-    try validateDistinctMatchDetectionOutputs(
-      outputURL: differentlyCasedOutput, auditPageURLs: [page])
-  } else {
-    #expect(throws: UniteAnalysisSwiftToolError.self) {
-      try validateDistinctMatchDetectionOutputs(
-        outputURL: differentlyCasedOutput, auditPageURLs: [page])
-    }
-  }
-}
-
-@Test func matchDetectionOutputCannotContainAuditPages() throws {
-  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-  let page = directory.appendingPathComponent("audit-000001.jpg")
-  #expect(throws: UniteAnalysisSwiftToolError.self) {
-    try validateDistinctMatchDetectionOutputs(outputURL: directory, auditPageURLs: [page])
-  }
-}
-
 @Test func networkOptimizedMP4PlacesMoovBeforeMdat() throws {
   let optimized =
     mp4Atom("ftyp", payloadSize: 4) + mp4Atom("moov", payloadSize: 8)

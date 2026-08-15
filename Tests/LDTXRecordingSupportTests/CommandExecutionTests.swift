@@ -237,14 +237,47 @@ private func registeredCommands(
 @Test func detectMatchesParsesPersistentOutputOptions() throws {
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
     "detect-matches-v1", "--input", "recording.ldtxrecord", "--layout", "layout.json",
-    "--output", "matches.json", "--audit-contact-sheet-prefix", "timer-audit", "--force",
+    "--audit-id", "019faa0d-1e4f-7a80-8000-000000000001", "--force",
   ])
   let command = try #require(parsed as? DetectMatches)
   #expect(command.input == "recording.ldtxrecord")
   #expect(command.layout == "layout.json")
-  #expect(command.output == "matches.json")
-  #expect(command.auditContactSheetPrefix == "timer-audit")
+  #expect(command.output == nil)
+  #expect(command.auditId == "019faa0d-1e4f-7a80-8000-000000000001")
   #expect(command.force)
+}
+
+@Test func managedAuditDirectoryReplacesAsOneUnit() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("audit")
+  let staged = root.appendingPathComponent("staged")
+  try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+  try Data("old".utf8).write(to: output.appendingPathComponent("old.txt"))
+  try FileManager.default.createDirectory(at: staged, withIntermediateDirectories: true)
+  try Data("new".utf8).write(to: staged.appendingPathComponent("match-detection.json"))
+
+  try validateManagedAuditDestination(output, force: true)
+  try installManagedAuditDirectory(staged, at: output, force: true)
+
+  #expect(!FileManager.default.fileExists(atPath: output.appendingPathComponent("old.txt").path))
+  #expect(
+    try Data(contentsOf: output.appendingPathComponent("match-detection.json"))
+      == Data("new".utf8))
+}
+
+@Test func managedAuditDestinationRejectsFilesAndUnforcedReplacement() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  let file = root.appendingPathComponent("file")
+  try Data().write(to: file)
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try validateManagedAuditDestination(file, force: true)
+  }
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try validateManagedAuditDestination(root, force: false)
+  }
 }
 
 @Test func schemaCommandProducesSemanticOutputRecord() async throws {
