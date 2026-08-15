@@ -20,7 +20,7 @@ struct DetectMatches: ParsableCommand {
 
       DETECTION. Strict MM:SS observations produce standard-match start candidates. A lone 10:00 is insufficient. Consistent candidates are clustered despite missing samples; discontinuous OCR values are retained as excluded diagnostics. A later independently corroborated reset creates another match.
 
-      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. --audit-contact-sheet optionally writes a deterministic source-video JPEG containing every timer ROI, requested and actual recording timestamps, selected OCR string, confidence, accepted/excluded disposition, and diagnostic reason. Existing outputs require --force. Matches end at start + 600 seconds. Surrendered matches and nonstandard modes are not inferred. Outputs are never written into LDTX-managed directories. If persisted inside a recording, use _PokemonUniteAnalysis.
+      OUTPUT. Pretty-printed, sorted JSON is written to stdout and optionally atomically to --output. --audit-contact-sheet-prefix writes deterministic source-video JPEG pages named <prefix>-000001.jpg and so on, with at most 120 observations per page. Cells show timer ROI, requested and actual timestamps, OCR text, confidence, disposition, and diagnostic reason. Existing outputs require --force. Matches end at start + 600 seconds. Outputs are never written into LDTX-managed directories. If persisted inside a recording, use _PokemonUniteAnalysis.
 
       SCHEMAS. Print the contracts with `unite-analysis-swift schema match-layout-v1.schema.json` and `unite-analysis-swift schema match-detection-v1.output.schema.json`.
 
@@ -80,7 +80,7 @@ struct DetectMatches: ParsableCommand {
       output.standardizedFileURL == audit.standardizedFileURL
     {
       throw UniteAnalysisSwiftToolError.message(
-        "--output and --audit-contact-sheet must use different paths")
+        "--output and --audit-contact-sheet-prefix must use different paths")
     }
     let recordingURL = resolvePath(input).standardizedFileURL
     guard recordingURL.pathExtension == "ldtxrecord" else {
@@ -145,7 +145,9 @@ struct DetectMatches: ParsableCommand {
       let pages = MatchTimerAuditContactSheet.pageOutputURLs(
         prefix: resolvePath(auditContactSheetPrefix),
         observationCount: detection.diagnostics.count)
-      guard !pages.map(\.standardizedFileURL).contains(output.standardizedFileURL) else {
+      let canonicalOutput = try resolvingSymlinkComponents(in: output)
+      let canonicalPages = try pages.map { try resolvingSymlinkComponents(in: $0) }
+      guard !canonicalPages.contains(canonicalOutput) else {
         throw UniteAnalysisSwiftToolError.message(
           "--output must not collide with an audit contact sheet page")
       }

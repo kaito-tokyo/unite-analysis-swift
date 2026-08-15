@@ -56,6 +56,7 @@ public enum MatchTimerAuditContactSheet {
     quality: Double = 0.85,
     force: Bool
   ) async throws -> MatchTimerAuditContactSheetResult {
+    try layout.validate()
     guard quality.isFinite, (0...1).contains(quality) else {
       throw Error.message("Timer audit JPEG quality must be between 0 and 1")
     }
@@ -80,9 +81,9 @@ public enum MatchTimerAuditContactSheet {
     let cellHeight = imageHeight + labelHeight
     let extractor =
       definition.cells.isEmpty ? nil : try await VideoFrameExtractor(videoURL: videoURL)
+    let columns = min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count))
     for (pageIndex, cells) in pages.enumerated() {
       try Task.checkCancellation()
-      let columns = min(MatchTimerAuditContactSheetDefinition.columns, max(1, cells.count))
       let rows = max(1, Int(ceil(Double(cells.count) / Double(columns))))
       let width = columns * cellWidth + max(0, columns - 1) * gutter
       let height = rows * cellHeight + max(0, rows - 1) * gutter
@@ -94,8 +95,7 @@ public enum MatchTimerAuditContactSheet {
     if force { try removeObsoletePages(prefix: outputPrefixURL, keeping: Set(outputURLs)) }
     return .init(
       outputs: outputURLs.map(\.path), observationCount: definition.cells.count,
-      columns: min(MatchTimerAuditContactSheetDefinition.columns, max(1, definition.cells.count)),
-      pageCount: pages.count)
+      columns: columns, pageCount: pages.count)
   }
 
   private static func renderPage(
