@@ -97,3 +97,17 @@ private func temporaryDirectory() throws -> URL {
 
   #expect(try Data(contentsOf: output) == Data("replacement\n".utf8))
 }
+
+@Test func forcedOutputReplacementPreservesDestinationPermissions() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let output = root.appendingPathComponent("output.json")
+  try Data("original\n".utf8).write(to: output)
+  try FileManager.default.setAttributes(
+    [.posixPermissions: 0o600], ofItemAtPath: output.path)
+
+  try OutputFileWriter.write(Data("replacement\n".utf8), to: output, force: true)
+
+  let attributes = try FileManager.default.attributesOfItem(atPath: output.path)
+  #expect(attributes[.posixPermissions] as? NSNumber == NSNumber(value: 0o600))
+}

@@ -181,7 +181,11 @@ public enum ChromaEventDetector {
     outputURL: URL,
     force: Bool
   ) throws {
-    try OutputFileWriter.validate(outputURL, force: force)
+    do {
+      try OutputFileWriter.validate(outputURL, force: force)
+    } catch let error as OutputFileError {
+      throw ChromaEventError.message(error.description)
+    }
     guard fps.isFinite, fps > 0 else {
       throw ChromaEventError.message("fps must be positive and finite")
     }
@@ -247,7 +251,11 @@ public enum ChromaEventDetector {
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try OutputFileWriter.write(encoder.encode(result), to: outputURL, force: force)
+    do {
+      try OutputFileWriter.write(encoder.encode(result), to: outputURL, force: force)
+    } catch let error as OutputFileError {
+      throw ChromaEventError.message(error.description)
+    }
   }
 
   package struct ChromaPlane {

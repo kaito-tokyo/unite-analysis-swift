@@ -399,7 +399,11 @@ public enum ContactSheetGenerator {
   package static func run(
     definitionData: Data, prepared: PreparedInput, outputURL: URL, quality: Double, force: Bool
   ) async throws {
-    try OutputFileWriter.validate(outputURL, force: force)
+    do {
+      try OutputFileWriter.validate(outputURL, force: force)
+    } catch let error as OutputFileError {
+      throw ContactSheetGeneratorError.message(error.description)
+    }
     let definition = try JSONDecoder().decode(ContactSheetDefinition.self, from: definitionData)
     let recordSpec = prepared.recordSpec
     let frameOffsets = try validate(definition: definition)
@@ -492,8 +496,12 @@ public enum ContactSheetGenerator {
     guard let image = context.makeImage() else {
       throw ContactSheetGeneratorError.message("Could not finalize contact-sheet image")
     }
-    try VideoFrameSupport.writeBaselineJPEG(
-      image, to: outputURL, quality: quality, force: force)
+    do {
+      try VideoFrameSupport.writeBaselineJPEG(
+        image, to: outputURL, quality: quality, force: force)
+    } catch let error as OutputFileError {
+      throw ContactSheetGeneratorError.message(error.description)
+    }
   }
 
   package static func validate(definition: ContactSheetDefinition) throws -> [Double] {

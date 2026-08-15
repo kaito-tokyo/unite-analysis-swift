@@ -37,26 +37,54 @@ public enum OutputFileWriter {
   public static func install(_ temporaryURL: URL, at outputURL: URL, force: Bool) throws {
     try FileManager.default.createDirectory(
       at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    let result = temporaryURL.withUnsafeFileSystemRepresentation { temporaryPath in
-      outputURL.withUnsafeFileSystemRepresentation { outputPath in
-        guard let temporaryPath, let outputPath else {
+    if force {
+      try installForced(temporaryURL, at: outputURL)
+      return
+    }
+    let result = renameExclusively(temporaryURL, to: outputURL)
+    guard result != 0 else { return }
+    let errorNumber = errno
+    if errorNumber == EEXIST {
+      throw OutputFileError.alreadyExists(outputURL.path)
+    }
+    throw posixError(errorNumber, path: outputURL.path)
+  }
+
+  private static func installForced(_ temporaryURL: URL, at outputURL: URL) throws {
+    for _ in 0..<8 {
+      do {
+        _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
+        return
+      } catch {
+        guard !FileManager.default.fileExists(atPath: outputURL.path) else { throw error }
+      }
+
+      let result = renameExclusively(temporaryURL, to: outputURL)
+      guard result != 0 else { return }
+      let errorNumber = errno
+      guard errorNumber == EEXIST else {
+        throw posixError(errorNumber, path: outputURL.path)
+      }
+    }
+    throw posixError(EBUSY, path: outputURL.path)
+  }
+
+  private static func renameExclusively(_ sourceURL: URL, to destinationURL: URL) -> Int32 {
+    sourceURL.withUnsafeFileSystemRepresentation { sourcePath in
+      destinationURL.withUnsafeFileSystemRepresentation { destinationPath in
+        guard let sourcePath, let destinationPath else {
           errno = EINVAL
           return Int32(-1)
         }
-        if force {
-          return Darwin.rename(temporaryPath, outputPath)
-        }
-        return renameatx_np(AT_FDCWD, temporaryPath, AT_FDCWD, outputPath, UInt32(RENAME_EXCL))
+        return renameatx_np(
+          AT_FDCWD, sourcePath, AT_FDCWD, destinationPath, UInt32(RENAME_EXCL))
       }
     }
-    guard result != 0 else { return }
-    let errorNumber = errno
-    if !force, errorNumber == EEXIST {
-      throw OutputFileError.alreadyExists(outputURL.path)
-    }
-    throw NSError(
-      domain: NSPOSIXErrorDomain, code: Int(errorNumber),
-      userInfo: [NSFilePathErrorKey: outputURL.path])
+  }
+
+  private static func posixError(_ errorNumber: Int32, path: String) -> NSError {
+    NSError(
+      domain: NSPOSIXErrorDomain, code: Int(errorNumber), userInfo: [NSFilePathErrorKey: path])
   }
 
   public static func temporaryURL(for outputURL: URL, suffix: String = ".tmp") -> URL {
