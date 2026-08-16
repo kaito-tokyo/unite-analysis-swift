@@ -24,4 +24,4 @@ jobs:
   swift-ci:
     permissions:
       contents: read
-    uses: ./.github/workflows/swift.yml
+    uses: ./.github/workflows/swift-ci.yml

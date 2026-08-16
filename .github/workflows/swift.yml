@@ -4,16 +4,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-name: Swift
+name: Release build
 
 on:
   workflow_call:
-    inputs:
-      release-build:
-        description: Builds, signs, notarizes, attests, and uploads the release package.
-        required: false
-        type: boolean
-        default: false
     outputs:
       artifact:
         description: Name of the uploaded notarized installer package.
@@ -22,11 +16,38 @@ on:
 jobs:
   swift-ci:
     runs-on: macos-26
-    environment: ${{ inputs.release-build && 'release-macos' || null }}
+    environment: release-macos
     timeout-minutes: 60
     outputs:
       artifact: ${{ steps.release-package.outputs.artifact_name }}
     steps:
+      - name: Set up Apple code signing
+        uses: kaito-tokyo/setup-apple-codesigning@b9f7d7c6819fe6f6bb44694b75963918dcbddd27 # v1.0.0
+        with:
+          MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
+          MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+
+      - name: Validate release credentials
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          APP_STORE_CONNECT_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER }}
+          APP_STORE_CONNECT_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
+          MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
+        run: |
+          for name in \
+            APP_STORE_CONNECT_ISSUER \
+            APP_STORE_CONNECT_KEY_BASE64 \
+            APP_STORE_CONNECT_KEY_ID \
+            MACOS_SIGNING_APPLICATION_IDENTITY \
+            MACOS_SIGNING_INSTALLER_IDENTITY; do
+            if [[ -z "${!name}" ]]; then
+              printf '%s is not configured.\n' "$name" >&2
+              exit 1
+            fi
+          done
+
       - name: Print Xcode version
         id: xcode
         shell: bash --noprofile --norc -euo pipefail {0}
@@ -84,7 +105,6 @@ jobs:
 
       - name: Assemble app bundle
         id: app
-        if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           APP_PATH: ${{ runner.temp }}/Kaito-Tokyo Unite Analysis.app
@@ -102,7 +122,6 @@ jobs:
           printf 'app_path=%s\n' "$APP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Validate app bundle
-        if: inputs.release-build
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
         env:
           APP_PATH: ${{ steps.app.outputs.app_path }}
@@ -137,15 +156,7 @@ jobs:
               }
           }
 
-      - name: Set up Apple code signing
-        if: inputs.release-build
-        uses: kaito-tokyo/setup-apple-codesigning@b9f7d7c6819fe6f6bb44694b75963918dcbddd27 # v1.0.0
-        with:
-          MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
-          MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
-
       - name: Sign app bundle
-        if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           APP_PATH: ${{ steps.app.outputs.app_path }}
@@ -166,7 +177,6 @@ jobs:
 
       - name: Package signed installer
         id: release-package
-        if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           APP_PATH: ${{ steps.app.outputs.app_path }}
@@ -202,7 +212,6 @@ jobs:
           printf 'artifact_path=%s\n' "$installer_package" >> "$GITHUB_OUTPUT"
 
       - name: Notarize and staple installer
-        if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           APP_STORE_CONNECT_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER }}
@@ -225,13 +234,11 @@ jobs:
           spctl --assess --type install --verbose=2 "$INSTALLER_PACKAGE_PATH"
 
       - name: Attest notarized installer package
-        if: inputs.release-build
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ steps.release-package.outputs.artifact_path }}
 
       - name: Upload installer package
-        if: inputs.release-build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           path: ${{ steps.release-package.outputs.artifact_path }}

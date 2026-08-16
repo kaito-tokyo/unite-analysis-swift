@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Swift
+
+on:
+  workflow_call:
+
+jobs:
+  swift-ci:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Print Xcode version
+        id: xcode
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          XCODE_VERSION="$(xcodebuild -version | awk '{print $NF}' | paste -s -d _ -)"
+          printf 'version=%s\n' "$XCODE_VERSION" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Calculate SwiftPM build cache key
+        id: swiftpm-cache-key
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          BUILD_INPUTS_HASH="$({
+            git rev-parse HEAD:Package.swift
+            git rev-parse HEAD:Package.resolved
+            git rev-parse HEAD:Sources
+            git rev-parse HEAD:Tests
+            git rev-parse HEAD:Vendor/opencv
+            git rev-parse HEAD:Vendor/opencv-config
+            git rev-parse HEAD:Vendor/opencv_contrib
+            git rev-parse HEAD:Vendor/nanopb
+          } | shasum -a 256 | awk '{print $1}')"
+          printf 'build-inputs-hash=%s\n' "$BUILD_INPUTS_HASH" >>"$GITHUB_OUTPUT"
+
+      - name: Restore SwiftPM build cache
+        id: swiftpm-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: build-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ steps.swiftpm-cache-key.outputs.build-inputs-hash }}
+          restore-keys: |
+            build-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+            build-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+            build-swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+
+      - name: Build
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift build -c release
+
+      - name: Test
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: swift test -c release
+
+      - name: Save SwiftPM build cache
+        if: github.event_name == 'push' && steps.swiftpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: ${{ steps.swiftpm-cache.outputs.cache-primary-key }}
