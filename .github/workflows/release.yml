@@ -131,11 +131,15 @@ jobs:
   build:
     needs: [validate-release, check]
     uses: ./.github/workflows/swift.yml
+    secrets: inherit
     permissions:
       artifact-metadata: write
       attestations: write
       contents: read
       id-token: write
+    with:
+      release-build: true
+
   draft-release:
     needs: build
     runs-on: ubuntu-24.04
