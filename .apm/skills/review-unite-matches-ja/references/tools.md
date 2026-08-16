@@ -36,8 +36,8 @@
 - **症状**: 誰が技を使い誰に当たったか、攻撃が回避・中断されたか、重なる動作のどれが先かを通常の静止画では確定できない。
 - **使うツール**: `frame-burst`。指定時刻以降のソースフレームを連続デコードし、近似シークによる順序の欠落を避ける。
 - **再現例**: [frame-burst.md](frame-burst.md)に従って`frame-burst-jobs.jsonl`を作り、`unite-analysis-swift frame-burst --record-spec _PokemonUniteMatches/match-01/record-spec.json _PokemonUniteAnalysis/matches/match-01/frame-burst-jobs.jsonl`を実行する。出力は`_PokemonUniteAnalysis/matches/match-01/frame-bursts/`以下に保存する。
-- **解釈と提示**: 左から右、上から下へ読み、使用者、発生、接触、リアクションの順を追う。セルの細部を再確認するときは、同じ`matchTimestamp`、`frameCount`、`decimate`を保ったまま、対象を含む狭い`source`と大きな`cellWidth`で別の`frame-burst`を生成する。同じデコード済みフレーム列の対応するセルを拡大して確かめる。
-- **限界**: MCP結果と連写画像はセルごとのPTSを示さない。選択セルの時刻を推定して`precise-frame`で抽出し直さない。候補時刻の発見や、数秒以上の配置・追撃・変換の説明に使わず、表示の間引きがデコード範囲を広げると解釈しない。
+- **解釈と提示**: 固定された60フレームを5列×12行で左から右、上から下へ読み、使用者、発生、接触、リアクションの順を追う。セルの細部を再確認するときは、同じ`matchTimestamp`を保ったまま、対象を含む狭い`source`と大きな`cellWidth`で別の`frame-burst`を生成する。ラベルのソースインデックスと実時刻で、2枚の対応するセルを照合する。
+- **限界**: stdoutの成功結果は先頭・末尾のPTSと範囲を示し、各セルは実際の試合相対時刻を表示するが、セルごとのソースPTS一覧は返さない。候補時刻の発見や、数秒以上の配置・追撃・変換の説明には使わない。
 - **次の調査**: 対話でシーケンス全体を共有する必要があれば`extract-clip`、HUDの細部は`precise-frame`を使う。
 
 ## 場面の前後やオブジェクト戦全体を共有する

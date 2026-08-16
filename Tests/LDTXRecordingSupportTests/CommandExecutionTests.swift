@@ -328,7 +328,7 @@ func batchFrameJobRejectsUnknownKeys(json: String) {
 
 @Test func frameBurstJobRejectsUnknownTopLevelKey() {
   let data = Data(
-    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"columns":1,"cellWidth":1,"output":"out.jpg","extra":true}"#
+    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"cellWidth":1,"output":"out.jpg","extra":true}"#
       .utf8
   )
   #expect(throws: DecodingError.self) {
@@ -336,13 +336,63 @@ func batchFrameJobRejectsUnknownKeys(json: String) {
   }
 }
 
-@Test func frameBurstJobAcceptsFrameLabels() throws {
+@Test(arguments: ["frameCount", "decimate", "columns", "labelFrames"])
+func frameBurstJobRejectsRemovedLayoutProperties(property: String) throws {
+  let json =
+    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":16,"height":9},"cellWidth":100,"output":"out.jpg",""#
+    + property + #"":1}"#
+  #expect(throws: DecodingError.self) {
+    _ = try JSONDecoder().decode(FrameBurstJob.self, from: Data(json.utf8))
+  }
+}
+
+@Test func frameBurstJobUsesFixedLayout() throws {
   let data = Data(
-    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":1,"height":1},"frameCount":1,"labelFrames":true,"columns":1,"cellWidth":1,"output":"out.jpg"}"#
-      .utf8
-  )
+    #"{"jobId":"job","matchTimestamp":0,"source":{"x":0,"y":0,"width":16,"height":9},"cellWidth":100,"output":"out.jpg"}"#
+      .utf8)
   let job = try JSONDecoder().decode(FrameBurstJob.self, from: data)
-  #expect(job.labelsFrames)
+  let layout = try job.layoutDimensions()
+  #expect(FrameBurstJob.frameCount == 60)
+  #expect(FrameBurstJob.columns == 5)
+  #expect(layout.rows == 12)
+  #expect(layout.cellHeight == 56)
+  #expect(layout.width == 516)
+  #expect(layout.height == 716)
+}
+
+@Test func frameBurstTimingRequiresAllFramesAndReportsActualRange() throws {
+  let first = CMTime(seconds: 10, preferredTimescale: 600)
+  let last = CMTime(seconds: 11.967, preferredTimescale: 600)
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try frameBurstTiming(decodedFrameCount: 59, firstPTS: first, lastPTS: last)
+  }
+  let timing = try frameBurstTiming(
+    decodedFrameCount: FrameBurstJob.frameCount, firstPTS: first, lastPTS: last)
+  #expect(timing.decodedFrameCount == 60)
+  #expect(timing.firstPresentationTimestamp == 10)
+  #expect(timing.lastPresentationTimestamp == last.seconds)
+  #expect(timing.coveredDuration == CMTimeSubtract(last, first).seconds)
+}
+
+@Test func frameBurstLabelsIncludeSourceIndexAndActualMatchTime() {
+  #expect(frameBurstLabel(sourceIndex: 0, actualInmatch: 12.3456) == "F0000  +12.346s")
+  #expect(frameBurstLabel(sourceIndex: 59, actualInmatch: -0.25) == "F0059  -0.250s")
+}
+
+@Test func frameBurstSuccessEncodesTimingMetadata() throws {
+  let output = FrameBurstJobOutput(
+    jobId: "job",
+    result: .init(
+      output: "/tmp/burst.jpg", decodedFrameCount: 60,
+      firstPresentationTimestamp: 10, lastPresentationTimestamp: 11.967,
+      coveredDuration: 1.967))
+  let object = try #require(
+    JSONSerialization.jsonObject(with: JSONEncoder().encode(output)) as? [String: Any])
+  let result = try #require(object["result"] as? [String: Any])
+  #expect(result["decodedFrameCount"] as? Int == 60)
+  #expect(result["firstPresentationTimestamp"] as? Double == 10)
+  #expect(result["lastPresentationTimestamp"] as? Double == 11.967)
+  #expect(result["coveredDuration"] as? Double == 1.967)
 }
 
 @Test func ocrJobRejectsUnknownTopLevelKey() {
