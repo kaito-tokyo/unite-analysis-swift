@@ -202,7 +202,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       let surrenders = endEvidence.evidence.filter {
         $0.mode == candidate.mode && $0.kind == "surrender"
           && $0.recordingPTS >= candidate.latestObservationPTS
-          && $0.recordingPTS < associationEnd
+          && $0.recordingPTS <= associationEnd
       }
       if surrenders.count == 1 {
         return (candidate.start, surrenders[0].recordingPTS)
@@ -330,6 +330,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
 
     var rejectedContradictoryCandidates =
       (ambiguousCandidates.union(supersededCandidates)).map { candidates[$0] }
+    var rejectedOverlappingCandidates: [Candidate] = []
     for (candidateIndex, candidate) in candidates.enumerated() {
       let matching = matchingByCandidate[candidateIndex]
       if supersededCandidates.contains(candidateIndex) {
@@ -441,6 +442,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         continue
       }
       guard accepted.last.map({ candidate.start >= $0.match.recordingPTSEnd }) ?? true else {
+        rejectedOverlappingCandidates.append(candidate)
         unclassified.append(
           .init(
             recordingPTSStart: candidate.start,
@@ -492,6 +494,22 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           }
       }
       guard let adopted else {
+        let matchingOverlappingCandidates = rejectedOverlappingCandidates.filter { rejected in
+          let candidate = rejected.mode == "quick5Minute" ? standardStart + 300 : standardStart
+          return (rejected.mode != "quick5Minute" || remaining <= 300)
+            && rejected.timerStartCandidates.contains { abs(candidate - $0) < 0.001 }
+        }
+        if !matchingOverlappingCandidates.isEmpty {
+          let diagnosticStart =
+            matchingOverlappingCandidates.contains { $0.mode == "standard10Minute" }
+            ? standardStart : standardStart + 300
+          return MatchTimerDiagnostic(
+            recordingTimelineMilliseconds: diagnostic.recordingTimelineMilliseconds,
+            output: diagnostic.output, imageFileName: diagnostic.imageFileName,
+            confidence: diagnostic.confidence, remainingSeconds: remaining,
+            startCandidate: diagnosticStart, disposition: "excluded",
+            reason: "overlapsPreviousMatch")
+        }
         let matchingAmbiguousCandidates = rejectedContradictoryCandidates.filter { ambiguous in
           let candidate = ambiguous.mode == "quick5Minute" ? standardStart + 300 : standardStart
           return (ambiguous.mode != "quick5Minute" || remaining <= 300)

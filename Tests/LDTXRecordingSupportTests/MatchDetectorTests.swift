@@ -446,6 +446,37 @@ private func detectV2(
   #expect(result.matches.map(\.endEvidenceIds) == [["boundary"], ["later"]])
 }
 
+@Test func v2RetainsQuickCandidateAfterBoundarySurrenders() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+      timer(550_000, "05:00"), timer(560_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"boundary","recordingPTS":350,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-350.jpg"},{"evidenceId":"later","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [350, 500])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2ExcludesTimersForOverlappingRejectedCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "05:00"), timer(110_000, "04:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"), timer(370_000, "09:40"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-end","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-400.jpg"},{"evidenceId":"contradicted","recordingPTS":355,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-355.jpg"}"#
+    ))
+  #expect(result.matches.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["standard10Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["overlapsPreviousMatch"])
+  #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.disposition == "excluded" })
+  #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.reason == "overlapsPreviousMatch" })
+}
+
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
   let result = detectV2(
     [timer(410_000, "04:50"), timer(420_000, "04:40")],
