@@ -304,8 +304,10 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         guard lhs.mode != rhs.mode,
           max(lhs.start, rhs.start)
             < min(evidenceAdjustedEnds[left], evidenceAdjustedEnds[right]),
-          !usableMatchingByCandidate[left].isEmpty,
+          !usableMatchingByCandidate[left].isEmpty
+            || (lhs.completedStandard && matchingByCandidate[left].isEmpty),
           !usableMatchingByCandidate[right].isEmpty
+            || (rhs.completedStandard && matchingByCandidate[right].isEmpty)
         else { continue }
         ambiguousCandidates.formUnion([left, right])
       }

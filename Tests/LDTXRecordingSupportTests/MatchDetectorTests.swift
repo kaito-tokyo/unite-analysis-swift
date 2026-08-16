@@ -315,6 +315,17 @@ private func detectV2(
   #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
 }
 
+@Test func v2IncludesCompletedStandardInCrossModeArbitration() throws {
+  let result = detectV2(
+    [timer(390_000, "05:10"), timer(400_000, "05:00"), timer(410_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-end","recordingPTS":700,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-700.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.count == 2)
+  #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
+}
+
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
   let result = detectV2(
     [timer(410_000, "04:50"), timer(420_000, "04:40")],
