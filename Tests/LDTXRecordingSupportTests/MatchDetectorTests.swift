@@ -324,6 +324,19 @@ private func detectV2(
   #expect(result.matches.isEmpty)
   #expect(result.unclassifiedCandidates.count == 2)
   #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+}
+
+@Test func v2AdmitsSurrenderAtLastLateTimerTimestamp() throws {
+  let result = detectV2(
+    [timer(410_000, "04:50"), timer(420_000, "04:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":420,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-420.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.recordingPTSEnd == 420)
 }
 
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {

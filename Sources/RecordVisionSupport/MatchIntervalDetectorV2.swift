@@ -184,7 +184,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       let confidentlyStandard = cluster.contains { $0.1 > 300 }
       let declaredStandardSurrender = endEvidence.evidence.contains {
         $0.mode == "standard10Minute" && $0.kind == "surrender"
-          && $0.recordingPTS > latestObservationPTS && $0.recordingPTS < start + 600
+          && $0.recordingPTS >= latestObservationPTS && $0.recordingPTS < start + 600
       }
       guard confidentlyStandard || declaredStandardSurrender else { return nil }
       return Candidate(
@@ -200,7 +200,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         candidate.start + candidate.nominalDuration, nextStart ?? .infinity)
       let surrenders = endEvidence.evidence.filter {
         $0.mode == candidate.mode && $0.kind == "surrender"
-          && $0.recordingPTS > candidate.latestObservationPTS
+          && $0.recordingPTS >= candidate.latestObservationPTS
           && $0.recordingPTS < associationEnd
       }
       return (
@@ -431,7 +431,21 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
             abs(candidate - $0) < 0.001
           }
       }
-      guard let adopted else { return diagnostic }
+      guard let adopted else {
+        let belongsToAmbiguousCandidate = ambiguousCandidates.contains { index in
+          let ambiguous = candidates[index]
+          let candidate = ambiguous.mode == "quick5Minute" ? standardStart + 300 : standardStart
+          return (ambiguous.mode != "quick5Minute" || remaining <= 300)
+            && ambiguous.timerStartCandidates.contains { abs(candidate - $0) < 0.001 }
+        }
+        guard belongsToAmbiguousCandidate else { return diagnostic }
+        return MatchTimerDiagnostic(
+          recordingTimelineMilliseconds: diagnostic.recordingTimelineMilliseconds,
+          output: diagnostic.output, imageFileName: diagnostic.imageFileName,
+          confidence: diagnostic.confidence, remainingSeconds: remaining,
+          startCandidate: standardStart, disposition: "excluded",
+          reason: "contradictoryEvidence")
+      }
       return MatchTimerDiagnostic(
         recordingTimelineMilliseconds: diagnostic.recordingTimelineMilliseconds,
         output: diagnostic.output, imageFileName: diagnostic.imageFileName,
