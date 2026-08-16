@@ -168,6 +168,10 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           $0.1 == 600 && abs($0.0 - clusterStart) <= 5 && $0.0 <= clusterStart
         }.map(\.0).min()
         ?? clusterStart
+      let anchoredObservationCount = parsed.filter { value in
+        value.1 == 600 && abs(value.0 - clusterStart) <= 5 && value.0 <= clusterStart
+          && !cluster.contains { $0.0 == value.0 && $0.1 == value.1 }
+      }.count
       let latestObservationPTS =
         timerDiagnostics.compactMap { diagnostic -> Double? in
           guard let candidate = diagnostic.startCandidate,
@@ -183,7 +187,8 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       guard confidentlyStandard || declaredStandardSurrender else { return nil }
       return Candidate(
         start: start, nominalDuration: 600, mode: "standard10Minute",
-        observationCount: cluster.count, latestObservationPTS: latestObservationPTS,
+        observationCount: cluster.count + anchoredObservationCount,
+        latestObservationPTS: latestObservationPTS,
         completedStandard: confidentlyStandard && start + 600 <= recordingDuration)
     }
     let standardStarts = candidates.map { ($0.start, $0.start + $0.nominalDuration) }
@@ -227,7 +232,13 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
     var provisional: [(Candidate, Double, String, [String])] = []
     var unclassified: [UnclassifiedMatchCandidate] = []
 
-    for candidate in candidates {
+    for (candidateIndex, candidate) in candidates.enumerated() {
+      let nextSameModeStart = candidates.dropFirst(candidateIndex + 1).first {
+        $0.mode == candidate.mode && $0.start > candidate.start
+      }?.start
+      let associationEnd = min(
+        candidate.start + candidate.nominalDuration,
+        nextSameModeStart ?? .infinity)
       let matching = endEvidence.evidence.indices.filter { index in
         let value = endEvidence.evidence[index]
         guard value.mode == candidate.mode, Self.supportedModes.contains(value.mode) else {
@@ -236,7 +247,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         switch value.kind {
         case "surrender":
           return value.recordingPTS > candidate.start
-            && value.recordingPTS < candidate.start + candidate.nominalDuration
+            && value.recordingPTS < associationEnd
         case "matchEnd":
           return candidate.mode == "quick5Minute"
             && abs(value.recordingPTS - (candidate.start + candidate.nominalDuration)) <= 10
@@ -332,10 +343,12 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       guard let remaining = diagnostic.remainingSeconds,
         let standardStart = diagnostic.startCandidate
       else { return diagnostic }
+      let observationPTS = Double(diagnostic.recordingTimelineMilliseconds) / 1000
       let adopted = accepted.first { match in
         let candidate = match.mode == "quick5Minute" ? standardStart + 300 : standardStart
         let tolerance = match.mode == "standard10Minute" ? 5.0 : 2.0
         return (match.mode != "quick5Minute" || remaining <= 300)
+          && observationPTS <= match.recordingPTSEnd
           && abs(candidate - match.recordingPTSStart) <= tolerance
       }
       guard let adopted else { return diagnostic }

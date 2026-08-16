@@ -203,7 +203,31 @@ private func detectV2(
       #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
     ))
   #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.matches[1].observationCount == 3)
   #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.disposition == "accepted" })
+}
+
+@Test func v2DoesNotAcceptOffClusterTimerAfterSurrender() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(300_000, "06:35")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":200,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-200.jpg"}"#
+    ))
+  #expect(try #require(result.matches.first).recordingPTSEnd == 200)
+  #expect(result.timerDiagnostics.last?.disposition == "excluded")
+}
+
+@Test func v2BoundsSurrenderEvidenceAtNextSameModeCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"first","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"},{"evidenceId":"second","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [300, 500])
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
 }
 
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
