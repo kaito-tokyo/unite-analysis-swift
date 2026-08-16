@@ -108,16 +108,17 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
   public let unclassifiedCandidates: [UnclassifiedMatchCandidate]
 
   public init(
-    standardMatches: [DetectedMatch],
     timerDiagnostics: [MatchTimerDiagnostic],
-    endEvidence: MatchEndEvidenceDocument
+    endEvidence: MatchEndEvidenceDocument,
+    recordingDuration: Double = .infinity
   ) {
     struct Candidate {
       let start: Double
       let nominalDuration: Double
       let mode: String
       let observationCount: Int
-      let completedStandard: DetectedMatch?
+      let latestObservationPTS: Double
+      let completedStandard: Bool
     }
 
     let parsed = timerDiagnostics.compactMap { diagnostic -> (Double, Int)? in
@@ -153,22 +154,37 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
     }
 
     let standardClusters = clusters(parsed.filter { $0.0 >= 0 }).filter {
-      $0.count >= 2 && Set($0.map(\.1)).count >= 2 && $0.contains { $0.1 > 300 }
+      $0.count >= 2 && Set($0.map(\.1)).count >= 2
     }
     var quickClusters = clusters(
       parsed.filter { $0.1 <= 300 && $0.0 + 300 >= 0 }.map { ($0.0 + 300, $0.1) }
     )
     .filter { $0.count >= 2 && Set($0.map(\.1)).count >= 2 && $0.contains { $0.1 < 300 } }
 
-    var candidates = standardClusters.map { cluster in
+    var candidates = standardClusters.compactMap { cluster -> Candidate? in
       let clusterStart = median(cluster.map(\.0))
       let start =
-        cluster.filter { $0.1 == 600 && $0.0 <= clusterStart }.map(\.0).min()
+        parsed.filter {
+          $0.1 == 600 && abs($0.0 - clusterStart) <= 5 && $0.0 <= clusterStart
+        }.map(\.0).min()
         ?? clusterStart
-      let completed = standardMatches.first { abs($0.recordingPTSStart - start) <= 2 }
+      let latestObservationPTS =
+        timerDiagnostics.compactMap { diagnostic -> Double? in
+          guard let candidate = diagnostic.startCandidate,
+            cluster.contains(where: { abs($0.0 - candidate) < 0.001 })
+          else { return nil }
+          return Double(diagnostic.recordingTimelineMilliseconds) / 1000
+        }.max() ?? start
+      let confidentlyStandard = cluster.contains { $0.1 > 300 }
+      let declaredStandardSurrender = endEvidence.evidence.contains {
+        $0.mode == "standard10Minute" && $0.kind == "surrender"
+          && $0.recordingPTS > latestObservationPTS && $0.recordingPTS < start + 600
+      }
+      guard confidentlyStandard || declaredStandardSurrender else { return nil }
       return Candidate(
         start: start, nominalDuration: 600, mode: "standard10Minute",
-        observationCount: cluster.count, completedStandard: completed)
+        observationCount: cluster.count, latestObservationPTS: latestObservationPTS,
+        completedStandard: confidentlyStandard && start + 600 <= recordingDuration)
     }
     let standardStarts = candidates.map { ($0.start, $0.start + $0.nominalDuration) }
     quickClusters.removeAll { cluster in
@@ -187,7 +203,14 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         ?? clusterStart
       return Candidate(
         start: start, nominalDuration: 300, mode: "quick5Minute",
-        observationCount: cluster.count, completedStandard: nil)
+        observationCount: cluster.count,
+        latestObservationPTS: timerDiagnostics.compactMap { diagnostic -> Double? in
+          guard let candidate = diagnostic.startCandidate,
+            cluster.contains(where: { abs($0.0 - (candidate + 300)) < 0.001 })
+          else { return nil }
+          return Double(diagnostic.recordingTimelineMilliseconds) / 1000
+        }.max() ?? start,
+        completedStandard: false)
     }
     candidates.sort {
       $0.start < $1.start || ($0.start == $1.start && $0.nominalDuration > $1.nominalDuration)
@@ -220,8 +243,13 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         default: return false
         }
       }
-      let surrender = matching.filter { endEvidence.evidence[$0].kind == "surrender" }
-      let matchEnd = matching.filter { endEvidence.evidence[$0].kind == "matchEnd" }
+      let contradictorySurrender = matching.filter {
+        endEvidence.evidence[$0].kind == "surrender"
+          && endEvidence.evidence[$0].recordingPTS < candidate.latestObservationPTS
+      }
+      let usable = matching.filter { !contradictorySurrender.contains($0) }
+      let surrender = usable.filter { endEvidence.evidence[$0].kind == "surrender" }
+      let matchEnd = usable.filter { endEvidence.evidence[$0].kind == "matchEnd" }
       let selected: Int?
       let completion: String
       if surrender.count == 1 && matchEnd.isEmpty {
@@ -238,8 +266,8 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       if let selected {
         let value = endEvidence.evidence[selected]
         provisional.append((candidate, value.recordingPTS, completion, [value.evidenceId]))
-      } else if candidate.mode == "standard10Minute", let completed = candidate.completedStandard {
-        provisional.append((candidate, completed.recordingPTSEnd, "completed", []))
+      } else if candidate.mode == "standard10Minute", candidate.completedStandard {
+        provisional.append((candidate, candidate.start + 600, "completed", []))
         for index in matching {
           evidenceDiagnostics[index] = Self.diagnostic(
             endEvidence.evidence[index], reason: "contradictoryEvidence")

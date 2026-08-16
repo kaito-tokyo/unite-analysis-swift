@@ -20,13 +20,14 @@ private func endEvidence(_ items: String = "") throws -> MatchEndEvidenceDocumen
 }
 
 private func detectV2(
-  _ records: [MatchTimerObservation], evidence: MatchEndEvidenceDocument
+  _ records: [MatchTimerObservation], evidence: MatchEndEvidenceDocument,
+  recordingDuration: Double = .infinity
 ) -> MatchIntervalDetectionV2 {
-  let timerDetection = MatchTimerDetection(records: records)
+  let timerDetection = MatchTimerDetection(records: records, recordingDuration: recordingDuration)
   return MatchIntervalDetectionV2(
-    standardMatches: timerDetection.matches,
     timerDiagnostics: timerDetection.diagnostics,
-    endEvidence: evidence)
+    endEvidence: evidence,
+    recordingDuration: recordingDuration)
 }
 
 @Test func matchLayoutValidatesAndScalesTimerRectangle() throws {
@@ -132,6 +133,54 @@ private func detectV2(
   #expect(match.duration == 330)
   #expect(match.endEvidenceIds == ["surrender-1"])
   #expect(result.endEvidenceDiagnostics[0].disposition == "adopted")
+}
+
+@Test func v2RejectsSurrenderContradictedByLaterTimerObservation() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(300_000, "06:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"early-surrender","recordingPTS":200,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-200.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.completion == "completed")
+  #expect(match.recordingPTSEnd == 700)
+  #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
+}
+
+@Test func v2ReevaluatesStandardMatchAfterPreviousSurrender() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "10:00"), timer(460_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.matches.map(\.recordingPTSEnd) == [430, 1_050])
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
+}
+
+@Test func v2UsesCorroboratedTenMinuteAnchorWhenReevaluatingStandardMatch() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(108_000, "09:55"), timer(113_000, "09:50")],
+    evidence: try endEvidence())
+  let match = try #require(result.matches.first)
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 700)
+}
+
+@Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
+  let result = detectV2(
+    [timer(410_000, "04:50"), timer(420_000, "04:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"late-surrender","recordingPTS":430,"kind":"surrender","medium":"audio","mode":"standard10Minute","source":"audio:429-431"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 430)
+  #expect(result.unclassifiedCandidates.isEmpty)
 }
 
 @Test func v2ClassifiesFiveMinuteModeOnlyWithEndEvidence() throws {

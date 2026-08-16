@@ -56,6 +56,7 @@ struct DetectMatches: ParsableCommand {
     let mainMediaFile: String
     let layoutId: String
     let gameScreen: GameScreenRectangle
+    let recordingDuration: Double
     let matches: [DetectedMatch]
     let diagnostics: [MatchTimerDiagnostic]
     let auditContactSheet: MatchTimerAuditContactSheetResult?
@@ -179,7 +180,7 @@ struct DetectMatches: ParsableCommand {
     }
     let result = Output(
       source: "videoOCR", mainMediaFile: mainMediaFile, layoutId: matchLayout.layoutId,
-      gameScreen: gameScreen,
+      gameScreen: gameScreen, recordingDuration: videoDuration,
       matches: detection.matches, diagnostics: detection.diagnostics,
       auditContactSheet: auditResult)
     if let stagedAuditDirectory, let finalAuditDirectory {
