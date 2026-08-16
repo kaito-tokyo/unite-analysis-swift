@@ -194,11 +194,14 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         completedStandard: confidentlyStandard && start + 600 <= recordingDuration,
         timerStartCandidates: cluster.map(\.0) + anchors.map(\.0))
     }
-    let standardIntervals = candidates.map { candidate -> (Double, Double) in
+    let standardIntervals = candidates.enumerated().map { index, candidate -> (Double, Double) in
+      let nextStart = candidates.dropFirst(index + 1).first { $0.start > candidate.start }?.start
+      let associationEnd = min(
+        candidate.start + candidate.nominalDuration, nextStart ?? .infinity)
       let surrenders = endEvidence.evidence.filter {
         $0.mode == candidate.mode && $0.kind == "surrender"
           && $0.recordingPTS > candidate.latestObservationPTS
-          && $0.recordingPTS < candidate.start + candidate.nominalDuration
+          && $0.recordingPTS < associationEnd
       }
       return (
         candidate.start,
@@ -281,8 +284,13 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       }
     }
     let matchingByCandidate = candidates.indices.map(matchingEvidence)
+    let usableMatchingByCandidate = candidates.indices.map { index in
+      matchingByCandidate[index].filter {
+        endEvidence.evidence[$0].recordingPTS >= candidates[index].latestObservationPTS
+      }
+    }
     let evidenceAdjustedEnds = candidates.indices.map { index -> Double in
-      let matching = matchingByCandidate[index]
+      let matching = usableMatchingByCandidate[index]
       guard matching.count == 1 else {
         return candidates[index].start + candidates[index].nominalDuration
       }
@@ -296,7 +304,8 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         guard lhs.mode != rhs.mode,
           max(lhs.start, rhs.start)
             < min(evidenceAdjustedEnds[left], evidenceAdjustedEnds[right]),
-          !matchingByCandidate[left].isEmpty, !matchingByCandidate[right].isEmpty
+          !usableMatchingByCandidate[left].isEmpty,
+          !usableMatchingByCandidate[right].isEmpty
         else { continue }
         ambiguousCandidates.formUnion([left, right])
       }

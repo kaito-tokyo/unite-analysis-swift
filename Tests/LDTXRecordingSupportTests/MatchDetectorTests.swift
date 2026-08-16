@@ -288,6 +288,33 @@ private func detectV2(
   #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
 }
 
+@Test func v2BoundsPreliminaryStandardIntervalsAtNextCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+      timer(550_000, "05:00"), timer(560_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"first","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"},{"evidenceId":"second","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [300, 500])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2DiscardsContradictedEvidenceBeforeModeArbitration() throws {
+  let result = detectV2(
+    [timer(390_000, "05:10"), timer(400_000, "05:00"), timer(410_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"contradicted","recordingPTS":405,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-405.jpg"},{"evidenceId":"quick-end","recordingPTS":700,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-700.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.completion == "completed")
+  #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
+}
+
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
   let result = detectV2(
     [timer(410_000, "04:50"), timer(420_000, "04:40")],
