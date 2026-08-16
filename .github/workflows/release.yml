@@ -131,6 +131,7 @@ jobs:
   build:
     needs: [validate-release, check]
     uses: ./.github/workflows/swift.yml
+    secrets: inherit
     permissions:
       artifact-metadata: write
       attestations: write
