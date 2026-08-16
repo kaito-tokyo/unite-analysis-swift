@@ -339,6 +339,22 @@ private func detectV2(
   #expect(match.recordingPTSEnd == 420)
 }
 
+@Test func v2PrefersEvidencedSameModeResetOverEarlierNominalEnd() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"later-surrender","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [350])
+  #expect(result.matches.map(\.recordingPTSEnd) == [500])
+  #expect(result.unclassifiedCandidates.map(\.recordingPTSStart) == [100])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.timerDiagnostics.prefix(2).allSatisfy { $0.disposition == "excluded" })
+}
+
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
   let result = detectV2(
     [timer(410_000, "04:50"), timer(420_000, "04:40")],

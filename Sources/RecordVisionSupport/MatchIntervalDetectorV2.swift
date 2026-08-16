@@ -376,10 +376,35 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       }
     }
 
-    var accepted: [(match: DetectedMatchV2, candidate: Candidate)] = []
-    for (candidate, end, completion, evidenceIds) in provisional.sorted(by: {
+    let orderedProvisional = provisional.sorted(by: {
       $0.0.start < $1.0.start
-    }) {
+    })
+    var supersededProvisional = Set<Int>()
+    for earlier in orderedProvisional.indices where orderedProvisional[earlier].3.isEmpty {
+      let value = orderedProvisional[earlier]
+      if orderedProvisional.indices.contains(where: { later in
+        later > earlier && !orderedProvisional[later].3.isEmpty
+          && orderedProvisional[later].0.mode == value.0.mode
+          && orderedProvisional[later].0.start < value.1
+      }) {
+        supersededProvisional.insert(earlier)
+      }
+    }
+    var rejectedContradictoryCandidates = ambiguousCandidates.map { candidates[$0] }
+    var accepted: [(match: DetectedMatchV2, candidate: Candidate)] = []
+    for (provisionalIndex, value) in orderedProvisional.enumerated() {
+      let (candidate, end, completion, evidenceIds) = value
+      if supersededProvisional.contains(provisionalIndex) {
+        rejectedContradictoryCandidates.append(candidate)
+        unclassified.append(
+          .init(
+            recordingPTSStart: candidate.start,
+            nominalDuration: candidate.nominalDuration,
+            mode: candidate.mode,
+            observationCount: candidate.observationCount,
+            reason: "contradictoryEvidence"))
+        continue
+      }
       guard accepted.last.map({ candidate.start >= $0.match.recordingPTSEnd }) ?? true else {
         unclassified.append(
           .init(
@@ -432,8 +457,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           }
       }
       guard let adopted else {
-        let belongsToAmbiguousCandidate = ambiguousCandidates.contains { index in
-          let ambiguous = candidates[index]
+        let belongsToAmbiguousCandidate = rejectedContradictoryCandidates.contains { ambiguous in
           let candidate = ambiguous.mode == "quick5Minute" ? standardStart + 300 : standardStart
           return (ambiguous.mode != "quick5Minute" || remaining <= 300)
             && ambiguous.timerStartCandidates.contains { abs(candidate - $0) < 0.001 }
