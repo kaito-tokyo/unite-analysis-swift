@@ -48,32 +48,36 @@ jobs:
           if (-not $env:BRANCH_NAME.StartsWith($branchPrefix)) {
               throw 'Version bump branches must be named bump/<major>.<minor>.<patch>.'
           }
-          $nextVersion = $env:BRANCH_NAME.Substring($branchPrefix.Length)
-          if ($nextVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+          $releaseVersion = $env:BRANCH_NAME.Substring($branchPrefix.Length)
+          if ($releaseVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
               throw 'Version bump branches must be named bump/<major>.<minor>.<patch>.'
+          }
+          if ([version]$releaseVersion -le [version]$publishedVersion) {
+              throw "Release version $releaseVersion must be newer than published version $publishedVersion."
+          }
+          if ($publishedTags -contains "v$releaseVersion") {
+              throw "Release tag v$releaseVersion already exists."
           }
 
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "published_version=$publishedVersion" -Encoding utf8
-          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "next_version=$nextVersion" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "release_version=$releaseVersion" -Encoding utf8
 
       - name: Check versions
         if: startsWith(github.head_ref, 'bump/')
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          PUBLISHED: ${{ steps.versions.outputs.published_version }}
-          NEXT: ${{ steps.versions.outputs.next_version }}
+          RELEASE: ${{ steps.versions.outputs.release_version }}
         run: |
           require_version() {
             grep -Fq "$1" "$2" || { echo "Missing version $1 in $2." >&2; exit 1; }
           }
 
-          require_version "$PUBLISHED" docs/metadata/latest-version.txt
-
-          require_version "$NEXT" apm.yml
-          require_version "$NEXT" Contents/Info.plist
-          require_version "$NEXT" Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift
-          require_version "$NEXT" Sources/UniteAnalysisModelTool/UniteAnalysisModelToolCommand.swift
-          require_version "$NEXT" Tests/LDTXRecordingSupportTests/ModelToolTests.swift
+          require_version "$RELEASE" README.md
+          require_version "$RELEASE" apm.yml
+          require_version "$RELEASE" Contents/Info.plist
+          require_version "$RELEASE" Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift
+          require_version "$RELEASE" Sources/UniteAnalysisModelTool/UniteAnalysisModelToolCommand.swift
+          require_version "$RELEASE" Tests/LDTXRecordingSupportTests/ModelToolTests.swift
 
       - name: Pass unless bump PR
         if: "!startsWith(github.head_ref, 'bump/')"

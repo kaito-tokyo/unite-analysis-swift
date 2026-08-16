@@ -68,14 +68,50 @@ jobs:
         shell: bash --noprofile --norc -euo pipefail {0}
         run: apm pack --format plugin --offline --dry-run
 
-      - name: Check APM package version
-        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+      - name: Check release versions
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
-          $packageVersion = (ruby -ryaml -e 'version = YAML.safe_load(File.read("apm.yml"))["version"]; abort "Missing APM package version." unless version.is_a?(String); puts version').Trim()
-          $tagVersion = $env:GITHUB_REF_NAME.Substring(1)
-          if ($packageVersion -ne $tagVersion) {
-              throw "APM package version $packageVersion does not match tag version $tagVersion."
+          ruby <<'RUBY'
+          require "yaml"
+
+          expected = ENV.fetch("RELEASE_VERSION").delete_prefix("v")
+
+          def captured_version(path, pattern)
+            contents = File.read(path)
+            match = contents.match(pattern)
+            abort "Missing version field in #{path}." unless match
+            match[1]
+          end
+
+          versions = {
+            "README.md" => captured_version(
+              "README.md", %r{unite-analysis-swift#v([^`]+)}),
+            "apm.yml" => YAML.safe_load(File.read("apm.yml")).fetch("version"),
+            "Contents/Info.plist CFBundleShortVersionString" => captured_version(
+              "Contents/Info.plist",
+              %r{<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>}),
+            "Contents/Info.plist CFBundleVersion" => captured_version(
+              "Contents/Info.plist",
+              %r{<key>CFBundleVersion</key>\s*<string>([^<]+)</string>}),
+            "Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift" =>
+              captured_version(
+                "Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift",
+                /version:\s*"([^"]+)"/),
+            "Sources/UniteAnalysisModelTool/UniteAnalysisModelToolCommand.swift" =>
+              captured_version(
+                "Sources/UniteAnalysisModelTool/UniteAnalysisModelToolCommand.swift",
+                /version:\s*"([^"]+)"/),
+            "Tests/LDTXRecordingSupportTests/ModelToolTests.swift" => captured_version(
+              "Tests/LDTXRecordingSupportTests/ModelToolTests.swift",
+              /modelBuiltInCLIOutput\(arguments: \["--version"\]\) == "([^"]+)"/),
           }
+
+          versions.each do |location, actual|
+            abort "Version in #{location} is #{actual}; expected #{expected}." unless actual == expected
+          end
+          RUBY
 
       - name: Check if the release commit belongs to main
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
