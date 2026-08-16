@@ -388,6 +388,33 @@ private func detectV2(
   #expect(result.timerDiagnostics.prefix(2).allSatisfy { $0.disposition == "excluded" })
 }
 
+@Test func v2SupersedesSameModeResetBeforeCrossModeArbitration() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+      timer(550_000, "05:00"), timer(560_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"standard-surrender","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"},{"evidenceId":"quick-end","recordingPTS":850,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-850.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [350, 550])
+  #expect(result.matches.map(\.recordingPTSEnd) == [500, 850])
+  #expect(result.unclassifiedCandidates.map(\.recordingPTSStart) == [100])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+}
+
+@Test func v2DoesNotCompleteStandardWithMultipleUsableSurrenders() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(400_000, "05:00")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"visual","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"},{"evidenceId":"audio","recordingPTS":431,"kind":"surrender","medium":"audio","mode":"standard10Minute","source":"audio:430-432"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+}
+
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
   let result = detectV2(
     [timer(410_000, "04:50"), timer(420_000, "04:40")],

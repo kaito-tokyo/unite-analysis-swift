@@ -289,6 +289,18 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         endEvidence.evidence[$0].recordingPTS >= candidates[index].latestObservationPTS
       }
     }
+    var supersededCandidates = Set<Int>()
+    for earlier in candidates.indices
+    where candidates[earlier].completedStandard && usableMatchingByCandidate[earlier].isEmpty {
+      if candidates.indices.contains(where: { later in
+        later > earlier && candidates[later].mode == candidates[earlier].mode
+          && usableMatchingByCandidate[later].count == 1
+          && candidates[later].start
+            < candidates[earlier].start + candidates[earlier].nominalDuration
+      }) {
+        supersededCandidates.insert(earlier)
+      }
+    }
     let evidenceAdjustedEnds = candidates.indices.map { index -> Double in
       let matching = usableMatchingByCandidate[index]
       guard matching.count == 1 else {
@@ -299,6 +311,9 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
     var ambiguousCandidates = Set<Int>()
     for left in candidates.indices {
       for right in candidates.indices where right > left {
+        guard !supersededCandidates.contains(left), !supersededCandidates.contains(right) else {
+          continue
+        }
         let lhs = candidates[left]
         let rhs = candidates[right]
         guard lhs.mode != rhs.mode,
@@ -315,6 +330,20 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
 
     for (candidateIndex, candidate) in candidates.enumerated() {
       let matching = matchingByCandidate[candidateIndex]
+      if supersededCandidates.contains(candidateIndex) {
+        unclassified.append(
+          .init(
+            recordingPTSStart: candidate.start,
+            nominalDuration: candidate.nominalDuration,
+            mode: candidate.mode,
+            observationCount: candidate.observationCount,
+            reason: "contradictoryEvidence"))
+        for index in matching {
+          evidenceDiagnostics[index] = Self.diagnostic(
+            endEvidence.evidence[index], reason: "contradictoryEvidence")
+        }
+        continue
+      }
       if ambiguousCandidates.contains(candidateIndex) {
         unclassified.append(
           .init(
@@ -355,7 +384,9 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           evidenceDiagnostics[index] = Self.diagnostic(
             endEvidence.evidence[index], reason: "contradictoryEvidence")
         }
-      } else if candidate.mode == "standard10Minute", candidate.completedStandard {
+      } else if candidate.mode == "standard10Minute", candidate.completedStandard,
+        usable.isEmpty
+      {
         provisional.append((candidate, candidate.start + 600, "completed", []))
         for index in matching {
           evidenceDiagnostics[index] = Self.diagnostic(
@@ -390,7 +421,8 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         supersededProvisional.insert(earlier)
       }
     }
-    var rejectedContradictoryCandidates = ambiguousCandidates.map { candidates[$0] }
+    var rejectedContradictoryCandidates =
+      (ambiguousCandidates.union(supersededCandidates)).map { candidates[$0] }
     var accepted: [(match: DetectedMatchV2, candidate: Candidate)] = []
     for (provisionalIndex, value) in orderedProvisional.enumerated() {
       let (candidate, end, completion, evidenceIds) = value
