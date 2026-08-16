@@ -94,7 +94,7 @@ private func registeredCommands(
     AudioPeaks.configuration.commandName,
     EventDetect.configuration.commandName,
     OCRCommand.configuration.commandName,
-    ScanResultCommand.configuration.commandName,
+    RecognizeResultCommand.configuration.commandName,
     RecognizeDraftLoadout.configuration.commandName,
     RecognizeBlindLoadout.configuration.commandName,
   ].compactMap { $0 }
@@ -104,7 +104,8 @@ private func registeredCommands(
       "asr-v1", "audio-peaks-v1", "detect-chroma-events-v1", "detect-matches-v1",
       "detect-matches-v2",
       "event-detect-v1",
-      "ocr-v1", "recognize-blind-loadout-v1", "recognize-draft-loadout-v1", "scan-result-v1",
+      "ocr-v1", "recognize-blind-loadout-v1", "recognize-draft-loadout-v1",
+      "recognize-result-v1",
     ])
   #expect(
     names.allSatisfy {
@@ -150,9 +151,9 @@ private func registeredCommands(
     ]) is OCRCommand)
   #expect(
     try UniteAnalysisSwiftCommand.parseAsRoot([
-      "scan-result-v1", "result.jpg", "--type", "summary", "--ocr-options",
+      "recognize-result-v1", "result.jpg", "--type", "summary", "--ocr-options",
       "ocr-options.json",
-    ]) is ScanResultCommand)
+    ]) is RecognizeResultCommand)
   #expect(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "recognize-draft-loadout-v1", "--input", "recording.ldtxrecord", "--final-prep-time",
@@ -162,6 +163,17 @@ private func registeredCommands(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "recognize-blind-loadout-v1", "--input", "recording.ldtxrecord", "--prep-time", "1",
     ]) is RecognizeBlindLoadout)
+}
+
+@Test func deprecatedScanResultAliasParsesAndProvidesCanonicalHelp() throws {
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "scan-result-v1", "result.jpg", "--type", "summary", "--ocr-options",
+      "ocr-options.json",
+    ]) is RecognizeResultCommand)
+  let help = builtInCLIOutput(arguments: ["scan-result-v1", "--help"])
+  #expect(help?.contains("recognize-result-v1") == true)
+  #expect(help?.contains("deprecated alias") == true)
 }
 
 @Test func unversionedAnalysisCommandNamesAreRejected() {
@@ -524,7 +536,7 @@ func frameBurstJobRejectsRemovedLayoutProperties(property: String) throws {
   #expect(versionRecords == [["text": UniteAnalysisSwiftCommand.configuration.version]])
 }
 
-@Test(arguments: ["ocr-v1", "scan-result-v1"])
+@Test(arguments: ["ocr-v1", "recognize-result-v1"])
 func writingCommandsParseForceFlag(commandName: String) throws {
   let arguments =
     commandName == "ocr-v1"
@@ -533,7 +545,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
       "--force",
     ]
     : [
-      "scan-result-v1", "result.jpg", "--type", "summary", "--ocr-options", "ocr-options.json",
+      "recognize-result-v1", "result.jpg", "--type", "summary", "--ocr-options", "ocr-options.json",
       "--output", "result.json", "--force",
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
@@ -541,7 +553,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   if let command = parsed as? OCRCommand {
     #expect(command.force)
   } else {
-    #expect(try #require(parsed as? ScanResultCommand).force)
+    #expect(try #require(parsed as? RecognizeResultCommand).force)
   }
 }
 
@@ -562,7 +574,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
     """.utf8
   ).write(to: optionsURL)
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", optionsURL.path,
+    "recognize-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", optionsURL.path,
   ])
 
   await #expect(throws: UniteAnalysisSwiftToolError.self) {
@@ -709,7 +721,7 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   #expect(try Data(contentsOf: output) == expected)
 }
 
-@Test(arguments: ["ocr-v1", "scan-result-v1"])
+@Test(arguments: ["ocr-v1", "recognize-result-v1"])
 func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -722,7 +734,7 @@ func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
       "--force",
     ]
     : [
-      "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "recognize-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
       "--output", output.path, "--force",
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
@@ -735,7 +747,7 @@ func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
   }
 }
 
-@Test(arguments: ["ocr-v1", "scan-result-v1"])
+@Test(arguments: ["ocr-v1", "recognize-result-v1"])
 func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -745,7 +757,7 @@ func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) asy
     commandName == "ocr-v1"
     ? ["ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
     : [
-      "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "recognize-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
       "--output", output.path,
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
@@ -756,7 +768,7 @@ func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) asy
   #expect(try Data(contentsOf: output) == Data("original\n".utf8))
 }
 
-@Test(arguments: ["ocr-v1", "scan-result-v1"])
+@Test(arguments: ["ocr-v1", "recognize-result-v1"])
 func writingCommandsRejectExistingOutputBeforeProcessing(commandName: String) async throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -766,7 +778,7 @@ func writingCommandsRejectExistingOutputBeforeProcessing(commandName: String) as
     commandName == "ocr-v1"
     ? ["ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
     : [
-      "scan-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
+      "recognize-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
       "--output", output.path,
     ]
   let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)

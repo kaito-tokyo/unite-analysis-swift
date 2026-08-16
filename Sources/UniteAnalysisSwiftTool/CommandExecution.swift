@@ -43,7 +43,7 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["event-detect-v1"]: EventDetect.self
     case ["extract-clip"]: ExtractClip.self
     case ["ocr-v1"]: OCRCommand.self
-    case ["scan-result-v1"]: ScanResultCommand.self
+    case ["recognize-result-v1"], ["scan-result-v1"]: RecognizeResultCommand.self
     case ["recognize-draft-loadout-v1"]: RecognizeDraftLoadout.self
     case ["recognize-blind-loadout-v1"]: RecognizeBlindLoadout.self
     case ["eval-draw-text-script"]: EvaluateDrawText.self
@@ -195,7 +195,7 @@ package func executeCLI(
     }
     try writer.finish()
 
-  case let command as ScanResultCommand:
+  case let command as RecognizeResultCommand:
     guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {
