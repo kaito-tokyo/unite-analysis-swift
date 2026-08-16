@@ -10,6 +10,26 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   .init(recordingTimelineMilliseconds: milliseconds, output: output)
 }
 
+private func endEvidence(_ items: String = "") throws -> MatchEndEvidenceDocument {
+  try JSONDecoder().decode(
+    MatchEndEvidenceDocument.self,
+    from: Data(
+      """
+      {"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[\(items)]}
+      """.utf8))
+}
+
+private func detectV2(
+  _ records: [MatchTimerObservation], evidence: MatchEndEvidenceDocument,
+  recordingDuration: Double = .infinity
+) -> MatchIntervalDetectionV2 {
+  let timerDetection = MatchTimerDetection(records: records, recordingDuration: recordingDuration)
+  return MatchIntervalDetectionV2(
+    timerDiagnostics: timerDetection.diagnostics,
+    endEvidence: evidence,
+    recordingDuration: recordingDuration)
+}
+
 @Test func matchLayoutValidatesAndScalesTimerRectangle() throws {
   let layout = MatchTimerLayout(
     schema: MatchTimerLayout.schemaURL,
@@ -86,6 +106,456 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(match.recordingPTSStart == 100)
   #expect(match.recordingPTSEnd == 700)
   #expect(match.observationCount == 4)
+}
+
+@Test func v2PreservesCompletedStandardMatchWithoutEndEvidence() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(400_000, "05:00")],
+    evidence: try endEvidence())
+  let match = try #require(result.matches.first)
+  #expect(result.matches.count == 1)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.completion == "completed")
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 700)
+  #expect(result.unclassifiedCandidates.isEmpty)
+}
+
+@Test func v2RequiresDeclaredSurrenderEvidenceToShortenStandardMatch() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender-1","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.completion == "surrendered")
+  #expect(match.recordingPTSEnd == 430)
+  #expect(match.duration == 330)
+  #expect(match.endEvidenceIds == ["surrender-1"])
+  #expect(result.endEvidenceDiagnostics[0].disposition == "adopted")
+}
+
+@Test func v2RejectsSurrenderContradictedByLaterTimerObservation() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(300_000, "06:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"early-surrender","recordingPTS":200,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-200.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.completion == "completed")
+  #expect(match.recordingPTSEnd == 700)
+  #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
+}
+
+@Test func v2RejectsQuickMatchEndContradictedByLaterTimerObservation() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(110_000, "04:50"), timer(395_000, "00:05")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"early-end","recordingPTS":390,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-390.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
+}
+
+@Test func v2RetainsFilteredEvidenceReasonWhenAdoptingLaterSurrender() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(300_000, "06:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"early","recordingPTS":200,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-200.jpg"},{"evidenceId":"valid","recordingPTS":400,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-400.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.recordingPTSEnd == 400)
+  #expect(
+    result.endEvidenceDiagnostics.map(\.reason) == ["contradictoryEvidence", "definesMatchEnd"])
+}
+
+@Test func v2ReevaluatesStandardMatchAfterPreviousSurrender() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "10:00"), timer(460_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.matches.map(\.recordingPTSEnd) == [430, 1_050])
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
+}
+
+@Test func v2UsesCorroboratedTenMinuteAnchorWhenReevaluatingStandardMatch() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(108_000, "09:55"), timer(113_000, "09:50")],
+    evidence: try endEvidence())
+  let match = try #require(result.matches.first)
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 700)
+}
+
+@Test func v2AcceptsDiagnosticsFromReevaluatedAnchoredCluster() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "10:00"), timer(458_000, "09:55"), timer(463_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.matches[1].observationCount == 3)
+  #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.disposition == "accepted" })
+}
+
+@Test func v2DoesNotAcceptOffClusterTimerAfterSurrender() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(300_000, "06:35")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":200,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-200.jpg"}"#
+    ))
+  #expect(try #require(result.matches.first).recordingPTSEnd == 200)
+  #expect(result.timerDiagnostics.last?.disposition == "excluded")
+}
+
+@Test func v2DoesNotAcceptPreEndTimerOutsideAdoptedCluster() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(295_000, "06:48")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"}"#
+    ))
+  #expect(result.timerDiagnostics.last?.disposition == "excluded")
+}
+
+@Test func v2BoundsSurrenderEvidenceAtNextSameModeCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"first","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"},{"evidenceId":"second","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [300, 500])
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
+}
+
+@Test func v2LeavesConflictingCrossModeInterpretationsUnclassified() throws {
+  let result = detectV2(
+    [timer(400_000, "05:00"), timer(410_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"standard-end","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"},{"evidenceId":"quick-end","recordingPTS":700,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-700.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.count == 2)
+  #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
+}
+
+@Test func v2BoundsMatchEndEvidenceAtNextQuickCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "05:00"), timer(110_000, "04:50"),
+      timer(395_000, "05:00"), timer(405_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"displaced","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-400.jpg"},{"evidenceId":"second","recordingPTS":695,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-695.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [395])
+  #expect(result.matches.map(\.recordingPTSEnd) == [695])
+}
+
+@Test func v2AnchorsQuickMatchToCorroboratingFiveMinuteObservation() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(108_000, "04:55"), timer(113_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"end","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-400.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.observationCount == 3)
+  #expect(result.timerDiagnostics.map(\.startCandidate) == [100, 103, 103])
+}
+
+@Test func v2AppliesQuickAnchorBeforeStandardPruning() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(458_000, "04:55"), timer(463_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-surrender","recordingPTS":451,"kind":"surrender","medium":"visual","mode":"quick5Minute","source":"frame-451.jpg"}"#
+    ))
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics.map(\.reason) == ["contradictoryEvidence"])
+}
+
+@Test func v2RetainsQuickCandidateAfterSurrenderedStandardMatch() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(460_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [430])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2BoundsPreliminaryStandardIntervalsAtNextCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+      timer(550_000, "05:00"), timer(560_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"first","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"},{"evidenceId":"second","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [300, 500])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2RetainsQuickCandidateBehindUnresolvedStandard() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(460_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"first","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"},{"evidenceId":"second","recordingPTS":400,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-400.jpg"}"#
+    ),
+    recordingDuration: 550)
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["standard10Minute", "quick5Minute"])
+  #expect(
+    result.unclassifiedCandidates.map(\.reason) == [
+      "contradictoryEvidence", "missingEndEvidence",
+    ])
+}
+
+@Test func v2DiscardsContradictedEvidenceBeforeModeArbitration() throws {
+  let result = detectV2(
+    [timer(390_000, "05:10"), timer(400_000, "05:00"), timer(410_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"contradicted","recordingPTS":405,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-405.jpg"},{"evidenceId":"quick-end","recordingPTS":700,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-700.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.completion == "completed")
+  #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
+}
+
+@Test func v2IncludesCompletedStandardInCrossModeArbitration() throws {
+  let result = detectV2(
+    [timer(390_000, "05:10"), timer(400_000, "05:00"), timer(410_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-end","recordingPTS":700,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-700.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.count == 2)
+  #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.map(\.startCandidate) == [100, 100, 100])
+}
+
+@Test func v2AdmitsSurrenderAtLastLateTimerTimestamp() throws {
+  let result = detectV2(
+    [timer(410_000, "04:50"), timer(420_000, "04:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":420,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-420.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.recordingPTSEnd == 420)
+}
+
+@Test func v2PrefersEvidencedSameModeResetOverEarlierNominalEnd() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"later-surrender","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [350])
+  #expect(result.matches.map(\.recordingPTSEnd) == [500])
+  #expect(result.unclassifiedCandidates.map(\.recordingPTSStart) == [100])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.timerDiagnostics.prefix(2).allSatisfy { $0.disposition == "excluded" })
+}
+
+@Test func v2SupersedesSameModeResetBeforeCrossModeArbitration() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+      timer(550_000, "05:00"), timer(560_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"standard-surrender","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"},{"evidenceId":"quick-end","recordingPTS":850,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-850.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [350, 550])
+  #expect(result.matches.map(\.recordingPTSEnd) == [500, 850])
+  #expect(result.unclassifiedCandidates.map(\.recordingPTSStart) == [100])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+}
+
+@Test func v2DoesNotCompleteStandardWithMultipleUsableSurrenders() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(400_000, "05:00")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"visual","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"},{"evidenceId":"audio","recordingPTS":431,"kind":"surrender","medium":"audio","mode":"standard10Minute","source":"audio:430-432"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
+}
+
+@Test func v2SupersedesNominalMatchForConflictedResetEvidence() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"visual","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"},{"evidenceId":"audio","recordingPTS":501,"kind":"surrender","medium":"audio","mode":"standard10Minute","source":"audio:500-502"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.recordingPTSStart) == [100, 350])
+  #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
+}
+
+@Test func v2AssignsBoundarySurrenderToEndingCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"boundary","recordingPTS":350,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-350.jpg"},{"evidenceId":"later","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 350])
+  #expect(result.matches.map(\.recordingPTSEnd) == [350, 500])
+  #expect(result.matches.map(\.endEvidenceIds) == [["boundary"], ["later"]])
+}
+
+@Test func v2RetainsQuickCandidateAfterBoundarySurrenders() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+      timer(550_000, "05:00"), timer(560_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"boundary","recordingPTS":350,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-350.jpg"},{"evidenceId":"later","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSEnd) == [350, 500])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2ExcludesTimersForOverlappingRejectedCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "05:00"), timer(110_000, "04:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"), timer(370_000, "09:40"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-end","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-400.jpg"},{"evidenceId":"contradicted","recordingPTS":355,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-355.jpg"}"#
+    ))
+  #expect(result.matches.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["standard10Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["overlapsPreviousMatch"])
+  #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.disposition == "excluded" })
+  #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.reason == "overlapsPreviousMatch" })
+}
+
+@Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {
+  let result = detectV2(
+    [timer(410_000, "04:50"), timer(420_000, "04:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"late-surrender","recordingPTS":430,"kind":"surrender","medium":"audio","mode":"standard10Minute","source":"audio:429-431"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 430)
+  #expect(result.unclassifiedCandidates.isEmpty)
+}
+
+@Test func v2ClassifiesFiveMinuteModeOnlyWithEndEvidence() throws {
+  let records = [timer(100_000, "05:00"), timer(110_000, "04:50"), timer(125_000, "04:35")]
+  let missing = detectV2(records, evidence: try endEvidence())
+  #expect(missing.matches.isEmpty)
+  #expect(missing.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+
+  let completed = detectV2(
+    records,
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-end","recordingPTS":400,"kind":"matchEnd","medium":"audio","mode":"quick5Minute","source":"audio:399-401"}"#
+    ))
+  let match = try #require(completed.matches.first)
+  #expect(match.mode == "quick5Minute")
+  #expect(match.completion == "completed")
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 400)
+  #expect(completed.timerDiagnostics.allSatisfy { $0.disposition == "accepted" })
+  #expect(completed.timerDiagnostics.allSatisfy { $0.reason == "consistentQuickMatchCluster" })
+}
+
+@Test func v2EndEvidenceRejectsUnknownKeys() {
+  let documents = [
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[],"extra":true}"#,
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[{"evidenceId":"end","recordingPTS":300,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame.jpg","extra":true}]}"#,
+  ]
+  for document in documents {
+    #expect(throws: DecodingError.self) {
+      _ = try JSONDecoder().decode(MatchEndEvidenceDocument.self, from: Data(document.utf8))
+    }
+  }
+}
+
+@Test func v2DoesNotGuessContradictoryNonstandardEnd() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(110_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"visual-end","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-400.jpg"},{"evidenceId":"audio-end","recordingPTS":401,"kind":"matchEnd","medium":"audio","mode":"quick5Minute","source":"audio:400-402"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+}
+
+@Test func v2RetainsUnsupportedEvidenceWithoutClassifyingMatch() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(110_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"unsupported","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"eventMode","source":"frame-400.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.endEvidenceDiagnostics[0].reason == "unsupportedMode")
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2SeparatesSurrenderAndAdjacentQuickMatchWithContiguousIDs() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(460_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"},{"evidenceId":"quick-end","recordingPTS":750,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-750.jpg"}"#
+    ))
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.matches.map(\.recordingPTSEnd) == [430, 750])
 }
 
 @Test func separatesMatchesAndRejectsResetAdjacentOutlier() throws {

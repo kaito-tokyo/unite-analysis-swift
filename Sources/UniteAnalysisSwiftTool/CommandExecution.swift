@@ -39,6 +39,7 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["asr-v1"]: ASRCommand.self
     case ["install-asr-assets-v1"]: InstallASRAssets.self
     case ["detect-matches-v1"]: DetectMatches.self
+    case ["detect-matches-v2"]: DetectMatchesV2.self
     case ["event-detect-v1"]: EventDetect.self
     case ["extract-clip"]: ExtractClip.self
     case ["ocr-v1"]: OCRCommand.self
@@ -83,6 +84,17 @@ package func executeCLI(
     }
 
   case let command as DetectMatches:
+    guard mode == .execute else { return }
+    try validateOutputPath(command.output.map(resolvePath), force: command.force)
+    for try await record in command.outputRecords() {
+      let data = try prettyPrintedJSONData(record)
+      if let output = command.output {
+        try writeOutputData(data, to: resolvePath(output), force: command.force)
+      }
+      try FileHandle.standardOutput.write(contentsOf: data)
+    }
+
+  case let command as DetectMatchesV2:
     guard mode == .execute else { return }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {

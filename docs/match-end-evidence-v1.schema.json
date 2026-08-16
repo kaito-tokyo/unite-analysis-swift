@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json",
+  "title": "Declared visual or audio match-end evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidenceId",
+          "recordingPTS",
+          "kind",
+          "medium",
+          "mode",
+          "source"
+        ],
+        "properties": {
+          "evidenceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recordingPTS": {
+            "type": "number",
+            "minimum": 0
+          },
+          "kind": {
+            "enum": [
+              "matchEnd",
+              "surrender"
+            ]
+          },
+          "medium": {
+            "enum": [
+              "visual",
+              "audio"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Initially supported values are standard10Minute and quick5Minute. Other declared values are retained as unsupported evidence."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Caller-declared source-frame, clip, audio interval, or recognizer reference."
+          }
+        }
+      }
+    }
+  }
+}
