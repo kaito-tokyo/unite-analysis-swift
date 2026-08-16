@@ -359,6 +359,7 @@ private func detectV2(
   #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
   #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
   #expect(result.timerDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.map(\.startCandidate) == [100, 100, 100])
 }
 
 @Test func v2AdmitsSurrenderAtLastLateTimerTimestamp() throws {
@@ -413,6 +414,36 @@ private func detectV2(
   #expect(result.matches.isEmpty)
   #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
   #expect(result.endEvidenceDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
+}
+
+@Test func v2SupersedesNominalMatchForConflictedResetEvidence() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"visual","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"},{"evidenceId":"audio","recordingPTS":501,"kind":"surrender","medium":"audio","mode":"standard10Minute","source":"audio:500-502"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.recordingPTSStart) == [100, 350])
+  #expect(result.unclassifiedCandidates.allSatisfy { $0.reason == "contradictoryEvidence" })
+  #expect(result.timerDiagnostics.allSatisfy { $0.disposition == "excluded" })
+}
+
+@Test func v2AssignsBoundarySurrenderToEndingCandidate() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(350_000, "10:00"), timer(360_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"boundary","recordingPTS":350,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-350.jpg"},{"evidenceId":"later","recordingPTS":500,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-500.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 350])
+  #expect(result.matches.map(\.recordingPTSEnd) == [350, 500])
+  #expect(result.matches.map(\.endEvidenceIds) == [["boundary"], ["later"]])
 }
 
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {

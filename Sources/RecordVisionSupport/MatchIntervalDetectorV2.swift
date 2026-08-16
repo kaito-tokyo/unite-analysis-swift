@@ -274,7 +274,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         switch value.kind {
         case "surrender":
           return value.recordingPTS > candidate.start
-            && value.recordingPTS < associationEnd
+            && value.recordingPTS <= associationEnd
         case "matchEnd":
           return candidate.mode == "quick5Minute"
             && value.recordingPTS <= matchEndAssociationEnd
@@ -294,7 +294,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
     where candidates[earlier].completedStandard && usableMatchingByCandidate[earlier].isEmpty {
       if candidates.indices.contains(where: { later in
         later > earlier && candidates[later].mode == candidates[earlier].mode
-          && usableMatchingByCandidate[later].count == 1
+          && !usableMatchingByCandidate[later].isEmpty
           && candidates[later].start
             < candidates[earlier].start + candidates[earlier].nominalDuration
       }) {
@@ -328,6 +328,8 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       }
     }
 
+    var rejectedContradictoryCandidates =
+      (ambiguousCandidates.union(supersededCandidates)).map { candidates[$0] }
     for (candidateIndex, candidate) in candidates.enumerated() {
       let matching = matchingByCandidate[candidateIndex]
       if supersededCandidates.contains(candidateIndex) {
@@ -393,6 +395,9 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
             endEvidence.evidence[index], reason: "contradictoryEvidence")
         }
       } else {
+        if !matching.isEmpty {
+          rejectedContradictoryCandidates.append(candidate)
+        }
         unclassified.append(
           .init(
             recordingPTSStart: candidate.start,
@@ -421,8 +426,6 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         supersededProvisional.insert(earlier)
       }
     }
-    var rejectedContradictoryCandidates =
-      (ambiguousCandidates.union(supersededCandidates)).map { candidates[$0] }
     var accepted: [(match: DetectedMatchV2, candidate: Candidate)] = []
     for (provisionalIndex, value) in orderedProvisional.enumerated() {
       let (candidate, end, completion, evidenceIds) = value
@@ -489,14 +492,15 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           }
       }
       guard let adopted else {
-        let ambiguousCandidate = rejectedContradictoryCandidates.first { ambiguous in
+        let matchingAmbiguousCandidates = rejectedContradictoryCandidates.filter { ambiguous in
           let candidate = ambiguous.mode == "quick5Minute" ? standardStart + 300 : standardStart
           return (ambiguous.mode != "quick5Minute" || remaining <= 300)
             && ambiguous.timerStartCandidates.contains { abs(candidate - $0) < 0.001 }
         }
-        guard let ambiguousCandidate else { return diagnostic }
+        guard !matchingAmbiguousCandidates.isEmpty else { return diagnostic }
         let diagnosticStart =
-          ambiguousCandidate.mode == "quick5Minute" ? standardStart + 300 : standardStart
+          matchingAmbiguousCandidates.contains { $0.mode == "standard10Minute" }
+          ? standardStart : standardStart + 300
         return MatchTimerDiagnostic(
           recordingTimelineMilliseconds: diagnostic.recordingTimelineMilliseconds,
           output: diagnostic.output, imageFileName: diagnostic.imageFileName,
