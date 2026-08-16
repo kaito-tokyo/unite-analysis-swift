@@ -72,6 +72,7 @@ struct DetectMatchesV2: ParsableCommand {
       throw UniteAnalysisSwiftToolError.message(
         "match end evidence $schema must be '\(MatchEndEvidenceDocument.schemaURL)'")
     }
+    try Self.validateEvidence(evidence)
     var v1 = DetectMatches()
     v1.input = input
     v1.layout = layout
@@ -80,7 +81,7 @@ struct DetectMatchesV2: ParsableCommand {
     v1.auditId = nil
     v1.force = false
     let base = try await v1.result()
-    try Self.validateEvidence(evidence, recordingDuration: base.recordingDuration)
+    try Self.validateEvidenceTimestamps(evidence, recordingDuration: base.recordingDuration)
     let detection = MatchIntervalDetectionV2(
       timerDiagnostics: base.diagnostics,
       endEvidence: evidence, recordingDuration: base.recordingDuration)
@@ -92,22 +93,28 @@ struct DetectMatchesV2: ParsableCommand {
       unclassifiedCandidates: detection.unclassifiedCandidates)
   }
 
-  static func validateEvidence(
-    _ evidence: MatchEndEvidenceDocument, recordingDuration: Double
-  ) throws {
+  static func validateEvidence(_ evidence: MatchEndEvidenceDocument) throws {
     var evidenceIds = Set<String>()
     for value in evidence.evidence {
       guard !value.evidenceId.isEmpty, evidenceIds.insert(value.evidenceId).inserted,
         value.recordingPTS.isFinite, value.recordingPTS >= 0,
-        value.recordingPTS <= recordingDuration,
         ["matchEnd", "surrender"].contains(value.kind),
         ["visual", "audio"].contains(value.medium),
         !value.mode.isEmpty, !value.source.isEmpty
       else {
         throw UniteAnalysisSwiftToolError.message(
-          "Match end evidence requires unique non-empty IDs, PTS within the recording, declared kind, medium, mode, and source"
+          "Match end evidence requires unique non-empty IDs, finite nonnegative PTS, declared kind, medium, mode, and source"
         )
       }
+    }
+  }
+
+  static func validateEvidenceTimestamps(
+    _ evidence: MatchEndEvidenceDocument, recordingDuration: Double
+  ) throws {
+    guard evidence.evidence.allSatisfy({ $0.recordingPTS <= recordingDuration }) else {
+      throw UniteAnalysisSwiftToolError.message(
+        "Match end evidence PTS must be within the recording")
     }
   }
 }

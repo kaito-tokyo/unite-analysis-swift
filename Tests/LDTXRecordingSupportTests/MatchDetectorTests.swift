@@ -147,6 +147,29 @@ private func detectV2(
   #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
 }
 
+@Test func v2RejectsQuickMatchEndContradictedByLaterTimerObservation() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(110_000, "04:50"), timer(395_000, "00:05")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"early-end","recordingPTS":390,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-390.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics[0].reason == "contradictoryEvidence")
+}
+
+@Test func v2RetainsFilteredEvidenceReasonWhenAdoptingLaterSurrender() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(300_000, "06:40")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"early","recordingPTS":200,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-200.jpg"},{"evidenceId":"valid","recordingPTS":400,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-400.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.recordingPTSEnd == 400)
+  #expect(
+    result.endEvidenceDiagnostics.map(\.reason) == ["contradictoryEvidence", "definesMatchEnd"])
+}
+
 @Test func v2ReevaluatesStandardMatchAfterPreviousSurrender() throws {
   let result = detectV2(
     [
@@ -168,6 +191,19 @@ private func detectV2(
   let match = try #require(result.matches.first)
   #expect(match.recordingPTSStart == 100)
   #expect(match.recordingPTSEnd == 700)
+}
+
+@Test func v2AcceptsDiagnosticsFromReevaluatedAnchoredCluster() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "10:00"), timer(458_000, "09:55"), timer(463_000, "09:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.timerDiagnostics.suffix(3).allSatisfy { $0.disposition == "accepted" })
 }
 
 @Test func v2UsesDeclaredModeToRecoverLateStandardCountdown() throws {

@@ -26,7 +26,18 @@ import Testing
       #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[{"evidenceId":"end","recordingPTS":101,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame.jpg"}]}"#
         .utf8))
   #expect(throws: UniteAnalysisSwiftToolError.self) {
-    try DetectMatchesV2.validateEvidence(evidence, recordingDuration: 100)
+    try DetectMatchesV2.validateEvidenceTimestamps(evidence, recordingDuration: 100)
+  }
+}
+
+@Test func detectMatchesV2RejectsInvalidEvidenceBeforeDurationValidation() throws {
+  let evidence = try JSONDecoder().decode(
+    MatchEndEvidenceDocument.self,
+    from: Data(
+      #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[{"evidenceId":"duplicate","recordingPTS":1,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame.jpg"},{"evidenceId":"duplicate","recordingPTS":2,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame.jpg"}]}"#
+        .utf8))
+  #expect(throws: UniteAnalysisSwiftToolError.self) {
+    try DetectMatchesV2.validateEvidence(evidence)
   }
 }
 

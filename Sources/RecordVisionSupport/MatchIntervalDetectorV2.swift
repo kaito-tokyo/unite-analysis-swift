@@ -243,11 +243,10 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         default: return false
         }
       }
-      let contradictorySurrender = matching.filter {
-        endEvidence.evidence[$0].kind == "surrender"
-          && endEvidence.evidence[$0].recordingPTS < candidate.latestObservationPTS
+      let contradictoryEvidence = matching.filter {
+        endEvidence.evidence[$0].recordingPTS < candidate.latestObservationPTS
       }
-      let usable = matching.filter { !contradictorySurrender.contains($0) }
+      let usable = matching.filter { !contradictoryEvidence.contains($0) }
       let surrender = usable.filter { endEvidence.evidence[$0].kind == "surrender" }
       let matchEnd = usable.filter { endEvidence.evidence[$0].kind == "matchEnd" }
       let selected: Int?
@@ -266,6 +265,10 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       if let selected {
         let value = endEvidence.evidence[selected]
         provisional.append((candidate, value.recordingPTS, completion, [value.evidenceId]))
+        for index in contradictoryEvidence {
+          evidenceDiagnostics[index] = Self.diagnostic(
+            endEvidence.evidence[index], reason: "contradictoryEvidence")
+        }
       } else if candidate.mode == "standard10Minute", candidate.completedStandard {
         provisional.append((candidate, candidate.start + 600, "completed", []))
         for index in matching {
@@ -331,8 +334,9 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
       else { return diagnostic }
       let adopted = accepted.first { match in
         let candidate = match.mode == "quick5Minute" ? standardStart + 300 : standardStart
+        let tolerance = match.mode == "standard10Minute" ? 5.0 : 2.0
         return (match.mode != "quick5Minute" || remaining <= 300)
-          && abs(candidate - match.recordingPTSStart) <= 2
+          && abs(candidate - match.recordingPTSStart) <= tolerance
       }
       guard let adopted else { return diagnostic }
       return MatchTimerDiagnostic(
