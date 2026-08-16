@@ -22,7 +22,7 @@ arguments: ["--help"]
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`detect-matches-v2`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。Apple管理のSpeech assetを導入する`install-asr-assets-v1`もサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`detect-matches-v2`、`ocr-v1`、`recognize-result-v1`はサンドボックス外で実行する。Apple管理のSpeech assetを導入する`install-asr-assets-v1`もサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -63,7 +63,7 @@ unite-analysis-swift schema <schema-basename>
 | `asr-v1` | ローカル音声・動画内の発話をAppleのオンデバイス音声認識で時刻付きテキスト索引にする |
 | `install-asr-assets-v1` | 人間の明示的な選択により、指定言語のApple管理Speech assetを導入する |
 | `extract-clip` | 試合相対の指定区間を再エンコードせずMP4へ切り出す |
-| `scan-result-v1` | 結果画面またはバトルデータ画面をJSONへ読み取る |
+| `recognize-result-v1` | 結果画面またはバトルデータ画面をJSONへ読み取る |
 | `recognize-draft-loadout-v1` | draftの最終準備画面とVS画面から、味方の持ち物・バトルアイテム・宣言ルート、敵のバトルアイテムをJSONへ読み取る |
 | `recognize-blind-loadout-v1` | blind選択画面から、味方の持ち物・バトルアイテム・宣言ルートをJSONへ読み取る |
 | `eval-draw-text-script` | コンタクトシートの`drawText`用JSC式を単独評価する |
@@ -202,11 +202,11 @@ OCR結果に疑問がある場合は、`ocr-v1`出力の入力絶対パスと`so
 
 `detect-chroma-events-v1`はJPEGディレクトリ、同じ`--fps`、JSON出力先をオプションで受ける。出力は全隣接ペアの無選別測定であり、契約は`chroma-events-v1.output.schema.json`で確認する。
 
-試合全体の概要コンタクトシートは目視探索索引であり、上記の機械生成候補に含めない。`scan-result-v1`も事前基礎情報と最終結果の復元であり、候補生成に含めない。
+試合全体の概要コンタクトシートは目視探索索引であり、上記の機械生成候補に含めない。`recognize-result-v1`も事前基礎情報と最終結果の復元であり、候補生成に含めない。
 
 ## リザルト
 
-`scan-result-v1`には、Swift CLIで生成し、ゲーム画面全体が正しく含まれると確認した静止画を渡す。
+`recognize-result-v1`には、Swift CLIで生成し、ゲーム画面全体が正しく含まれると確認した静止画を渡す。
 
 - 総合結果には`--type summary`を使う。
 - バトルデータには`--type battle-data`を使う。
@@ -243,7 +243,7 @@ OCR結果に疑問がある場合は、`ocr-v1`出力の入力絶対パスと`so
 4. 既存の`_PokemonUniteAnalysis`成果物を調べ、現行入力と一致するものを再利用する。
 5. 選出開始前からVS画面までの映像で`draft`、`blind`、`unknown`を判定する。認識器に形式を推測させない。
 6. `draft`なら`recognize-draft-loadout-v1`、`blind`なら`recognize-blind-loadout-v1`を実行する。`unknown`または技術的失敗なら、未取得の認識種別、コマンド、理由を記録する。
-7. 結果画面とバトルデータ画面の安定フレームを抽出し、`scan-result-v1`を実行する。取得不能または失敗した種類、コマンド、理由も記録する。
+7. 結果画面とバトルデータ画面の安定フレームを抽出し、`recognize-result-v1`を実行する。取得不能または失敗した種類、コマンド、理由も記録する。
 8. 取得値と未取得理由を前提コンテキストへ整理し、以降の全分析入力として保存する。
 9. 事前イベント点候補生成の実行契約を実行し、候補または未取得理由を前提コンテキストとともに保存する。
 10. `batch-frame`または`contact-sheet`で、候補生成とは別に試合全体の概要を作る。

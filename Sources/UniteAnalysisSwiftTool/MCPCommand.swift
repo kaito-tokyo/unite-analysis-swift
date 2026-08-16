@@ -149,7 +149,7 @@ package func executeForMCP(
       }
     }
     try writer?.finish()
-  case let command as ScanResultCommand:
+  case let command as RecognizeResultCommand:
     guard mode == .execute else { return records }
     try validateOutputPath(command.output.map(resolvePath), force: command.force)
     for try await record in command.outputRecords() {

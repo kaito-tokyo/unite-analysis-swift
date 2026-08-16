@@ -730,7 +730,7 @@ public enum ResultScannerRunner {
       let numericOptions = ocrOptions[ScanResultOCRRegion.numeric]
     else {
       throw ScannerError.message(
-        "scan-result-v1 requires OCR options for \(ScanResultOCRRegion.screenText), \(ScanResultOCRRegion.playerName), and \(ScanResultOCRRegion.numeric)"
+        "recognize-result-v1 requires OCR options for \(ScanResultOCRRegion.screenText), \(ScanResultOCRRegion.playerName), and \(ScanResultOCRRegion.numeric)"
       )
     }
     let inputURL = URL(fileURLWithPath: input).standardizedFileURL

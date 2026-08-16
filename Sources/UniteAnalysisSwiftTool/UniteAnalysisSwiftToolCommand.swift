@@ -31,7 +31,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       Commands that use AVFoundation media access or Apple Vision text recognition must run outside a sandbox; their individual help identifies this requirement. Audio peak detection uses recording format v2 main-media audio to propose visually interesting times; it does not classify events. Run `batch-frame --help`, `sample-frames --help`, `precise-frame --help`,
       `contact-sheet --help`, `frame-burst --help`, `detect-chroma-events-v1 --help`,
       `asr-v1 --help`, `install-asr-assets-v1 --help`, `event-detect-v1 --help`,
-      `audio-peaks-v1 --help`, `detect-matches-v1 --help`, `detect-matches-v2 --help`, `extract-clip --help`, `ocr-v1 --help`, `scan-result-v1 --help`,
+      `audio-peaks-v1 --help`, `detect-matches-v1 --help`, `detect-matches-v2 --help`, `extract-clip --help`, `ocr-v1 --help`, `recognize-result-v1 --help`,
       `recognize-draft-loadout-v1 --help`, `recognize-blind-loadout-v1 --help`,
       `eval-draw-text-script --help`, `schema --help`, or `config --help`
       for their JSON and output contracts.
@@ -44,7 +44,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       DetectMatches.self, DetectMatchesV2.self,
       EventDetect.self,
       ExtractClip.self, OCRCommand.self,
-      ScanResultCommand.self,
+      RecognizeResultCommand.self,
       RecognizeDraftLoadout.self, RecognizeBlindLoadout.self,
       EvaluateDrawText.self, Schema.self, Config.self, MCPCommand.self,
     ]
