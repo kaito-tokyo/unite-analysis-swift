@@ -272,6 +272,21 @@ private func detectV2(
   let match = try #require(result.matches.first)
   #expect(match.recordingPTSStart == 100)
   #expect(match.observationCount == 3)
+  #expect(result.timerDiagnostics.map(\.startCandidate) == [100, 103, 103])
+}
+
+@Test func v2AppliesQuickAnchorBeforeStandardPruning() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(458_000, "04:55"), timer(463_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-surrender","recordingPTS":451,"kind":"surrender","medium":"visual","mode":"quick5Minute","source":"frame-451.jpg"}"#
+    ))
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics.map(\.reason) == ["contradictoryEvidence"])
 }
 
 @Test func v2RetainsQuickCandidateAfterSurrenderedStandardMatch() throws {
@@ -301,6 +316,24 @@ private func detectV2(
   #expect(result.matches.map(\.recordingPTSEnd) == [300, 500])
   #expect(result.unclassifiedCandidates.map(\.mode) == ["quick5Minute"])
   #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2RetainsQuickCandidateBehindUnresolvedStandard() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(460_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"first","recordingPTS":300,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-300.jpg"},{"evidenceId":"second","recordingPTS":400,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-400.jpg"}"#
+    ),
+    recordingDuration: 550)
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.mode) == ["standard10Minute", "quick5Minute"])
+  #expect(
+    result.unclassifiedCandidates.map(\.reason) == [
+      "contradictoryEvidence", "missingEndEvidence",
+    ])
 }
 
 @Test func v2DiscardsContradictedEvidenceBeforeModeArbitration() throws {

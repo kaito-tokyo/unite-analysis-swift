@@ -160,7 +160,7 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
     let quickParsed = parsed.filter { $0.1 <= 300 && $0.0 + 300 >= 0 }.map {
       ($0.0 + 300, $0.1)
     }
-    var quickClusters = clusters(quickParsed)
+    let quickClusters = clusters(quickParsed)
       .filter { $0.count >= 2 && Set($0.map(\.1)).count >= 2 && $0.contains { $0.1 < 300 } }
 
     var candidates = standardClusters.compactMap { cluster -> Candidate? in
@@ -194,7 +194,8 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         completedStandard: confidentlyStandard && start + 600 <= recordingDuration,
         timerStartCandidates: cluster.map(\.0) + anchors.map(\.0))
     }
-    let standardIntervals = candidates.enumerated().map { index, candidate -> (Double, Double) in
+    let standardIntervals = candidates.enumerated().compactMap {
+      index, candidate -> (Double, Double)? in
       let nextStart = candidates.dropFirst(index + 1).first { $0.start > candidate.start }?.start
       let associationEnd = min(
         candidate.start + candidate.nominalDuration, nextStart ?? .infinity)
@@ -203,29 +204,18 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           && $0.recordingPTS >= candidate.latestObservationPTS
           && $0.recordingPTS < associationEnd
       }
-      return (
-        candidate.start,
-        surrenders.count == 1
-          ? surrenders[0].recordingPTS : candidate.start + candidate.nominalDuration
-      )
-    }
-    quickClusters.removeAll { cluster in
-      let start = median(cluster.map(\.0))
-      let hasDeclaredEnd = endEvidence.evidence.contains {
-        $0.mode == "quick5Minute"
-          && (($0.kind == "matchEnd" && abs($0.recordingPTS - (start + 300)) <= 10)
-            || ($0.kind == "surrender" && $0.recordingPTS > start && $0.recordingPTS < start + 300))
+      if surrenders.count == 1 {
+        return (candidate.start, surrenders[0].recordingPTS)
       }
-      return !hasDeclaredEnd && standardIntervals.contains { start > $0.0 && start < $0.1 }
+      guard surrenders.isEmpty, candidate.completedStandard else { return nil }
+      return (candidate.start, candidate.start + candidate.nominalDuration)
     }
-    candidates += quickClusters.map { cluster in
+    var quickCandidates = quickClusters.map { cluster in
       let clusterStart = median(cluster.map(\.0))
       let anchors = quickParsed.filter {
         $0.1 == 300 && abs($0.0 - clusterStart) <= 5 && $0.0 <= clusterStart
       }
-      let start =
-        anchors.map(\.0).min()
-        ?? clusterStart
+      let start = anchors.map(\.0).min() ?? clusterStart
       let adoptedAnchors = anchors.filter { value in
         !cluster.contains { $0.0 == value.0 && $0.1 == value.1 }
       }.count
@@ -241,6 +231,16 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
         completedStandard: false,
         timerStartCandidates: cluster.map(\.0) + anchors.map(\.0))
     }
+    quickCandidates.removeAll { candidate in
+      let start = candidate.start
+      let hasDeclaredEnd = endEvidence.evidence.contains {
+        $0.mode == "quick5Minute"
+          && (($0.kind == "matchEnd" && abs($0.recordingPTS - (start + 300)) <= 10)
+            || ($0.kind == "surrender" && $0.recordingPTS > start && $0.recordingPTS < start + 300))
+      }
+      return !hasDeclaredEnd && standardIntervals.contains { start > $0.0 && start < $0.1 }
+    }
+    candidates += quickCandidates
     candidates.sort {
       $0.start < $1.start || ($0.start == $1.start && $0.nominalDuration > $1.nominalDuration)
     }
@@ -457,24 +457,28 @@ public struct MatchIntervalDetectionV2: Codable, Sendable {
           }
       }
       guard let adopted else {
-        let belongsToAmbiguousCandidate = rejectedContradictoryCandidates.contains { ambiguous in
+        let ambiguousCandidate = rejectedContradictoryCandidates.first { ambiguous in
           let candidate = ambiguous.mode == "quick5Minute" ? standardStart + 300 : standardStart
           return (ambiguous.mode != "quick5Minute" || remaining <= 300)
             && ambiguous.timerStartCandidates.contains { abs(candidate - $0) < 0.001 }
         }
-        guard belongsToAmbiguousCandidate else { return diagnostic }
+        guard let ambiguousCandidate else { return diagnostic }
+        let diagnosticStart =
+          ambiguousCandidate.mode == "quick5Minute" ? standardStart + 300 : standardStart
         return MatchTimerDiagnostic(
           recordingTimelineMilliseconds: diagnostic.recordingTimelineMilliseconds,
           output: diagnostic.output, imageFileName: diagnostic.imageFileName,
           confidence: diagnostic.confidence, remainingSeconds: remaining,
-          startCandidate: standardStart, disposition: "excluded",
+          startCandidate: diagnosticStart, disposition: "excluded",
           reason: "contradictoryEvidence")
       }
+      let diagnosticStart =
+        adopted.match.mode == "quick5Minute" ? standardStart + 300 : standardStart
       return MatchTimerDiagnostic(
         recordingTimelineMilliseconds: diagnostic.recordingTimelineMilliseconds,
         output: diagnostic.output, imageFileName: diagnostic.imageFileName,
         confidence: diagnostic.confidence, remainingSeconds: remaining,
-        startCandidate: adopted.match.recordingPTSStart, disposition: "accepted",
+        startCandidate: diagnosticStart, disposition: "accepted",
         reason: adopted.match.mode == "quick5Minute"
           ? "consistentQuickMatchCluster" : "consistentStandardMatchCluster")
     }
