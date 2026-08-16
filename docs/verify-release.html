@@ -63,12 +63,13 @@ SPDX-License-Identifier: Apache-2.0
 
       <h2>Download the latest installer</h2>
       <p>
-        Run these commands in an empty directory. The version is read from the
-        metadata published with this site.
+        Run these commands in an empty directory. The tag is read from the
+        latest published GitHub Release.
       </p>
-      <pre><code>VERSION="$(curl --fail --silent --show-error \
-  https://kaito-tokyo.github.io/unite-analysis-swift/metadata/latest-version.txt)"
-TAG="v${VERSION}"
+      <pre><code>TAG="$(gh release view \
+  --repo kaito-tokyo/unite-analysis-swift \
+  --json tagName \
+  --jq '.tagName')"
 PACKAGE="unite-analysis-swift-${TAG}-macos-arm64.pkg"
 
 gh release download "$TAG" \

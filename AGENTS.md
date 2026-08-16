@@ -79,20 +79,17 @@ When creating a commit, follow these rules:
 - Run `reuse --no-multiprocessing lint` after changing tracked files.
 - Report each verification command and its result separately.
 
-## Release follow-up
+## Release preparation
 
 - Agents must not publish GitHub Releases. Only human maintainers may publish a draft release.
 - Release tags must be signed annotated tags.
 - The annotated tag message must exactly match the tag name. For example, tag `v0.1.4` must have the message `v0.1.4` with no additional text.
-- After a release has completed, the agent must create a follow-up pull request that prepares the repository for the next release.
-- Name the post-release follow-up branch `bump/<next-version>`, for example `bump/0.1.5`.
-- Treat a `bump/<next-version>` pull request as a special, narrowly scoped pull request whose only purpose is to align released-version references and advance unreleased-version values after a release. The permission to edit `README.md` is exclusive to this narrow scope; do not include features, fixes, refactors, or unrelated maintenance in a bump pull request.
-- Keep two distinct version values on `main`:
-  - `apm.yml` and the native CLI `--version` must always contain the next, unreleased version. No Git tag for that version may exist yet.
-  - `README.md` and `docs/metadata/latest-version.txt` must always contain the newest released version, for which a Git tag already exists.
-- Treat the post-release version update as one combined operation: update `README.md` and `docs/metadata/latest-version.txt` to the version of the newly published tag, using each file's existing version format, and advance `apm.yml`, `Contents/Info.plist`, and all native executable versions to the following release version.
-- Do not advance `docs/metadata/latest-version.txt` or the released-version references in `README.md` before the corresponding GitHub Release is available for download.
-- Outside a `bump/<next-version>` post-release pull request, report any stale or inconsistent released-version reference in `README.md` for a human maintainer to update instead of editing it.
+- Prepare each release before creating its tag on a branch named `bump/<release-version>`, for example `bump/0.1.5`.
+- Treat a `bump/<release-version>` pull request as a special, narrowly scoped pull request whose only purpose is to align every release-version reference with the version that will be tagged after the pull request is merged. The permission to edit `README.md` is exclusive to this narrow scope; do not include features, fixes, refactors, or unrelated maintenance in a bump pull request.
+- In the release-preparation pull request, update `README.md`, `apm.yml`, `Contents/Info.plist`, and all native executable versions to the release version, using each file's existing version format.
+- The release version must be newer than the latest release tag and must not already have a tag.
+- Merge the release-preparation pull request before creating the corresponding release tag. Do not create a post-release version-bump pull request.
+- Outside a `bump/<release-version>` release-preparation pull request, report any stale or inconsistent released-version reference in `README.md` for a human maintainer to update instead of editing it.
 
 ## Shell scripts
 

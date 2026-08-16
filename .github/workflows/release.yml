@@ -68,14 +68,20 @@ jobs:
         shell: bash --noprofile --norc -euo pipefail {0}
         run: apm pack --format plugin --offline --dry-run
 
-      - name: Check APM package version
-        shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+      - name: Check release versions
+        shell: bash --noprofile --norc -euo pipefail {0}
         run: |
-          $packageVersion = (ruby -ryaml -e 'version = YAML.safe_load(File.read("apm.yml"))["version"]; abort "Missing APM package version." unless version.is_a?(String); puts version').Trim()
-          $tagVersion = $env:GITHUB_REF_NAME.Substring(1)
-          if ($packageVersion -ne $tagVersion) {
-              throw "APM package version $packageVersion does not match tag version $tagVersion."
+          release_version="${GITHUB_REF_NAME#v}"
+          require_version() {
+            grep -Fq "$1" "$2" || { echo "Missing version $1 in $2." >&2; exit 1; }
           }
+
+          require_version "$release_version" README.md
+          require_version "$release_version" apm.yml
+          require_version "$release_version" Contents/Info.plist
+          require_version "$release_version" Sources/UniteAnalysisSwiftTool/UniteAnalysisSwiftToolCommand.swift
+          require_version "$release_version" Sources/UniteAnalysisModelTool/UniteAnalysisModelToolCommand.swift
+          require_version "$release_version" Tests/LDTXRecordingSupportTests/ModelToolTests.swift
 
       - name: Check if the release commit belongs to main
         shell: pwsh -command "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
