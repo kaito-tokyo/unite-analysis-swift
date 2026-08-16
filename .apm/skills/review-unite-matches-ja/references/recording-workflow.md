@@ -22,7 +22,7 @@ arguments: ["--help"]
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
-AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。Apple管理のSpeech assetを導入する`install-asr-assets-v1`もサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
+AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`precise-frame`、`contact-sheet`、`frame-burst`、`audio-peaks-v1`、`asr-v1`、`extract-clip`、`recognize-draft-loadout-v1`、`recognize-blind-loadout-v1`、`eval-draw-text-script`と、Apple Visionを使う`detect-matches-v1`、`detect-matches-v2`、`ocr-v1`、`scan-result-v1`はサンドボックス外で実行する。Apple管理のSpeech assetを導入する`install-asr-assets-v1`もサンドボックス外で実行する。サンドボックス外での実行が許可されない場合は、環境制約により未実行として記録する。
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
@@ -54,6 +54,8 @@ unite-analysis-swift schema <schema-basename>
 | `precise-frame` | AVAssetReaderで1枚の明示的なソース矩形画像を出力する |
 | `contact-sheet` | ソース動画フレームから任意配置のコンタクトシートを作る |
 | `frame-burst` | 指定時刻以降の連続ソースフレームを連写として1枚へ並べ、1秒未満の動作を検証する |
+| `detect-matches-v1` | 主映像のタイマーOCRから完了した標準10分試合だけを検出する |
+| `detect-matches-v2` | 主映像のタイマーOCRと確認済み終了証拠から降参・5分モードを含む区間を検出する |
 | `ocr-v1` | 静止画ジョブごとに矩形、領域名、認識タイプを明示してOCRする |
 | `sample-frames` | FFmpeg相似のcrop、fps、scale指定で1領域のJPEG連番を出力する |
 | `detect-chroma-events-v1` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
@@ -101,7 +103,7 @@ unite-analysis-swift asr-v1 \
 `batch-frame`、`contact-sheet`、`frame-burst`、`ocr-v1`には、1行1ジョブの`jobs.jsonl`を渡す。各ジョブに空でない一意な`jobId`を明示し、各出力行の`jobId`で結果を対応付ける。jobs行に`$schema`は書かない。`-`を指定する場合はstdinをEOF前から1行ずつ処理し、stdoutのJSONL応答を1行ずつ読む。1ジョブの失敗では後続処理やプロセス終了コードが失敗しないため、全応答行の`ok`を検査する。`sample-frames`と`detect-chroma-events-v1`はJSONLジョブを使わず、1回につき1領域をオプションで処理する。
 
 - `batch-frame`の各ジョブには`outputPrefix`を、`contact-sheet`と`frame-burst`の各ジョブには`output`を明示する。`ocr-v1`の結果はstdout、またはコマンドの`--output`が指定するJSONLへ書き出す。
-- 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。試合区間を検出する前の`detect-matches-v1`だけは例外で、録画を`--input`、固定UIレイアウトJSONを`--layout`で指定する。`ocr-v1`は静止画入力のみを読み、`record-spec.json`を使わない。
+- 録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにし、試合ごとの`record-spec.json`を`--record-spec`で必ず指定する。試合区間を検出する前の`detect-matches-v1`と`detect-matches-v2`だけは例外で、録画を`--input`、固定UIレイアウトJSONを`--layout`で指定する。v2では確認済み終了証拠JSONも`--end-evidence`で指定する。`ocr-v1`は静止画入力のみを読み、`record-spec.json`を使わない。
 - すべての相対パスは、ジョブファイルの位置に関係なく現在の作業ディレクトリ基準とする。
 - 既存成果物を意図せず上書きしない。`--force`は再生成対象を確認した場合だけ使う。
 - `ocr-v1`の各ジョブは`region`で`ocr-options.json`の同名エントリを選び、`source`と`type`を明示する。`ocr-options.json`には`$schema`、選択領域ごとの空でない`recognitionLanguages`、必要なら`customWords`を記録する。fallbackはない。

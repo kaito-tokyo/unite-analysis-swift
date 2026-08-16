@@ -67,6 +67,7 @@ private func registeredCommands(
   let names = [
     ASRCommand.configuration.commandName,
     DetectMatches.configuration.commandName,
+    DetectMatchesV2.configuration.commandName,
     DetectChromaEvents.configuration.commandName,
     AudioPeaks.configuration.commandName,
     EventDetect.configuration.commandName,
@@ -75,10 +76,11 @@ private func registeredCommands(
     RecognizeDraftLoadout.configuration.commandName,
     RecognizeBlindLoadout.configuration.commandName,
   ].compactMap { $0 }
-  #expect(names.count == 9)
+  #expect(names.count == 10)
   #expect(
     Set(names) == [
       "asr-v1", "audio-peaks-v1", "detect-chroma-events-v1", "detect-matches-v1",
+      "detect-matches-v2",
       "event-detect-v1",
       "ocr-v1", "recognize-blind-loadout-v1", "recognize-draft-loadout-v1", "scan-result-v1",
     ])
@@ -102,6 +104,11 @@ private func registeredCommands(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "detect-matches-v1", "--input", "recording.ldtxrecord", "--layout", "layout.json",
     ]) is DetectMatches)
+  #expect(
+    try UniteAnalysisSwiftCommand.parseAsRoot([
+      "detect-matches-v2", "--input", "recording.ldtxrecord", "--layout", "layout.json",
+      "--end-evidence", "ends.json",
+    ]) is DetectMatchesV2)
   #expect(
     try UniteAnalysisSwiftCommand.parseAsRoot([
       "detect-chroma-events-v1", "--input-sample-dir", "frames", "--fps", "2", "--output",

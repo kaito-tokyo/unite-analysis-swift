@@ -10,6 +10,25 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   .init(recordingTimelineMilliseconds: milliseconds, output: output)
 }
 
+private func endEvidence(_ items: String = "") throws -> MatchEndEvidenceDocument {
+  try JSONDecoder().decode(
+    MatchEndEvidenceDocument.self,
+    from: Data(
+      """
+      {"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[\(items)]}
+      """.utf8))
+}
+
+private func detectV2(
+  _ records: [MatchTimerObservation], evidence: MatchEndEvidenceDocument
+) -> MatchIntervalDetectionV2 {
+  let timerDetection = MatchTimerDetection(records: records)
+  return MatchIntervalDetectionV2(
+    standardMatches: timerDetection.matches,
+    timerDiagnostics: timerDetection.diagnostics,
+    endEvidence: evidence)
+}
+
 @Test func matchLayoutValidatesAndScalesTimerRectangle() throws {
   let layout = MatchTimerLayout(
     schema: MatchTimerLayout.schemaURL,
@@ -86,6 +105,101 @@ private func timer(_ milliseconds: Int64, _ output: String) -> MatchTimerObserva
   #expect(match.recordingPTSStart == 100)
   #expect(match.recordingPTSEnd == 700)
   #expect(match.observationCount == 4)
+}
+
+@Test func v2PreservesCompletedStandardMatchWithoutEndEvidence() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50"), timer(400_000, "05:00")],
+    evidence: try endEvidence())
+  let match = try #require(result.matches.first)
+  #expect(result.matches.count == 1)
+  #expect(match.mode == "standard10Minute")
+  #expect(match.completion == "completed")
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 700)
+  #expect(result.unclassifiedCandidates.isEmpty)
+}
+
+@Test func v2RequiresDeclaredSurrenderEvidenceToShortenStandardMatch() throws {
+  let result = detectV2(
+    [timer(100_000, "10:00"), timer(110_000, "09:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender-1","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"}"#
+    ))
+  let match = try #require(result.matches.first)
+  #expect(match.completion == "surrendered")
+  #expect(match.recordingPTSEnd == 430)
+  #expect(match.duration == 330)
+  #expect(match.endEvidenceIds == ["surrender-1"])
+  #expect(result.endEvidenceDiagnostics[0].disposition == "adopted")
+}
+
+@Test func v2ClassifiesFiveMinuteModeOnlyWithEndEvidence() throws {
+  let records = [timer(100_000, "05:00"), timer(110_000, "04:50"), timer(125_000, "04:35")]
+  let missing = detectV2(records, evidence: try endEvidence())
+  #expect(missing.matches.isEmpty)
+  #expect(missing.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+
+  let completed = detectV2(
+    records,
+    evidence: try endEvidence(
+      #"{"evidenceId":"quick-end","recordingPTS":400,"kind":"matchEnd","medium":"audio","mode":"quick5Minute","source":"audio:399-401"}"#
+    ))
+  let match = try #require(completed.matches.first)
+  #expect(match.mode == "quick5Minute")
+  #expect(match.completion == "completed")
+  #expect(match.recordingPTSStart == 100)
+  #expect(match.recordingPTSEnd == 400)
+  #expect(completed.timerDiagnostics.allSatisfy { $0.disposition == "accepted" })
+  #expect(completed.timerDiagnostics.allSatisfy { $0.reason == "consistentQuickMatchCluster" })
+}
+
+@Test func v2EndEvidenceRejectsUnknownKeys() {
+  let documents = [
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[],"extra":true}"#,
+    #"{"$schema":"https://kaito-tokyo.github.io/unite-analysis-swift/match-end-evidence-v1.schema.json","evidence":[{"evidenceId":"end","recordingPTS":300,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame.jpg","extra":true}]}"#,
+  ]
+  for document in documents {
+    #expect(throws: DecodingError.self) {
+      _ = try JSONDecoder().decode(MatchEndEvidenceDocument.self, from: Data(document.utf8))
+    }
+  }
+}
+
+@Test func v2DoesNotGuessContradictoryNonstandardEnd() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(110_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"visual-end","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-400.jpg"},{"evidenceId":"audio-end","recordingPTS":401,"kind":"matchEnd","medium":"audio","mode":"quick5Minute","source":"audio:400-402"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["contradictoryEvidence"])
+  #expect(result.endEvidenceDiagnostics.allSatisfy { $0.reason == "contradictoryEvidence" })
+}
+
+@Test func v2RetainsUnsupportedEvidenceWithoutClassifyingMatch() throws {
+  let result = detectV2(
+    [timer(100_000, "05:00"), timer(110_000, "04:50")],
+    evidence: try endEvidence(
+      #"{"evidenceId":"unsupported","recordingPTS":400,"kind":"matchEnd","medium":"visual","mode":"eventMode","source":"frame-400.jpg"}"#
+    ))
+  #expect(result.matches.isEmpty)
+  #expect(result.endEvidenceDiagnostics[0].reason == "unsupportedMode")
+  #expect(result.unclassifiedCandidates.map(\.reason) == ["missingEndEvidence"])
+}
+
+@Test func v2SeparatesSurrenderAndAdjacentQuickMatchWithContiguousIDs() throws {
+  let result = detectV2(
+    [
+      timer(100_000, "10:00"), timer(110_000, "09:50"),
+      timer(450_000, "05:00"), timer(460_000, "04:50"),
+    ],
+    evidence: try endEvidence(
+      #"{"evidenceId":"surrender","recordingPTS":430,"kind":"surrender","medium":"visual","mode":"standard10Minute","source":"frame-430.jpg"},{"evidenceId":"quick-end","recordingPTS":750,"kind":"matchEnd","medium":"visual","mode":"quick5Minute","source":"frame-750.jpg"}"#
+    ))
+  #expect(result.matches.map(\.matchId) == ["match-01", "match-02"])
+  #expect(result.matches.map(\.recordingPTSStart) == [100, 450])
+  #expect(result.matches.map(\.recordingPTSEnd) == [430, 750])
 }
 
 @Test func separatesMatchesAndRejectsResetAdjacentOutlier() throws {

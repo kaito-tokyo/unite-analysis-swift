@@ -70,7 +70,7 @@ struct DetectMatches: ParsableCommand {
     commandOutputStream { continuation in continuation.yield(try await self.result()) }
   }
 
-  private func result() async throws -> Output {
+  package func result() async throws -> Output {
     try validateOutputPath(output.map(resolvePath), force: force)
     if output != nil, auditId != nil {
       throw UniteAnalysisSwiftToolError.message(
