@@ -35,10 +35,13 @@ public enum RecordVisionInputLogger {
   }
 
   public static func unfinishedRecording(_ url: URL) {
-    let line =
-      "unite-analysis-swift: warning: recording is not finalized (missing .finalized): " + url.path
-      + "\n"
-    FileHandle.standardError.write(Data(line.utf8))
+    FileHandle.standardError.write(Data(unfinishedRecordingWarning(url).utf8))
+  }
+
+  package static func unfinishedRecordingWarning(_ url: URL) -> String {
+    "unite-analysis-swift: warning: recording is not finalized (missing .finalized); "
+      + "results use the currently readable media range and may change when recording finishes: "
+      + url.path + "\n"
   }
 
   private static func write(_ label: String, _ url: URL) {

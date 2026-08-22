@@ -297,6 +297,26 @@ private func registeredCommands(
   #expect(command.force)
 }
 
+@Test func detectMatchesAllowsUnfinalizedFormatV2Recording() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let recording = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: recording, withIntermediateDirectories: true)
+  let plist: [String: Any] = ["LDTXRecordingFormatVersion": 2]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: recording.appendingPathComponent("Info.plist"))
+  FileManager.default.createFile(
+    atPath: recording.appendingPathComponent("main.fragmented.mp4").path, contents: Data())
+
+  #expect(
+    try resolveDetectMatchesMediaURL(recording)
+      == recording.appendingPathComponent("main.fragmented.mp4"))
+  #expect(
+    RecordVisionInputLogger.unfinishedRecordingWarning(recording)
+      == "unite-analysis-swift: warning: recording is not finalized (missing .finalized); results use the currently readable media range and may change when recording finishes: \(recording.path)\n"
+  )
+}
+
 @Test func managedAuditDirectoryReplacesAsOneUnit() throws {
   let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: root) }

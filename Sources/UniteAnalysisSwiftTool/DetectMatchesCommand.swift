@@ -13,7 +13,7 @@ struct DetectMatches: ParsableCommand {
     commandName: "detect-matches-v1",
     abstract: "Detect standard 10-minute matches by OCRing the main video timer.",
     discussion: """
-      INPUT. --input must be a finalized recording format v2 .ldtxrecord. The main video is the format-v2 fixed file main.fragmented.mp4; LDTXRecordingMainMediaFile does not select another file. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
+      INPUT. --input must be a recording format v2 .ldtxrecord. A missing .finalized marker is allowed with a warning; results then describe the media range readable when the command runs and may change after recording finishes. The main video is the format-v2 fixed file main.fragmented.mp4; LDTXRecordingMainMediaFile does not select another file. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
 
       EXECUTION. AVFoundation decoding and Apple Vision recognition require this command to run outside an application sandbox.
 
@@ -90,12 +90,7 @@ struct DetectMatches: ParsableCommand {
     guard recordingURL.pathExtension == "ldtxrecord" else {
       throw UniteAnalysisSwiftToolError.message("--input must be a .ldtxrecord directory")
     }
-    guard
-      FileManager.default.fileExists(atPath: recordingURL.appendingPathComponent(".finalized").path)
-    else {
-      throw UniteAnalysisSwiftToolError.message("Recording is not finalized: \(recordingURL.path)")
-    }
-    let mediaURL = try LDTXRecordingBundle.formatV2MainMediaURL(in: recordingURL)
+    let mediaURL = try resolveDetectMatchesMediaURL(recordingURL)
     let mainMediaFile = mediaURL.lastPathComponent
     let asset = AVURLAsset(url: mediaURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
@@ -196,6 +191,15 @@ struct DetectMatches: ParsableCommand {
     }
     return result
   }
+}
+
+package func resolveDetectMatchesMediaURL(_ recordingURL: URL) throws -> URL {
+  if !FileManager.default.fileExists(
+    atPath: recordingURL.appendingPathComponent(".finalized").path)
+  {
+    RecordVisionInputLogger.unfinishedRecording(recordingURL)
+  }
+  return try LDTXRecordingBundle.formatV2MainMediaURL(in: recordingURL)
 }
 
 package func validateManagedAuditDestination(_ url: URL, force: Bool) throws {
