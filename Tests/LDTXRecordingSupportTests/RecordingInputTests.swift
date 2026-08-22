@@ -73,6 +73,34 @@ private func temporaryDirectory() throws -> URL {
       == bundle.appendingPathComponent("main.fragmented.mp4"))
 }
 
+@Test func formatV2MainMediaStillRejectsInvalidMetadataAndMissingMedia() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+
+  try Data("not a plist".utf8).write(to: bundle.appendingPathComponent("Info.plist"))
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.formatV2MainMediaURL(in: bundle)
+  }
+
+  let legacyPlist: [String: Any] = ["LDTXRecordingFormatVersion": 1]
+  try PropertyListSerialization.data(
+    fromPropertyList: legacyPlist, format: .xml, options: 0
+  ).write(to: bundle.appendingPathComponent("Info.plist"))
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.formatV2MainMediaURL(in: bundle)
+  }
+
+  let currentPlist: [String: Any] = ["LDTXRecordingFormatVersion": 2]
+  try PropertyListSerialization.data(
+    fromPropertyList: currentPlist, format: .xml, options: 0
+  ).write(to: bundle.appendingPathComponent("Info.plist"))
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.formatV2MainMediaURL(in: bundle)
+  }
+}
+
 @Test func outputFileWriterRejectsDestinationCreatedAfterPreflight() throws {
   let root = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: root) }

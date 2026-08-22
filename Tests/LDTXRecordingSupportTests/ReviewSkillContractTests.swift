@@ -67,6 +67,17 @@ private func reviewSkillText(_ relativePath: String) throws -> String {
   #expect(tools.contains("音声トラックなしや認識失敗を、発話が存在しなかった証拠にしない"))
 }
 
+@Test func unfinishedRecordingIsProvisionalInsteadOfExcluded() throws {
+  let workflow = try reviewSkillText("references/recording-workflow.md")
+
+  #expect(workflow.contains("分析対象から除外したりしない"))
+  #expect(workflow.contains("実行時に読み取れるメディア範囲だけを根拠"))
+  #expect(workflow.contains("未finalized状態と取得時点を記録"))
+  #expect(workflow.contains("再実行結果が変わり得る"))
+  #expect(workflow.contains("後から`.finalized`が現れた場合"))
+  #expect(!workflow.contains("`.finalized`がないアクティブな録画を除外する"))
+}
+
 @Test func allyReactionWindowsRequireFeasibilityAndRevision() throws {
   let skill = try reviewSkillText("SKILL.md")
   let model = try reviewSkillText("references/reaction-windows.md")

@@ -28,14 +28,16 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 
 ## 入力と保存領域
 
-ユーザーが指定した完了済み`.ldtxrecord`を読み取り専用の入力として扱う。固定の録画ディレクトリを仮定しない。
+ユーザーが指定した`.ldtxrecord`を読み取り専用の入力として扱う。固定の録画ディレクトリを仮定しない。
 
-- `.finalized`がないアクティブな録画を除外する。
+- `.finalized`は録画が正常に終了し、以後伸びないことの保証として扱う。欠けていることだけを理由に、録画破損、試合未完了、分析不能と判定したり、分析対象から除外したりしない。
 - recording format v2だけを対象とする。主映像ファイル名は`main.fragmented.mp4`であり、`LDTXRecordingMainMediaFile`も通常は同じ名前を記録する。
 - 物理試合メタデータは`<recording>/_PokemonUniteMatches/match-<NN>/record-spec.json`とする。
 - 分析成果物は`<recording>/_PokemonUniteAnalysis/`以下だけへ書く。
 - 正本レポートは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/review.md`とする。
 - LDTXが管理する既存ファイルを変更しない。
+
+`.finalized`がない録画は、`Info.plist`が読め、recording format v2であり、`main.fragmented.mp4`の対象時刻をデコードできる場合に分析する。実行時に読み取れるメディア範囲だけを根拠とし、分析メモとレポートへ未finalized状態と取得時点を記録する。録画中は後からメディアが伸び、再実行結果が変わり得ることを明示する。試合終了、リザルト、選出画面などが未収録なら、完了や内容を推測せず、値を`—`または`?`として未取得理由を残す。後から`.finalized`が現れた場合は、最終的なメディア範囲で分析結果を再検証する。
 
 `record-spec.json`は録画を読む各コマンドの必須入力である。見つからない場合は、ソース動画、`Info.plist`、既存の分析成果物から根拠を集め、試合境界とゲーム画面矩形を候補として復元する。候補specは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/record-spec.json`へ保存し、根拠と未確定な値を分析メモへ記録する。LDTXが管理する`_PokemonUniteMatches/`には書き込まない。
 
