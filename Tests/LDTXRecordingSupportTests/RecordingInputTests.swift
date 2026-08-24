@@ -29,6 +29,26 @@ private func temporaryDirectory() throws -> URL {
   #expect(resolved.videoURL.lastPathComponent == "main.mp4")
 }
 
+@Test func resolvesLegacyFormatV1MainMediaFromInfoPlist() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord")
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  FileManager.default.createFile(
+    atPath: bundle.appendingPathComponent(".finalized").path, contents: Data())
+  FileManager.default.createFile(
+    atPath: bundle.appendingPathComponent("main.mp4").path, contents: Data())
+  let plist: [String: Any] = [
+    "LDTXRecordingFormatVersion": 1,
+    "LDTXRecordingMainMediaFile": "main.mp4",
+  ]
+  let plistData = try PropertyListSerialization.data(
+    fromPropertyList: plist, format: .xml, options: 0)
+  try plistData.write(to: bundle.appendingPathComponent("Info.plist"))
+
+  #expect(try ResolvedRecordingInput.resolve(bundle.path).videoURL.lastPathComponent == "main.mp4")
+}
+
 @Test func rejectsUnfinishedBundlesUnlessExplicitlyAllowed() throws {
   let bundle = try temporaryDirectory().appendingPathComponent("sample.ldtxrecord")
   try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
@@ -122,6 +142,47 @@ private func temporaryDirectory() throws -> URL {
   let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
   try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
   let plist: [String: Any] = ["LDTXRecordingFormatVersion": 3]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: bundle.appendingPathComponent("Info.plist"))
+
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.mainMediaURL(in: bundle)
+  }
+}
+
+@Test func formatV3RejectsLandscapeMediaOutsideBundle() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  FileManager.default.createFile(
+    atPath: root.appendingPathComponent("outside.mp4").path, contents: Data())
+  let plist: [String: Any] = [
+    "LDTXRecordingFormatVersion": 3,
+    "LDTXRecordingLandscapeMediaFile": "../outside.mp4",
+  ]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: bundle.appendingPathComponent("Info.plist"))
+
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.mainMediaURL(in: bundle)
+  }
+}
+
+@Test func formatV3RejectsLandscapeMediaSymlinkOutsideBundle() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  let outside = root.appendingPathComponent("outside.mp4")
+  FileManager.default.createFile(atPath: outside.path, contents: Data())
+  try FileManager.default.createSymbolicLink(
+    at: bundle.appendingPathComponent("landscape.fragmented.mp4"),
+    withDestinationURL: outside)
+  let plist: [String: Any] = [
+    "LDTXRecordingFormatVersion": 3,
+    "LDTXRecordingLandscapeMediaFile": "landscape.fragmented.mp4",
+  ]
   try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
     .write(to: bundle.appendingPathComponent("Info.plist"))
 

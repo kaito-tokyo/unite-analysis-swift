@@ -69,7 +69,7 @@ public enum LDTXRecordingBundle {
       relativePath = "main.fragmented.mp4"
     case 3:
       guard let value = dictionary["LDTXRecordingLandscapeMediaFile"] as? String,
-        !value.isEmpty
+        !value.isEmpty, !(value as NSString).isAbsolutePath
       else {
         throw RecordingInputError.mainMediaNotFound(bundleURL.path)
       }
@@ -78,6 +78,13 @@ public enum LDTXRecordingBundle {
       throw RecordingInputError.unsupportedRecordingFormat(infoURL.path)
     }
     let mediaURL = bundleURL.appendingPathComponent(relativePath).standardizedFileURL
+    if version == 3 {
+      let resolvedBundleURL = bundleURL.standardizedFileURL.resolvingSymlinksInPath()
+      let resolvedMediaURL = mediaURL.resolvingSymlinksInPath()
+      guard resolvedMediaURL.path.hasPrefix(resolvedBundleURL.path + "/") else {
+        throw RecordingInputError.mainMediaNotFound(mediaURL.path)
+      }
+    }
     guard FileManager.default.fileExists(atPath: mediaURL.path) else {
       throw RecordingInputError.mainMediaNotFound(mediaURL.path)
     }
@@ -114,9 +121,12 @@ public struct ResolvedRecordingInput: Sendable {
       else {
         throw RecordingInputError.invalidInfoPlist(infoURL.path)
       }
-      if dictionary["LDTXRecordingFormatVersion"] != nil {
+      let formatVersion = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue
+      if formatVersion == 2 || formatVersion == 3 {
         let videoURL = try LDTXRecordingBundle.mainMediaURL(in: inputURL)
         return Self(inputURL: inputURL, videoURL: videoURL, bundleURL: inputURL)
+      } else if let formatVersion, formatVersion != 1 {
+        throw RecordingInputError.unsupportedRecordingFormat(infoURL.path)
       }
       if let relativePath = dictionary["LDTXRecordingMainMediaFile"] as? String,
         !relativePath.isEmpty
