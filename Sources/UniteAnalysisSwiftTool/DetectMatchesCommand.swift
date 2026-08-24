@@ -13,7 +13,7 @@ struct DetectMatches: ParsableCommand {
     commandName: "detect-matches-v1",
     abstract: "Detect standard 10-minute matches by OCRing the main video timer.",
     discussion: """
-      INPUT. --input must be a recording format v2 .ldtxrecord. A missing .finalized marker is allowed with a warning; results then describe the media range readable when the command runs and may change after recording finishes. The main video is the format-v2 fixed file main.fragmented.mp4; LDTXRecordingMainMediaFile does not select another file. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
+      INPUT. --input must be a recording format v2 or v3 .ldtxrecord. A missing .finalized marker is allowed with a warning; results then describe the media range readable when the command runs and may change after recording finishes. Format v2 uses the fixed main.fragmented.mp4 file; format v3 uses LDTXRecordingLandscapeMediaFile. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
 
       EXECUTION. AVFoundation decoding and Apple Vision recognition require this command to run outside an application sandbox.
 
@@ -31,7 +31,7 @@ struct DetectMatches: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Recording format v2 .ldtxrecord path.")
+  @Option(help: "Recording format v2 or v3 .ldtxrecord path.")
   var input: String
 
   @Option(help: "Fixed match UI layout JSON path.")
@@ -199,7 +199,7 @@ package func resolveDetectMatchesMediaURL(_ recordingURL: URL) throws -> URL {
   {
     RecordVisionInputLogger.unfinishedRecording(recordingURL)
   }
-  return try LDTXRecordingBundle.formatV2MainMediaURL(in: recordingURL)
+  return try LDTXRecordingBundle.mainMediaURL(in: recordingURL)
 }
 
 package func validateManagedAuditDestination(_ url: URL, force: Bool) throws {

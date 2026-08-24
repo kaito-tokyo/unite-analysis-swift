@@ -31,13 +31,13 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 ユーザーが指定した`.ldtxrecord`を読み取り専用の入力として扱う。固定の録画ディレクトリを仮定しない。
 
 - `.finalized`は録画が正常に終了し、以後伸びないことの保証として扱う。欠けていることだけを理由に、録画破損、試合未完了、分析不能と判定したり、分析対象から除外したりしない。
-- recording format v2だけを対象とする。主映像ファイル名は`main.fragmented.mp4`であり、`LDTXRecordingMainMediaFile`も通常は同じ名前を記録する。
+- recording format v2またはv3を対象とする。v2の主映像は固定の`main.fragmented.mp4`、v3の主映像は`LDTXRecordingLandscapeMediaFile`が指定するファイルである。
 - 物理試合メタデータは`<recording>/_PokemonUniteMatches/match-<NN>/record-spec.json`とする。
 - 分析成果物は`<recording>/_PokemonUniteAnalysis/`以下だけへ書く。
 - 正本レポートは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/review.md`とする。
 - LDTXが管理する既存ファイルを変更しない。
 
-`.finalized`がない録画は、`Info.plist`が読め、recording format v2であり、`main.fragmented.mp4`の対象時刻をデコードできる場合に分析する。実行時に読み取れるメディア範囲だけを根拠とし、分析メモとレポートへ未finalized状態と取得時点を記録する。録画中は後からメディアが伸び、再実行結果が変わり得ることを明示する。試合終了、リザルト、選出画面などが未収録なら、完了や内容を推測せず、値を`—`または`?`として未取得理由を残す。後から`.finalized`が現れた場合は、最終的なメディア範囲で分析結果を再検証する。
+`.finalized`がない録画は、`Info.plist`が読め、recording format v2またはv3であり、対応する主映像の対象時刻をデコードできる場合に分析する。実行時に読み取れるメディア範囲だけを根拠とし、分析メモとレポートへ未finalized状態と取得時点を記録する。録画中は後からメディアが伸び、再実行結果が変わり得ることを明示する。試合終了、リザルト、選出画面などが未収録なら、完了や内容を推測せず、値を`—`または`?`として未取得理由を残す。後から`.finalized`が現れた場合は、最終的なメディア範囲で分析結果を再検証する。
 
 `record-spec.json`は録画を読む各コマンドの必須入力である。見つからない場合は、ソース動画、`Info.plist`、既存の分析成果物から根拠を集め、試合境界とゲーム画面矩形を候補として復元する。候補specは`<recording>/_PokemonUniteAnalysis/matches/match-<NN>/record-spec.json`へ保存し、根拠と未確定な値を分析メモへ記録する。LDTXが管理する`_PokemonUniteMatches/`には書き込まない。
 
@@ -61,7 +61,7 @@ unite-analysis-swift schema <schema-basename>
 | `ocr-v1` | 静止画ジョブごとに矩形、領域名、認識タイプを明示してOCRする |
 | `sample-frames` | FFmpeg相似のcrop、fps、scale指定で1領域のJPEG連番を出力する |
 | `detect-chroma-events-v1` | JPEG連番をファイル名辞書順に処理して視覚イベント候補を提案する |
-| `audio-peaks-v1` | recording format v2の主映像音声のパワー上昇から映像確認候補時刻を提案する |
+| `audio-peaks-v1` | recording format v2またはv3の主映像音声のパワー上昇から映像確認候補時刻を提案する |
 | `asr-v1` | ローカル音声・動画内の発話をAppleのオンデバイス音声認識で時刻付きテキスト索引にする |
 | `install-asr-assets-v1` | 人間の明示的な選択により、指定言語のApple管理Speech assetを導入する |
 | `extract-clip` | 試合相対の指定区間を再エンコードせずMP4へ切り出す |
@@ -115,7 +115,7 @@ unite-analysis-swift asr-v1 \
 
 ## 試合区間の動画切り出し
 
-ハイライトの共有、局所シーンの連続再生、またはレポート用の映像を必要とするときは、`extract-clip`でrecording format v2の`main.fragmented.mp4`から必要区間をMP4へ切り出す。外部の動画ツールで再エンコードせず、まずこの専用サブコマンドを使う。
+ハイライトの共有、局所シーンの連続再生、またはレポート用の映像を必要とするときは、`extract-clip`でrecording format v2またはv3の主映像から必要区間をMP4へ切り出す。外部の動画ツールで再エンコードせず、まずこの専用サブコマンドを使う。
 
 初回のハイライト対話では、選んだ候補ごとに1本のクリップを必ず先に生成し、動画を主成果物として提示する。境界は固定時間窓ではなくシーンモデルから決め、局所的な試みの短い前置き、敵と味方の反応、出力の確定までを含める。コンタクトシート、`frame-burst`、原寸フレームは候補探索、サブ秒検証、特定瞬間の補助証拠として維持する。
 
@@ -198,7 +198,7 @@ overview以外のコンタクトシートに固定のPhase、Detail、列数、�
 
 OCR結果に疑問がある場合は、`ocr-v1`出力の入力絶対パスと`source`を使って同じJPEG領域を確認する。OCR文字列だけで出来事を確定せず、ソース動画画像を再確認する。`audio-peaks-v1`と`detect-chroma-events-v1`もイベントを分類しない。
 
-`audio-peaks-v1`は`--record-spec`と必要なら正の`--gain`を受け、試合全体を解析する。`--output`を指定しても完全なJSONをstdoutへ出力する既存契約は変わらない。`inmatch-start`や`duration`は指定しない。format v2の`main.fragmented.mp4`内の音声トラックを使い、音声トラックなし、format v1、デコード不能はエラーとして記録する。出力契約は`audio-peaks-v1.output.schema.json`で確認する。
+`audio-peaks-v1`は`--record-spec`と必要なら正の`--gain`を受け、試合全体を解析する。`--output`を指定しても完全なJSONをstdoutへ出力する既存契約は変わらない。`inmatch-start`や`duration`は指定しない。format v2またはv3の主映像内の音声トラックを使い、音声トラックなし、format v1、デコード不能はエラーとして記録する。出力契約は`audio-peaks-v1.output.schema.json`で確認する。
 
 分析メモには`audio-peaks-v1`を`成功（peaksあり）`、`成功（0件）`、`失敗`、`未実行`のいずれかで記録し、成功時はraw JSONの保存先も記録する。raw JSONを保存しただけでは後段へ引き渡し済みとせず、候補選択・統合へ渡したかを別に記録する。失敗または未実行では、実行予定または実行したコマンドと理由を残す。
 

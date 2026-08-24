@@ -19,7 +19,7 @@ struct AudioPeaks: ParsableCommand {
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation audio decoding is unavailable in the sandboxed execution environment.
 
-      INPUT. --record-spec is required and identifies one match. Run the command with the recording format v2 .ldtxrecord root as the current directory; this caller responsibility is not checked separately. The command reads the audio track embedded in main.fragmented.mp4. That filename is fixed by format v2; LDTXRecordingMainMediaFile normally contains the same name but cannot select another input. Other format versions are rejected.
+      INPUT. --record-spec is required and identifies one match. Run the command with the recording format v2 or v3 .ldtxrecord root as the current directory; this caller responsibility is not checked separately. Format v2 reads the audio track embedded in the fixed main.fragmented.mp4 file; format v3 reads it from LDTXRecordingLandscapeMediaFile. Other format versions are rejected.
 
       COMPLETE EXAMPLE.
 

@@ -317,6 +317,25 @@ private func registeredCommands(
   )
 }
 
+@Test func detectMatchesAllowsUnfinalizedFormatV3Recording() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let recording = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: recording, withIntermediateDirectories: true)
+  let plist: [String: Any] = [
+    "LDTXRecordingFormatVersion": 3,
+    "LDTXRecordingLandscapeMediaFile": "landscape.fragmented.mp4",
+  ]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: recording.appendingPathComponent("Info.plist"))
+  FileManager.default.createFile(
+    atPath: recording.appendingPathComponent("landscape.fragmented.mp4").path, contents: Data())
+
+  #expect(
+    try resolveDetectMatchesMediaURL(recording)
+      == recording.appendingPathComponent("landscape.fragmented.mp4"))
+}
+
 @Test func managedAuditDirectoryReplacesAsOneUnit() throws {
   let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: root) }
