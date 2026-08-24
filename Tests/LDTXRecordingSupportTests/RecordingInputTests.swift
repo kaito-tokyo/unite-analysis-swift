@@ -73,6 +73,63 @@ private func temporaryDirectory() throws -> URL {
       == bundle.appendingPathComponent("main.fragmented.mp4"))
 }
 
+@Test func mainMediaUsesFormatV3LandscapeMediaFile() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  let plist: [String: Any] = [
+    "LDTXRecordingFormatVersion": 3,
+    "LDTXRecordingLandscapeMediaFile": "landscape.fragmented.mp4",
+  ]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: bundle.appendingPathComponent("Info.plist"))
+  FileManager.default.createFile(
+    atPath: bundle.appendingPathComponent("landscape.fragmented.mp4").path, contents: Data())
+
+  #expect(
+    try LDTXRecordingBundle.mainMediaURL(in: bundle)
+      == bundle.appendingPathComponent("landscape.fragmented.mp4"))
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.formatV2MainMediaURL(in: bundle)
+  }
+}
+
+@Test func resolvedRecordingInputUsesFormatV3LandscapeMediaFile() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  FileManager.default.createFile(
+    atPath: bundle.appendingPathComponent(".finalized").path, contents: Data())
+  let plist: [String: Any] = [
+    "LDTXRecordingFormatVersion": 3,
+    "LDTXRecordingLandscapeMediaFile": "landscape.fragmented.mp4",
+  ]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: bundle.appendingPathComponent("Info.plist"))
+  FileManager.default.createFile(
+    atPath: bundle.appendingPathComponent("landscape.fragmented.mp4").path, contents: Data())
+
+  #expect(
+    try ResolvedRecordingInput.resolve(bundle.path).videoURL
+      == bundle.appendingPathComponent("landscape.fragmented.mp4"))
+}
+
+@Test func formatV3RequiresDeclaredLandscapeMedia() throws {
+  let root = try temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  let bundle = root.appendingPathComponent("sample.ldtxrecord", isDirectory: true)
+  try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+  let plist: [String: Any] = ["LDTXRecordingFormatVersion": 3]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    .write(to: bundle.appendingPathComponent("Info.plist"))
+
+  #expect(throws: RecordingInputError.self) {
+    try LDTXRecordingBundle.mainMediaURL(in: bundle)
+  }
+}
+
 @Test func formatV2MainMediaStillRejectsInvalidMetadataAndMissingMedia() throws {
   let root = try temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: root) }

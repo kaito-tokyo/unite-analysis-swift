@@ -16,7 +16,7 @@ struct ExtractClip: ParsableCommand {
     discussion: """
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because it uses AVFoundation media export.
 
-      INPUT. --record-spec identifies one match in a recording format v2 .ldtxrecord. Run from the .ldtxrecord root. --start and --end are seconds relative to match start. --start defaults to 0 and --end defaults to the match duration.
+      INPUT. --record-spec identifies one match in a recording format v2 or v3 .ldtxrecord. Run from the .ldtxrecord root. --start and --end are seconds relative to match start. --start defaults to 0 and --end defaults to the match duration.
 
       COMPLETE EXAMPLE.
 
@@ -100,7 +100,7 @@ func extractClip(
   if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
     RecordVisionInputLogger.unfinishedRecording(bundleURL)
   }
-  let videoURL = try LDTXRecordingBundle.formatV2MainMediaURL(in: bundleURL)
+  let videoURL = try LDTXRecordingBundle.mainMediaURL(in: bundleURL)
   RecordVisionInputLogger.sourceVideo(videoURL)
   let asset = AVURLAsset(url: videoURL)
   let assetDuration = try await asset.load(.duration)

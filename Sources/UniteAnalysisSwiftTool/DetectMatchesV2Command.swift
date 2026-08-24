@@ -26,7 +26,7 @@ struct DetectMatchesV2: ParsableCommand {
       LIMITS. quick5Minute is the only initially supported nonstandard mode. Timer OCR does not identify a map or ruleset. Evidence for any other mode remains excluded, and ambiguous sequences remain unclassified.
       """.reflowedHelp())
 
-  @Option(help: "Recording format v2 .ldtxrecord path.") var input: String
+  @Option(help: "Recording format v2 or v3 .ldtxrecord path.") var input: String
   @Option(help: "Fixed match UI layout JSON path.") var layout: String
   @Option(help: "Strict declared visual/audio match-end evidence JSON path.")
   var endEvidence: String

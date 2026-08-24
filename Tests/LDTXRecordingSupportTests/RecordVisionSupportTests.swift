@@ -447,6 +447,18 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
       == bundle.appendingPathComponent("main.fragmented.mp4"))
 }
 
+@Test func audioPeakInputUsesFormatV3LandscapeMedia() throws {
+  let bundle = try audioPeakTestBundle(
+    info: [
+      "LDTXRecordingFormatVersion": 3,
+      "LDTXRecordingLandscapeMediaFile": "landscape.fragmented.mp4",
+    ],
+    files: ["landscape.fragmented.mp4"])
+  #expect(
+    try AudioPeakDetector.audioURL(in: bundle)
+      == bundle.appendingPathComponent("landscape.fragmented.mp4"))
+}
+
 @Test func audioPeakInputRejectsV1MainMixRecording() throws {
   let bundle = try audioPeakTestBundle(
     info: [
@@ -466,7 +478,7 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
   } catch {
     #expect(
       String(describing: error)
-        == "LDTX recording format version 2 is required: \(bundle.appendingPathComponent("Info.plist").path)"
+        == "LDTX recording format version 2 or 3 is required: \(bundle.appendingPathComponent("Info.plist").path)"
     )
   }
 }

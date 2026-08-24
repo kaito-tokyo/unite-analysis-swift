@@ -26,7 +26,7 @@ public enum RecordingInputError: Error, CustomStringConvertible {
     case .recordingBundleNotFound(let path):
       return "Record spec must be inside a .ldtxrecord bundle: \(path)"
     case .unsupportedRecordingFormat(let path):
-      return "LDTX recording format version 2 is required: \(path)"
+      return "LDTX recording format version 2 or 3 is required: \(path)"
     }
   }
 }
@@ -42,6 +42,14 @@ public enum LDTXRecordingBundle {
   }
 
   public static func formatV2MainMediaURL(in bundleURL: URL) throws -> URL {
+    try mainMediaURL(in: bundleURL, supportedVersions: [2])
+  }
+
+  public static func mainMediaURL(in bundleURL: URL) throws -> URL {
+    try mainMediaURL(in: bundleURL, supportedVersions: [2, 3])
+  }
+
+  private static func mainMediaURL(in bundleURL: URL, supportedVersions: Set<Int>) throws -> URL {
     let infoURL = bundleURL.appendingPathComponent("Info.plist").standardizedFileURL
     guard let data = try? Data(contentsOf: infoURL),
       let plist = try? PropertyListSerialization.propertyList(
@@ -50,10 +58,26 @@ public enum LDTXRecordingBundle {
     else {
       throw RecordingInputError.invalidInfoPlist(infoURL.path)
     }
-    guard (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue == 2 else {
+    guard let version = (dictionary["LDTXRecordingFormatVersion"] as? NSNumber)?.intValue,
+      supportedVersions.contains(version)
+    else {
       throw RecordingInputError.unsupportedRecordingFormat(infoURL.path)
     }
-    let mediaURL = bundleURL.appendingPathComponent("main.fragmented.mp4").standardizedFileURL
+    let relativePath: String
+    switch version {
+    case 2:
+      relativePath = "main.fragmented.mp4"
+    case 3:
+      guard let value = dictionary["LDTXRecordingLandscapeMediaFile"] as? String,
+        !value.isEmpty
+      else {
+        throw RecordingInputError.mainMediaNotFound(bundleURL.path)
+      }
+      relativePath = value
+    default:
+      throw RecordingInputError.unsupportedRecordingFormat(infoURL.path)
+    }
+    let mediaURL = bundleURL.appendingPathComponent(relativePath).standardizedFileURL
     guard FileManager.default.fileExists(atPath: mediaURL.path) else {
       throw RecordingInputError.mainMediaNotFound(mediaURL.path)
     }
@@ -89,6 +113,10 @@ public struct ResolvedRecordingInput: Sendable {
         let dictionary = plist as? [String: Any]
       else {
         throw RecordingInputError.invalidInfoPlist(infoURL.path)
+      }
+      if dictionary["LDTXRecordingFormatVersion"] != nil {
+        let videoURL = try LDTXRecordingBundle.mainMediaURL(in: inputURL)
+        return Self(inputURL: inputURL, videoURL: videoURL, bundleURL: inputURL)
       }
       if let relativePath = dictionary["LDTXRecordingMainMediaFile"] as? String,
         !relativePath.isEmpty

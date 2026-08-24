@@ -114,7 +114,7 @@ public enum AudioPeakDetector {
   package static let peakDilation = 0.5
 
   public static func audioURL(in bundleURL: URL) throws -> URL {
-    try LDTXRecordingBundle.formatV2MainMediaURL(in: bundleURL)
+    try LDTXRecordingBundle.mainMediaURL(in: bundleURL)
   }
 
   public static func detect(
