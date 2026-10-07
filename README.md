@@ -17,7 +17,7 @@ Pokémon Unite match recordings created by LDTX.
 
 1. Open the DMG from the latest release and copy `UALY.app` into `/Applications` or `~/Applications`.
 2. Eject the DMG.
-3. Ask your agent: Install the APM package from `kaito-tokyo/unite-analysis-swift#v0.2.5` globally.
+3. Ask your agent: Install the APM package from `kaito-tokyo/unite-analysis-swift#v0.3.0` globally.
 
 The CLI executables are inside the app's `Contents/MacOS` directory.
 Copying the app does not add them to PATH.

@@ -8,7 +8,7 @@ import Testing
 import UniteAnalysisModelCommands
 
 @Test func modelToolVersionIsHandledAsBuiltInOutput() {
-  #expect(modelBuiltInCLIOutput(arguments: ["--version"]) == "0.2.5")
+  #expect(modelBuiltInCLIOutput(arguments: ["--version"]) == "0.3.0")
 }
 
 @Test func modelToolHelpDescribesBuildCommand() {
