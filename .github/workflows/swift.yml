@@ -198,6 +198,7 @@ jobs:
           install -d "$image_root"
           cp -R "$APP_PATH" "$image_root/"
           Vendor/create-dmg/create-dmg \
+            --skip-jenkins \
             --volname "UALY" \
             --window-size 640 420 \
             --icon-size 100 \

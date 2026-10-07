@@ -21,6 +21,7 @@ for app in "$HOME/Applications/UALY.app" "/Applications/UALY.app"; do
   fi
 done
 if [ -n "$unite_analysis_cli" ]; then
+  printf 'CLI path: %s\n' "$unite_analysis_cli"
   "$unite_analysis_cli" --version
   "$unite_analysis_cli" --help
 else
@@ -28,7 +29,7 @@ else
 fi
 ```
 
-以下のコード例にある`unite-analysis-swift`は、確認した実行ファイルの完全なパスを表す。パスには空白が含まれるため、実際のコマンドでは`"$unite_analysis_cli"`へ置き換える。必要なサブコマンドの`--help`も確認する。CLIがない、実行できない、スキルのAPMパッケージとバージョンが一致しない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
+以下のコード例にある`unite-analysis-swift`は、確認した実行ファイルの完全なパスを表す。実行結果の`CLI path:`に表示された完全なパスを記録し、以後の各シェル呼び出しではそのリテラルを引用符で囲んで使う（例：`"/Applications/UALY.app/Contents/MacOS/unite-analysis-swift"`）。`unite_analysis_cli`は探索したシェル内だけで有効であり、別のシェル呼び出しでは参照しない。必要なサブコマンドの`--help`も確認する。CLIがない、実行できない、スキルのAPMパッケージとバージョンが一致しない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
 
 スキルはAPM、署名済みappバンドルはDMGから`~/Applications`または`/Applications`へコピーする。Swiftソースのチェックアウトや`.build`内の成果物へ依存しない。
 
