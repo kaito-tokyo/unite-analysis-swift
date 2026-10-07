@@ -144,6 +144,26 @@ jobs:
           MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
           MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
 
+      - name: Validate release signing identities
+        if: inputs.release-build
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
+          MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
+        run: |
+          if [[ -z "$MACOS_SIGNING_APPLICATION_IDENTITY" || -z "$MACOS_SIGNING_INSTALLER_IDENTITY" ]]; then
+            echo 'Both MACOS_SIGNING_APPLICATION_IDENTITY and MACOS_SIGNING_INSTALLER_IDENTITY must be configured.' >&2
+            exit 1
+          fi
+          keychain_path="$(security default-keychain | xargs)"
+          identities="$(security find-identity -v "$keychain_path")"
+          for identity in "$MACOS_SIGNING_APPLICATION_IDENTITY" "$MACOS_SIGNING_INSTALLER_IDENTITY"; do
+            if ! grep -Fq -- "$identity" <<< "$identities"; then
+              echo "Required signing identity is missing from the imported keychain: $identity" >&2
+              exit 1
+            fi
+          done
+
       - name: Sign app bundle
         if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}

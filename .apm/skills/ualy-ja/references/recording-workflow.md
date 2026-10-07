@@ -8,13 +8,24 @@
 
 macOS appをコピーしても実行ファイルはPATHへ追加されない。実行前に、ユーザー領域、次にシステム領域のappバンドルから実行ファイルを探して機能とバージョンを確認する。
 
+`expected_version`は、使用中のAPMパッケージの`version`で置き換えてから実行する。ユーザー領域のCLIが古い場合も、バージョンが一致するシステム領域のCLIがあればそちらを使う。
+
 ```sh
-unite_analysis_cli="$HOME/Applications/UALY.app/Contents/MacOS/unite-analysis-swift"
-if [ ! -x "$unite_analysis_cli" ]; then
-  unite_analysis_cli="/Applications/UALY.app/Contents/MacOS/unite-analysis-swift"
+expected_version='<APMパッケージのversion>'
+unite_analysis_cli=
+for app in "$HOME/Applications/UALY.app" "/Applications/UALY.app"; do
+  candidate="$app/Contents/MacOS/unite-analysis-swift"
+  if [ -x "$candidate" ] && candidate_version="$("$candidate" --version 2>/dev/null)" && [ "$candidate_version" = "$expected_version" ]; then
+    unite_analysis_cli="$candidate"
+    break
+  fi
+done
+if [ -n "$unite_analysis_cli" ]; then
+  "$unite_analysis_cli" --version
+  "$unite_analysis_cli" --help
+else
+  printf '%s\n' "対応するCLIが見つからないため、分析は未実行です。必要なバージョン: $expected_version" >&2
 fi
-"$unite_analysis_cli" --version
-"$unite_analysis_cli" --help
 ```
 
 以下のコード例にある`unite-analysis-swift`は、確認した実行ファイルの完全なパスを表す。パスには空白が含まれるため、実際のコマンドでは`"$unite_analysis_cli"`へ置き換える。必要なサブコマンドの`--help`も確認する。CLIがない、実行できない、スキルのAPMパッケージとバージョンが一致しない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
