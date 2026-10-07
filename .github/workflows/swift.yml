@@ -87,7 +87,7 @@ jobs:
         if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          APP_PATH: ${{ runner.temp }}/Kaito-Tokyo Unite Analysis.app
+          APP_PATH: ${{ runner.temp }}/UALY.app
         run: |
           bin_path="$(swift build --show-bin-path -c release)"
           install -d "$APP_PATH"
@@ -173,16 +173,16 @@ jobs:
           MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
         run: |
           image_root="$RUNNER_TEMP/dmg-root"
-          artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$(uname -m).dmg"
+          artifact_name="UALY.dmg"
           disk_image="$RUNNER_TEMP/$artifact_name"
           install -d "$image_root"
           cp -R "$APP_PATH" "$image_root/"
           Vendor/create-dmg/create-dmg \
-            --volname "Kaito-Tokyo Unite Analysis" \
+            --volname "UALY" \
             --window-size 640 420 \
             --icon-size 100 \
-            --icon "Kaito-Tokyo Unite Analysis.app" 160 180 \
-            --hide-extension "Kaito-Tokyo Unite Analysis.app" \
+            --icon "UALY.app" 160 180 \
+            --hide-extension "UALY.app" \
             --app-drop-link 480 180 \
             "$disk_image" "$image_root"
           codesign --force --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$disk_image"

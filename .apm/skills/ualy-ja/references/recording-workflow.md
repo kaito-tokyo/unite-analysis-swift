@@ -9,9 +9,9 @@
 macOS appをコピーしても実行ファイルはPATHへ追加されない。実行前に、ユーザー領域、次にシステム領域のappバンドルから実行ファイルを探して機能とバージョンを確認する。
 
 ```sh
-unite_analysis_cli="$HOME/Applications/Kaito-Tokyo Unite Analysis.app/Contents/MacOS/unite-analysis-swift"
+unite_analysis_cli="$HOME/Applications/UALY.app/Contents/MacOS/unite-analysis-swift"
 if [ ! -x "$unite_analysis_cli" ]; then
-  unite_analysis_cli="/Applications/Kaito-Tokyo Unite Analysis.app/Contents/MacOS/unite-analysis-swift"
+  unite_analysis_cli="/Applications/UALY.app/Contents/MacOS/unite-analysis-swift"
 fi
 "$unite_analysis_cli" --version
 "$unite_analysis_cli" --help

@@ -573,7 +573,7 @@ private func writeSilentVideoWithoutAudio(to url: URL) async throws {
     .deletingLastPathComponent()
     .deletingLastPathComponent()
   let jobsURL = repositoryRoot.appendingPathComponent(
-    ".apm/skills/review-unite-matches-ja/references/overview-contact-sheet-jobs.jsonl")
+    ".apm/skills/ualy-ja/references/overview-contact-sheet-jobs.jsonl")
   let lines = try String(contentsOf: jobsURL, encoding: .utf8)
     .split(whereSeparator: \.isNewline)
   #expect(lines.count == 5)

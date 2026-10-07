@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "ualy-ja"
+  short_description: "録画を分析し、対話を通じて日本語レポートにまとめる"
+  default_prompt: "$ualy-jaを使って、指定した録画のポケモンユナイトの試合を分析し、一緒に振り返りながら日本語のレポートにまとめてください。"

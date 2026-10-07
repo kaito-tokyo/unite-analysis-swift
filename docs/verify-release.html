@@ -70,7 +70,7 @@ SPDX-License-Identifier: Apache-2.0
   --repo kaito-tokyo/unite-analysis-swift \
   --json tagName \
   --jq '.tagName')"
-DISK_IMAGE="unite-analysis-swift-${TAG}-macos-arm64.dmg"
+DISK_IMAGE="UALY.dmg"
 
 gh release download "$TAG" \
   --repo kaito-tokyo/unite-analysis-swift \
@@ -118,7 +118,7 @@ xcrun stapler validate "$DISK_IMAGE"</code></pre>
       </p>
       <pre><code>open "$DISK_IMAGE"</code></pre>
       <p>
-        Drag <code>Kaito-Tokyo Unite Analysis.app</code> onto the Applications
+        Drag <code>UALY.app</code> onto the Applications
         shortcut to copy it into <code>/Applications</code>. To install only for
         the current user, copy the app into <code>~/Applications</code> instead.
         Eject the disk image after copying. The CLI remains inside the app bundle;

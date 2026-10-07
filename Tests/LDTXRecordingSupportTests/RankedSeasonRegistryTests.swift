@@ -25,7 +25,7 @@ private func skillReferenceURL(_ name: String) -> URL {
     .deletingLastPathComponent()
     .deletingLastPathComponent()
     .deletingLastPathComponent()
-    .appendingPathComponent(".apm/skills/review-unite-matches-ja/references")
+    .appendingPathComponent(".apm/skills/ualy-ja/references")
     .appendingPathComponent(name)
 }
 

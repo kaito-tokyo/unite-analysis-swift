@@ -25,7 +25,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       resolved inputs, timestamps, and unfinished-recording warnings to stderr.
       Copying the macOS app does not add this executable to PATH. In examples,
       `unite-analysis-swift` denotes the complete path to the executable inside
-      Kaito-Tokyo Unite Analysis.app/Contents/MacOS.
+      UALY.app/Contents/MacOS.
       Commands that accept jobs use one JSON object per non-empty jobs.jsonl line. Pass - to process
       stdin one line at a time; every job requires a unique jobId echoed by its JSONL response.
       Commands that use AVFoundation media access or Apple Vision text recognition must run outside a sandbox; their individual help identifies this requirement. Audio peak detection uses recording format v2 or v3 main-media audio to propose visually interesting times; it does not classify events. Run `batch-frame --help`, `sample-frames --help`, `precise-frame --help`,
