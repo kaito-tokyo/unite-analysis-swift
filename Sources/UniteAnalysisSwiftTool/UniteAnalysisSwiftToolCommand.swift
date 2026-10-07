@@ -23,7 +23,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       Requires macOS 26 or later. OCR uses Apple Vision locally and accepts still images, while
       record-based extraction reads the main video. Commands print machine-readable results or output paths to stdout and diagnostics,
       resolved inputs, timestamps, and unfinished-recording warnings to stderr.
-      The macOS PKG does not add this executable to PATH. In examples,
+      Copying the macOS app does not add this executable to PATH. In examples,
       `unite-analysis-swift` denotes the complete path to the executable inside
       Kaito-Tokyo Unite Analysis.app/Contents/MacOS.
       Commands that accept jobs use one JSON object per non-empty jobs.jsonl line. Pass - to process

@@ -6,7 +6,7 @@
 
 このスキルの標準分析手段は、インストール済みの`unite-analysis-swift` CLIとする。シェルから直接実行し、録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにする。JSONLを`-`から読む場合は標準入力へ内容を渡す。
 
-macOS PKGは実行ファイルをPATHへ追加しない。実行前に、ユーザー領域、次にシステム領域のappバンドルから実行ファイルを探して機能とバージョンを確認する。
+macOS appをコピーしても実行ファイルはPATHへ追加されない。実行前に、ユーザー領域、次にシステム領域のappバンドルから実行ファイルを探して機能とバージョンを確認する。
 
 ```sh
 unite_analysis_cli="$HOME/Applications/Kaito-Tokyo Unite Analysis.app/Contents/MacOS/unite-analysis-swift"
@@ -19,7 +19,7 @@ fi
 
 以下のコード例にある`unite-analysis-swift`は、確認した実行ファイルの完全なパスを表す。パスには空白が含まれるため、実際のコマンドでは`"$unite_analysis_cli"`へ置き換える。必要なサブコマンドの`--help`も確認する。CLIがない、実行できない、スキルのAPMパッケージとバージョンが一致しない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
 
-スキルはAPM、署名済みappバンドルはmacOS PKGでインストールする。Swiftソースのチェックアウトや`.build`内の成果物へ依存しない。
+スキルはAPM、署名済みappバンドルはDMGから`~/Applications`または`/Applications`へコピーする。Swiftソースのチェックアウトや`.build`内の成果物へ依存しない。
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
