@@ -5,7 +5,6 @@
 import AVFoundation
 import ArgumentParser
 import Foundation
-import MCP
 import RecordVisionSupport
 import Testing
 
@@ -81,7 +80,6 @@ private func registeredCommands(
     guard command.isLeaf else { continue }
     let instance = command.type.init()
     try await executeCLI(instance, mode: .validate)
-    _ = try await executeForMCP(instance, mode: .validate)
   }
 }
 
@@ -518,63 +516,6 @@ func frameBurstJobRejectsRemovedLayoutProperties(property: String) throws {
   #expect(parsed is BuildDescriptorDatabase)
 }
 
-@Test func mcpIsARegularParsableSubcommand() throws {
-  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(["mcp"])
-  #expect(parsed is MCPCommand)
-  #expect(!(parsed is any AsyncParsableCommand))
-}
-
-@Test func mcpClipResultIncludesPlayableResourceLink() throws {
-  let clipURL = URL(fileURLWithPath: "/tmp/highlight clip.mp4")
-  let result = mcpToolResult("{\"records\":[]}", mediaURLs: [clipURL])
-  let data = try JSONEncoder().encode(result)
-  let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-  let content = try #require(object["content"] as? [[String: Any]])
-
-  #expect(content.count == 2)
-  #expect(content[0]["type"] as? String == "text")
-  #expect(content[1]["type"] as? String == "resource_link")
-  #expect(content[1]["uri"] as? String == clipURL.absoluteString)
-  #expect(content[1]["name"] as? String == "highlight clip.mp4")
-  #expect(content[1]["mimeType"] as? String == "video/mp4")
-}
-
-@Test func mcpMediaResourceStoreServesRegisteredClip() async throws {
-  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-    UUID().uuidString, isDirectory: true)
-  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: directory) }
-  let clipURL = directory.appendingPathComponent("highlight.mp4")
-  let clipData = Data([0, 1, 2, 3])
-  try clipData.write(to: clipURL)
-
-  let store = MCPMediaResourceStore()
-  await store.register([clipURL])
-  let resources = await store.resources()
-  let content = try await store.content(for: clipURL.absoluteString)
-
-  #expect(resources.count == 1)
-  #expect(resources[0].uri == clipURL.absoluteString)
-  #expect(resources[0].mimeType == "video/mp4")
-  #expect(content.uri == clipURL.absoluteString)
-  #expect(content.mimeType == "video/mp4")
-  #expect(content.blob == clipData.base64EncodedString())
-}
-
-@Test func mcpInterpretsBuiltInCLIOptionsBeforeParsingCommands() throws {
-  let help = try #require(try builtInMCPOutput(arguments: ["--help"]))
-  let helpObject = try #require(
-    JSONSerialization.jsonObject(with: Data(help.utf8)) as? [String: Any])
-  let helpRecords = try #require(helpObject["records"] as? [[String: String]])
-  #expect(helpRecords.first?["text"]?.contains("USAGE: unite-analysis-swift") == true)
-
-  let version = try #require(try builtInMCPOutput(arguments: ["--version"]))
-  let versionObject = try #require(
-    JSONSerialization.jsonObject(with: Data(version.utf8)) as? [String: Any])
-  let versionRecords = try #require(versionObject["records"] as? [[String: String]])
-  #expect(versionRecords == [["text": UniteAnalysisSwiftCommand.configuration.version]])
-}
-
 @Test(arguments: ["ocr-v1", "recognize-result-v1"])
 func writingCommandsParseForceFlag(commandName: String) throws {
   let arguments =
@@ -661,47 +602,6 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   #expect(try Data(contentsOf: output) == Data("original\n".utf8))
 }
 
-@Test func mcpAudioPeaksRejectsExistingOutputBeforeDecoding() async throws {
-  let output = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString)
-  defer { try? FileManager.default.removeItem(at: output) }
-  try Data("original\n".utf8).write(to: output)
-  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "audio-peaks-v1", "--record-spec", "missing.json", "--output", output.path,
-  ])
-
-  await #expect(throws: UniteAnalysisSwiftToolError.self) {
-    _ = try await executeForMCP(parsed)
-  }
-  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
-}
-
-@Test func mcpRejectsSpeechAssetInstallation() async throws {
-  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "install-asr-assets-v1", "--language", "ja-JP",
-  ])
-
-  await #expect(throws: UniteAnalysisSwiftToolError.self) {
-    _ = try await executeForMCP(parsed)
-  }
-}
-
-@Test func mcpDetectMatchesRejectsExistingOutputBeforeDecoding() async throws {
-  let output = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString)
-  defer { try? FileManager.default.removeItem(at: output) }
-  try Data("original\n".utf8).write(to: output)
-  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot([
-    "detect-matches-v1", "--input", "missing.ldtxrecord", "--layout", "missing.json",
-    "--output", output.path,
-  ])
-
-  await #expect(throws: UniteAnalysisSwiftToolError.self) {
-    _ = try await executeForMCP(parsed)
-  }
-  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
-}
-
 @Test func jsonlOutputRequiresForceBeforeReplacingExistingFile() throws {
   let output = FileManager.default.temporaryDirectory
     .appendingPathComponent(UUID().uuidString)
@@ -758,53 +658,6 @@ func writingCommandsParseForceFlag(commandName: String) throws {
   try writeOutputData(expected, to: output, force: false)
 
   #expect(try Data(contentsOf: output) == expected)
-}
-
-@Test(arguments: ["ocr-v1", "recognize-result-v1"])
-func mcpWritingCommandsForwardForceFlag(commandName: String) async throws {
-  let output = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString)
-  defer { try? FileManager.default.removeItem(at: output) }
-  try Data("original\n".utf8).write(to: output)
-  let arguments =
-    commandName == "ocr-v1"
-    ? [
-      "ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path,
-      "--force",
-    ]
-    : [
-      "recognize-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
-      "--output", output.path, "--force",
-    ]
-  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
-
-  do {
-    _ = try await executeForMCP(parsed)
-    Issue.record("Expected missing input to fail")
-  } catch {
-    #expect(!String(describing: error).contains("Output already exists"))
-  }
-}
-
-@Test(arguments: ["ocr-v1", "recognize-result-v1"])
-func mcpWritingCommandsRejectExistingOutputWithoutForce(commandName: String) async throws {
-  let output = FileManager.default.temporaryDirectory
-    .appendingPathComponent(UUID().uuidString)
-  defer { try? FileManager.default.removeItem(at: output) }
-  try Data("original\n".utf8).write(to: output)
-  let arguments =
-    commandName == "ocr-v1"
-    ? ["ocr-v1", "missing.jsonl", "--ocr-options", "missing.json", "--output", output.path]
-    : [
-      "recognize-result-v1", "missing.jpg", "--type", "summary", "--ocr-options", "missing.json",
-      "--output", output.path,
-    ]
-  let parsed = try UniteAnalysisSwiftCommand.parseAsRoot(arguments)
-
-  await #expect(throws: UniteAnalysisSwiftToolError.self) {
-    _ = try await executeForMCP(parsed)
-  }
-  #expect(try Data(contentsOf: output) == Data("original\n".utf8))
 }
 
 @Test(arguments: ["ocr-v1", "recognize-result-v1"])

@@ -119,7 +119,7 @@ struct InstallASRAssets: ParsableCommand {
     commandName: "install-asr-assets-v1",
     abstract: "Install Apple-managed on-device speech assets for one language.",
     discussion: """
-      This command performs a network download and persistent host installation when the resolved locale's speech assets are absent. Run it directly from the CLI only after the user has explicitly chosen to install those assets. It is not available through MCP and must run outside an application sandbox. Installed assets are managed by Apple.
+      This command performs a network download and persistent host installation when the resolved locale's speech assets are absent. Run it directly from the CLI only after the user has explicitly chosen to install those assets. It must run outside an application sandbox. Installed assets are managed by Apple.
 
       The requested language is resolved through DictationTranscriber's supported-locale API. A machine-readable JSON result is written to stdout and diagnostics are written to stderr.
       """.reflowedHelp()

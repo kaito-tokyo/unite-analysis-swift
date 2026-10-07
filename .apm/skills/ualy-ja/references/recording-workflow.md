@@ -4,21 +4,34 @@
 
 ## 実行契約
 
-このスキルの標準分析手段は、プラグイン同梱の`run_unite_analysis` MCPツールだけとする。ツールの`arguments`へCLI引数を文字列配列として渡し、録画ルートは`currentDirectory`へ渡す。JSONLを`-`から読む場合は`standardInput`へ内容を渡す。
+このスキルの標準分析手段は、インストール済みの`unite-analysis-swift` CLIとする。シェルから直接実行し、録画を読むコマンドは`.ldtxrecord`ルートをカレントディレクトリにする。JSONLを`-`から読む場合は標準入力へ内容を渡す。
 
-```text
-run_unite_analysis(arguments: ["--help"])
+macOS appをコピーしても実行ファイルはPATHへ追加されない。実行前に、ユーザー領域、次にシステム領域のappバンドルから実行ファイルを探して機能とバージョンを確認する。
+
+`expected_version`は、使用中のAPMパッケージの`version`で置き換えてから実行する。ユーザー領域のCLIが古い場合も、バージョンが一致するシステム領域のCLIがあればそちらを使う。
+
+```sh
+expected_version='<APMパッケージのversion>'
+unite_analysis_cli=
+for app in "$HOME/Applications/UALY.app" "/Applications/UALY.app"; do
+  candidate="$app/Contents/MacOS/unite-analysis-swift"
+  if [ -x "$candidate" ] && candidate_version="$("$candidate" --version 2>/dev/null)" && [ "$candidate_version" = "$expected_version" ]; then
+    unite_analysis_cli="$candidate"
+    break
+  fi
+done
+if [ -n "$unite_analysis_cli" ]; then
+  printf 'CLI path: %s\n' "$unite_analysis_cli"
+  "$unite_analysis_cli" --version
+  "$unite_analysis_cli" --help
+else
+  printf '%s\n' "対応するCLIが見つからないため、分析は未実行です。必要なバージョン: $expected_version" >&2
+fi
 ```
 
-実行前に、MCPツールで次に相当する引数を実行して機能を確認する。
+以下のコード例にある`unite-analysis-swift`は、確認した実行ファイルの完全なパスを表す。実行結果の`CLI path:`に表示された完全なパスを記録し、以後の各シェル呼び出しではそのリテラルを引用符で囲んで使う（例：`"/Applications/UALY.app/Contents/MacOS/unite-analysis-swift"`）。`unite_analysis_cli`は探索したシェル内だけで有効であり、別のシェル呼び出しでは参照しない。必要なサブコマンドの`--help`も確認する。CLIがない、実行できない、スキルのAPMパッケージとバージョンが一致しない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
 
-```text
-arguments: ["--help"]
-```
-
-以下のコード例にある`unite-analysis-swift`は、MCPツールへ渡す`arguments`を読みやすく示すCLI表記であり、シェルから実行しない。MCPツールがない、実行できない、または必要なサブコマンドがない場合は、その検査を未実行として報告する。スキルからCLIをビルド、インストール、更新、上書きしない。
-
-プラグインにはスキルと署名済みappバンドルが同じバージョンで含まれる。Swiftソースのチェックアウト、`.build`内の成果物、プラグイン外の実行ファイルへ依存しない。
+スキルはAPM、署名済みappバンドルはDMGから`~/Applications`または`/Applications`へコピーする。Swiftソースのチェックアウトや`.build`内の成果物へ依存しない。
 
 このワークフローでは外部の認識・映像・音声ツールでSwift CLIの欠落機能を暗黙に補完せず、未取得として扱う。ただし、`sample-frames` helpに示される同形のFFmpeg抽出は、ユーザーまたは既存ワークフローが明示的に選んだ場合に限り利用できる。
 
@@ -132,7 +145,7 @@ unite-analysis-swift extract-clip \
 - 指定区間は`0 <= start < end <= record-spec duration`を満たす有限値とする。ソース動画の範囲外はエラーになる。
 - `AVAssetExportPresetPassthrough`により、互換性のある圧縮済み映像・音声サンプルをデコード・再エンコードせずコピーする。
 - 指定した開始時刻に新しいキーフレームは作られない。プレイヤーは近接する同期サンプルからデコードし始める場合がある。フレーム単位で正確かつ独立デコード可能な開始が必須なら、このコマンドではなく再エンコードが必要と報告する。
-- MCPが返す`video/mp4`のresource linkをチャットへ提示し、再生できたことを確認する。resource linkが返らない、再生できない、または抽出に失敗した場合は、その候補の不足理由を明示し、ソース動画画像だけをfallbackとして提示する。
+- CLIが標準出力へ返すMP4の出力パスを絶対パスに解決し、`![クリップの説明](/absolute/path/clip.mp4)`としてチャットへ提示する。再生できたことを確認する。出力パスが得られない、再生できない、または抽出に失敗した場合は、その候補の不足理由を明示し、ソース動画画像だけをfallbackとして提示する。
 - 既存出力はエラーになる。再生成対象を確認した場合だけ`--force`を使う。出力は一時的な同階層ファイルへ書き出した後、成功時だけ目的パスへ置く。
 - 出力MP4の映像・音声、指定区間、開始付近のデコード可否は、対応する決定的なリポジトリツールまたはテストが利用できる場合だけ、その結果を検証結果として記録する。利用できない項目は未実行と報告する。実際の再生は補助的な確認として行えるが、目視・聴取だけを検証済みの根拠にしない。
 
@@ -241,7 +254,7 @@ OCR結果に疑問がある場合は、`ocr-v1`出力の入力絶対パスと`so
 
 1. ユーザーが指定した録画と対象試合を確認する。
 2. `.finalized`、`Info.plist`、`record-spec.json`を確認し、録画形式、試合境界、ゲーム画面矩形を確定する。specがなければ根拠を集めて候補を復元・記録する。
-3. `run_unite_analysis`へ`["--help"]`を渡してCLIを確認する。
+3. インストール済みCLIの`--version`と`--help`を直接実行して確認する。
 4. 既存の`_PokemonUniteAnalysis`成果物を調べ、現行入力と一致するものを再利用する。
 5. 選出開始前からVS画面までの映像で`draft`、`blind`、`unknown`を判定する。認識器に形式を推測させない。
 6. `draft`なら`recognize-draft-loadout-v1`、`blind`なら`recognize-blind-loadout-v1`を実行する。`unknown`または技術的失敗なら、未取得の認識種別、コマンド、理由を記録する。

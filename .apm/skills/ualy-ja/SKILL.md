@@ -3,7 +3,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-name: review-unite-matches-ja
+name: ualy-ja
 description: LDTXの.ldtxrecordに収録された完了済みポケモンユナイトの試合を分析し、日本語での対話を通じて意図と因果関係を整理し、自己完結した試合単位の日本語レポートとして保存する。録画調査、試合の振り返り、参加者とビルド、結果復元、ハイライトと因果分析、訂正、レポート改善、正本保存、ObsidianまたはGoogle Driveへの任意公開に使用する。
 ---
 

@@ -10,13 +10,13 @@ on:
   workflow_call:
     inputs:
       release-build:
-        description: Builds, signs, notarizes, attests, and uploads the release package.
+        description: Builds, signs, notarizes, attests, and uploads the release disk image.
         required: false
         type: boolean
         default: false
     outputs:
       artifact:
-        description: Name of the uploaded notarized installer package.
+        description: Name of the uploaded notarized disk image.
         value: ${{ jobs.swift-ci.outputs.artifact }}
 
 jobs:
@@ -87,7 +87,7 @@ jobs:
         if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
-          APP_PATH: ${{ runner.temp }}/Kaito-Tokyo Unite Analysis.app
+          APP_PATH: ${{ runner.temp }}/UALY.app
         run: |
           bin_path="$(swift build --show-bin-path -c release)"
           install -d "$APP_PATH"
@@ -144,6 +144,26 @@ jobs:
           MACOS_SIGNING_CERT: ${{ secrets.MACOS_SIGNING_CERT }}
           MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
 
+      - name: Validate release signing identities
+        if: inputs.release-build
+        shell: bash --noprofile --norc -euo pipefail {0}
+        env:
+          MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
+          MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
+        run: |
+          if [[ -z "$MACOS_SIGNING_APPLICATION_IDENTITY" || -z "$MACOS_SIGNING_INSTALLER_IDENTITY" ]]; then
+            echo 'Both MACOS_SIGNING_APPLICATION_IDENTITY and MACOS_SIGNING_INSTALLER_IDENTITY must be configured.' >&2
+            exit 1
+          fi
+          keychain_path="$(security default-keychain | xargs)"
+          identities="$(security find-identity -v "$keychain_path")"
+          for identity in "$MACOS_SIGNING_APPLICATION_IDENTITY" "$MACOS_SIGNING_INSTALLER_IDENTITY"; do
+            if ! grep -Fq -- "$identity" <<< "$identities"; then
+              echo "Required signing identity is missing from the imported keychain: $identity" >&2
+              exit 1
+            fi
+          done
+
       - name: Sign app bundle
         if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
@@ -164,73 +184,63 @@ jobs:
           codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$APP_PATH"
           codesign --verify --strict --verbose=2 "$APP_PATH"
 
-      - name: Package signed installer
+      - name: Create and sign disk image
         id: release-package
         if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           APP_PATH: ${{ steps.app.outputs.app_path }}
-          MACOS_SIGNING_INSTALLER_IDENTITY: ${{ vars.MACOS_SIGNING_INSTALLER_IDENTITY }}
+          MACOS_SIGNING_APPLICATION_IDENTITY: ${{ vars.MACOS_SIGNING_APPLICATION_IDENTITY }}
         run: |
-          if [[ -z "$MACOS_SIGNING_INSTALLER_IDENTITY" ]]; then
-            echo 'MACOS_SIGNING_INSTALLER_IDENTITY is not configured.' >&2
-            exit 1
-          fi
-          component_root="$RUNNER_TEMP/installer-root"
-          component_package="$RUNNER_TEMP/unite-analysis-swift-component.pkg"
-          resources_directory="$RUNNER_TEMP/installer-resources"
-          artifact_name="unite-analysis-swift-$GITHUB_REF_NAME-macos-$(uname -m).pkg"
-          installer_package="$RUNNER_TEMP/$artifact_name"
-          install -d "$component_root" "$resources_directory"
-          cp -R "$APP_PATH" "$component_root/"
-          install -m 644 LICENSE "$resources_directory/"
-          COPYFILE_DISABLE=1 pkgbuild \
-            --root "$component_root" \
-            --component-plist pkg/Components.plist \
-            --identifier tokyo.kaito.unite-analysis-swift \
-            --version "${GITHUB_REF_NAME#v}" \
-            --install-location /Applications \
-            "$component_package"
-          productbuild \
-            --distribution pkg/Distribution.xml \
-            --package-path "$RUNNER_TEMP" \
-            --resources "$resources_directory" \
-            --sign "$MACOS_SIGNING_INSTALLER_IDENTITY" \
-            "$installer_package"
-          pkgutil --check-signature "$installer_package"
+          image_root="$RUNNER_TEMP/dmg-root"
+          artifact_name="UALY.dmg"
+          disk_image="$RUNNER_TEMP/$artifact_name"
+          install -d "$image_root"
+          cp -R "$APP_PATH" "$image_root/"
+          Vendor/create-dmg/create-dmg \
+            --skip-jenkins \
+            --volname "UALY" \
+            --window-size 640 420 \
+            --icon-size 100 \
+            --icon "UALY.app" 160 180 \
+            --hide-extension "UALY.app" \
+            --app-drop-link 480 180 \
+            "$disk_image" "$image_root"
+          codesign --force --timestamp --sign "$MACOS_SIGNING_APPLICATION_IDENTITY" "$disk_image"
+          codesign --verify --strict --verbose=2 "$disk_image"
           printf 'artifact_name=%s\n' "$artifact_name" >> "$GITHUB_OUTPUT"
-          printf 'artifact_path=%s\n' "$installer_package" >> "$GITHUB_OUTPUT"
+          printf 'artifact_path=%s\n' "$disk_image" >> "$GITHUB_OUTPUT"
 
-      - name: Notarize and staple installer
+      - name: Notarize and staple disk image
         if: inputs.release-build
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           APP_STORE_CONNECT_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER }}
           APP_STORE_CONNECT_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          INSTALLER_PACKAGE_PATH: ${{ steps.release-package.outputs.artifact_path }}
+          DISK_IMAGE_PATH: ${{ steps.release-package.outputs.artifact_path }}
         run: |
           key_path="$(mktemp)"
           trap 'rm -f "$key_path"' EXIT
           printf '%s' "$APP_STORE_CONNECT_KEY_BASE64" | base64 -D > "$key_path"
           chmod 600 "$key_path"
-          xcrun notarytool submit "$INSTALLER_PACKAGE_PATH" \
+          xcrun notarytool submit "$DISK_IMAGE_PATH" \
             --key "$key_path" \
             --key-id "$APP_STORE_CONNECT_KEY_ID" \
             --issuer "$APP_STORE_CONNECT_ISSUER" \
             --wait
-          xcrun stapler staple "$INSTALLER_PACKAGE_PATH"
-          xcrun stapler validate "$INSTALLER_PACKAGE_PATH"
-          pkgutil --check-signature "$INSTALLER_PACKAGE_PATH"
-          spctl --assess --type install --verbose=2 "$INSTALLER_PACKAGE_PATH"
+          xcrun stapler staple "$DISK_IMAGE_PATH"
+          xcrun stapler validate "$DISK_IMAGE_PATH"
+          codesign --verify --strict --verbose=2 "$DISK_IMAGE_PATH"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DISK_IMAGE_PATH"
 
-      - name: Attest notarized installer package
+      - name: Attest notarized disk image
         if: inputs.release-build
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ steps.release-package.outputs.artifact_path }}
 
-      - name: Upload installer package
+      - name: Upload disk image
         if: inputs.release-build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

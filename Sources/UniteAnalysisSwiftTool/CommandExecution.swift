@@ -53,7 +53,6 @@ package func builtInCLIOutput(arguments: [String]) -> String? {
     case ["config", "set"]: ConfigSet.self
     case ["config", "unset"]: ConfigUnset.self
     case ["config", "path"]: ConfigPath.self
-    case ["mcp"]: MCPCommand.self
     default: nil
     }
   guard let commandType else { return nil }
@@ -255,10 +254,6 @@ package func executeCLI(
     for try await record in command.outputRecords() {
       try FileHandle.standardOutput.write(contentsOf: Data("\(record.value)\n".utf8))
     }
-
-  case is MCPCommand:
-    guard mode == .execute else { return }
-    try await executeMCPServer()
 
   default:
     throw ValidationError("Unsupported command type: \(String(describing: type(of: parsed)))")

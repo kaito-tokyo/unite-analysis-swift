@@ -155,19 +155,19 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      - name: Download installer package
+      - name: Download disk image
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.build.outputs.artifact }}
           path: ${{ runner.temp }}/release-assets
 
-      - name: Verify installer package attestation
+      - name: Verify disk image attestation
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
-          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/release-assets/${{ needs.build.outputs.artifact }}
+          DISK_IMAGE_PATH: ${{ runner.temp }}/release-assets/${{ needs.build.outputs.artifact }}
         run: |
-          gh attestation verify "$INSTALLER_PACKAGE_PATH" \
+          gh attestation verify "$DISK_IMAGE_PATH" \
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/swift.yml" \
             --source-ref "$GITHUB_REF" \
@@ -179,7 +179,7 @@ jobs:
         shell: bash --noprofile --norc -euo pipefail {0}
         env:
           GH_TOKEN: ${{ github.token }}
-          INSTALLER_PACKAGE_PATH: ${{ runner.temp }}/release-assets/${{ needs.build.outputs.artifact }}
+          DISK_IMAGE_PATH: ${{ runner.temp }}/release-assets/${{ needs.build.outputs.artifact }}
         run: |
           git fetch --force --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/release-verification/tag"
           tag_sha="$(git rev-parse 'refs/release-verification/tag^{commit}')"
@@ -189,13 +189,13 @@ jobs:
           fi
           is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)"
           if [[ -z "$is_draft" ]]; then
-            gh release create "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" \
+            gh release create "$GITHUB_REF_NAME" "$DISK_IMAGE_PATH" \
               --draft \
               --generate-notes \
               --title "$GITHUB_REF_NAME" \
               --verify-tag
           elif [[ "$is_draft" == 'true' ]]; then
-            gh release upload "$GITHUB_REF_NAME" "$INSTALLER_PACKAGE_PATH" --clobber
+            gh release upload "$GITHUB_REF_NAME" "$DISK_IMAGE_PATH" --clobber
           else
             echo "Release $GITHUB_REF_NAME is already published." >&2
             exit 1

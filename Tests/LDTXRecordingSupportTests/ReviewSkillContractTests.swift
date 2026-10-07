@@ -13,7 +13,7 @@ private func reviewSkillText(_ relativePath: String) throws -> String {
   return try String(
     contentsOf:
       repositoryRoot
-      .appendingPathComponent(".apm/skills/review-unite-matches-ja")
+      .appendingPathComponent(".apm/skills/ualy-ja")
       .appendingPathComponent(relativePath),
     encoding: .utf8)
 }
