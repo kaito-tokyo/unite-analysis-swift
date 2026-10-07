@@ -9,8 +9,7 @@ let package = Package(
     .executable(name: "unite-analysis-model-tool", targets: ["UniteAnalysisModelTool"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
-    .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.12.1"),
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2")
   ],
   targets: [
     .target(
@@ -188,7 +187,6 @@ let package = Package(
         "UniteAnalysisConfiguration",
         "IconMatcherNative",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        .product(name: "MCP", package: "swift-sdk"),
       ],
       path: "Sources/UniteAnalysisSwiftTool",
       resources: [.embedInCode("Schemas")],

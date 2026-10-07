@@ -46,7 +46,7 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
       ExtractClip.self, OCRCommand.self,
       RecognizeResultCommand.self,
       RecognizeDraftLoadout.self, RecognizeBlindLoadout.self,
-      EvaluateDrawText.self, Schema.self, Config.self, MCPCommand.self,
+      EvaluateDrawText.self, Schema.self, Config.self,
     ]
   )
 

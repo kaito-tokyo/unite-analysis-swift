@@ -31,7 +31,7 @@ struct EvaluateDrawText: ParsableCommand {
 
       GLOBALS. The expression receives the same JSC globals as contact-sheet drawText.script: FRAME (index, inmatch, beforeStart, afterEnd, actualInmatch), MATCH (duration), RECORD (matchId), and VIDEO (width, height, frameRate, duration). FRAME.index is set by --index and is zero-based. FRAME.actualInmatch is set by --actual-inmatch.
 
-      TIME LIMIT. Script execution is limited to 0.1 seconds. An expression that exceeds the limit fails with a timeout error instead of blocking the CLI or MCP server.
+      TIME LIMIT. Script execution is limited to 0.1 seconds. An expression that exceeds the limit fails with a timeout error instead of blocking the CLI.
       """.reflowedHelp()
   )
 
