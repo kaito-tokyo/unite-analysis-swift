@@ -39,6 +39,23 @@ AVFoundationで動画または音声を読む`batch-frame`、`sample-frames`、`
 
 サンドボックス内で`Cannot Decode`になった場合は、同じコマンドと入力をサンドボックス外で再実行してから成否を判定する。サンドボックス内の失敗だけを根拠に録画破損や実装不具合と判定しない。
 
+
+## 単体MP4モード
+
+単体MP4も読み取り専用入力として扱う。試合検出には`--standalone-mp4 --input <video.mp4> --output-dir <analysis-dir>`を指定する。通常録画のメタデータは読まない。ゲーム画面は表示方向を反映した動画全体が既定で、配信レイアウトや余白がある場合は`--game-screen-x`、`--game-screen-y`、`--game-screen-width`、`--game-screen-height`を4項目とも指定する。既存の`--layout`と、v2の`--end-evidence`は引き続き必要である。
+
+```sh
+unite-analysis-swift detect-matches-v1 --standalone-mp4 --input video.mp4 --layout <skill-root>/references/ja.20260811.match.timer.json --output-dir analysis
+unite-analysis-swift precise-frame --standalone-mp4 --input video.mp4 --record-spec analysis/match-01/record-spec.json --match-timestamp 30 --x 0 --y 0 --width 1920 --height 1080 --output analysis/match-01/frame.jpg
+unite-analysis-swift extract-clip --standalone-mp4 --input video.mp4 --record-spec analysis/match-01/record-spec.json --start 20 --end 40 --output analysis/match-01/clip.mp4
+```
+
+出力ディレクトリには`match-detection.json`と、確定した各試合の`match-<NN>/record-spec.json`が生成される。未分類候補にはspecを作らない。試合ゼロの場合は検出JSONだけを生成する。v1の`--audit-id`は`<analysis-dir>/audits/<id>/`へ保存する。単体モードの試合検出で`--output`は使わない。`--force`は指定ディレクトリ全体を置換するため、既存の分析成果物が必要なら別ディレクトリを指定する。入力ファイルを含むディレクトリや作業ディレクトリ自体は置換先に指定できない。
+
+後続の動画を読む試合単位のコマンドには`--standalone-mp4 --input <同じvideo.mp4> --record-spec <生成したspec>`を指定する。specの内容と試合相対時刻の意味は通常モードと同じであり、動画パスはspecに保存されない。specと動画の組合せは呼び出し側が一致させる。持ち物認識では`--output`も必須で、診断PNGはその親ディレクトリへ保存するため`--dump-akaze-inputs`を指定しない。成果物とレポートは明示した分析ディレクトリの試合別ディレクトリへ保存する。
+
+ASR、静止画OCR・リザルト認識、画像列の色差検出、イベント候補の統合は既存のファイル入力を使い、単体MP4フラグもrecord-spec指定も追加しない。この節の単体モードでは、後述の`.ldtxrecord`ルートやバンドル内保存先の規定を、明示したMP4と分析ディレクトリに読み替える。
+
 ## 入力と保存領域
 
 ユーザーが指定した`.ldtxrecord`を読み取り専用の入力として扱う。固定の録画ディレクトリを仮定しない。

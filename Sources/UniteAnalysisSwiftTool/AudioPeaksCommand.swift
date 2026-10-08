@@ -17,6 +17,8 @@ struct AudioPeaks: ParsableCommand {
     commandName: "audio-peaks-v1",
     abstract: "Print visually interesting recording-audio SE peak times as JSON.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 and supply --record-spec for the same video. The record spec may be outside a .ldtxrecord. No recording metadata is read in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation audio decoding is unavailable in the sandboxed execution environment.
 
       INPUT. --record-spec is required and identifies one match. Run the command with the recording format v2 or v3 .ldtxrecord root as the current directory; this caller responsibility is not checked separately. Format v2 reads the audio track embedded in the fixed main.fragmented.mp4 file; format v3 reads it from LDTXRecordingLandscapeMediaFile. Other format versions are rejected.
@@ -73,8 +75,9 @@ struct AudioPeaks: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Required record-spec.json path. Run from the .ldtxrecord root.")
+  @Option(help: "Required record-spec.json path. With --standalone-mp4, also supply --input.")
   var recordSpec: String
+  @OptionGroup var matchInput: MatchInputOptions
 
   @Option(help: "Fixed linear input gain applied before power calculation.")
   var gain = 1.0
@@ -86,6 +89,7 @@ struct AudioPeaks: ParsableCommand {
   var force = false
 
   func validate() throws {
+    try matchInput.validate()
     guard gain.isFinite, gain > 0 else {
       throw ValidationError("--gain must be a finite value greater than zero")
     }
@@ -105,6 +109,9 @@ extension AudioPeaks {
 
   private func result() async throws -> OutputRecord {
     let recordSpecURL = resolveRecordSpec(recordSpec)
+    if let output {
+      try matchInput.source().validateOutput(resolvePath(output), recordSpecURL: recordSpecURL)
+    }
     let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
     guard spec.startPTS.timescale > 0 else {
@@ -115,12 +122,9 @@ extension AudioPeaks {
         "record-spec duration must be a positive finite value")
     }
 
-    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
-    {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
-    }
-    let audioURL = try AudioPeakDetector.audioURL(in: bundleURL)
+    let audioURL = try resolveMatchRecording(
+      recordSpecURL: recordSpecURL, source: matchInput.source(), requireModernBundle: true
+    ).videoURL
     RecordVisionInputLogger.sourceAudio(audioURL)
     let result = try await AudioPeakDetector.detect(
       audioURL: audioURL,

@@ -17,6 +17,8 @@ struct PreciseFrame: ParsableCommand {
     commandName: "precise-frame",
     abstract: "Write exactly one AVAssetReader-decoded explicit-source screenshot.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 and supply --record-spec for the same video. The record spec may be outside a .ldtxrecord. No recording metadata is read in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       INPUT. This command accepts options only and writes exactly one frame; it does not use the jobs.jsonl interface. Specify --record-spec, --match-timestamp, --x, --y, --width, --height, and --output. Run it with the .ldtxrecord root as the current directory; this caller responsibility is not checked separately.
@@ -37,8 +39,9 @@ struct PreciseFrame: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Required record-spec.json path. Run from the .ldtxrecord root.")
+  @Option(help: "Required record-spec.json path. With --standalone-mp4, also supply --input.")
   var recordSpec: String
+  @OptionGroup var matchInput: MatchInputOptions
   @Option(help: "Required finite seconds relative to match start.") var matchTimestamp: Double
   @Option(help: "Required source rectangle x in main-video pixels.") var x: Int
   @Option(help: "Required source rectangle y in main-video pixels.") var y: Int
@@ -49,6 +52,7 @@ struct PreciseFrame: ParsableCommand {
   @Flag(help: "Overwrite the output if it already exists.") var force = false
 
   func validate() throws {
+    try matchInput.validate()
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
@@ -69,6 +73,7 @@ extension PreciseFrame {
       let command = self
       let output = try await renderPreciseFrame(
         recordSpecURL: resolveRecordSpec(command.recordSpec),
+        videoInput: try command.matchInput.source(),
         scene: .matchRelative(command.matchTimestamp),
         source: FrameSource(
           x: command.x, y: command.y, width: command.width, height: command.height),

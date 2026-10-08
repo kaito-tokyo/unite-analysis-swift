@@ -10,6 +10,8 @@ struct SampleFrames: ParsableCommand {
     commandName: "sample-frames",
     abstract: "Write one FFmpeg-shaped fixed-rate JPEG sequence.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 and supply --record-spec for the same video. The record spec may be outside a .ldtxrecord. No recording metadata is read in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       PURPOSE. Generate one seek-image sequence before detect-chroma-events-v1. The options intentionally correspond to one FFmpeg crop, fps, and scale filter chain. This command only extracts images; it does not measure chroma differences or select event candidates.
@@ -34,8 +36,9 @@ struct SampleFrames: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Required record-spec.json path. Run from the .ldtxrecord root.")
+  @Option(help: "Required record-spec.json path. With --standalone-mp4, also supply --input.")
   var recordSpec: String
+  @OptionGroup var matchInput: MatchInputOptions
 
   @Option(help: "Crop left edge; maps to crop x.") var cropX: Int
   @Option(help: "Crop top edge; maps to crop y.") var cropY: Int
@@ -51,6 +54,7 @@ struct SampleFrames: ParsableCommand {
   @Flag(help: "Overwrite every generated output path.") var force = false
 
   func validate() throws {
+    try matchInput.validate()
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
@@ -68,6 +72,7 @@ extension SampleFrames {
       let command = self
       for output in try await renderSampleFrames(
         recordSpecURL: resolveRecordSpec(command.recordSpec),
+        videoInput: try command.matchInput.source(),
         request: SampleFramesRequest(
           source: FrameSource(
             x: command.cropX, y: command.cropY, width: command.cropWidth,

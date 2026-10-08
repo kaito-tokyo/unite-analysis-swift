@@ -14,6 +14,8 @@ struct ExtractClip: ParsableCommand {
     commandName: "extract-clip",
     abstract: "Copy a match-relative interval into an MP4 without re-encoding.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 and supply --record-spec for the same video. The record spec may be outside a .ldtxrecord. No recording metadata is read in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because it uses AVFoundation media export.
 
       INPUT. --record-spec identifies one match in a recording format v2 or v3 .ldtxrecord. Run from the .ldtxrecord root. --start and --end are seconds relative to match start. --start defaults to 0 and --end defaults to the match duration.
@@ -34,8 +36,9 @@ struct ExtractClip: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Required record-spec.json path. Run from the .ldtxrecord root.")
+  @Option(help: "Required record-spec.json path. With --standalone-mp4, also supply --input.")
   var recordSpec: String
+  @OptionGroup var matchInput: MatchInputOptions
   @Option(help: "Finite seconds relative to match start; defaults to 0.") var start = 0.0
   @Option(help: "Finite seconds relative to match start; defaults to match duration.")
   var end: Double?
@@ -43,6 +46,7 @@ struct ExtractClip: ParsableCommand {
   @Flag(help: "Replace the output if it already exists.") var force = false
 
   func validate() throws {
+    try matchInput.validate()
     guard start.isFinite else {
       throw ValidationError("--start must be finite")
     }
@@ -63,6 +67,7 @@ extension ExtractClip {
       let command = self
       let output = try await extractClip(
         recordSpecURL: resolveRecordSpec(command.recordSpec),
+        source: try command.matchInput.source(),
         start: command.start,
         end: command.end,
         outputURL: resolvePath(command.output),
@@ -74,6 +79,7 @@ extension ExtractClip {
 
 func extractClip(
   recordSpecURL: URL,
+  source: MatchVideoInput = .recordingBundle,
   start: Double,
   end requestedEnd: Double?,
   outputURL: URL,
@@ -94,13 +100,12 @@ func extractClip(
   guard outputURL.pathExtension.lowercased() == "mp4" else {
     throw UniteAnalysisSwiftToolError.message("Output path must have the .mp4 extension")
   }
+  try source.validateOutput(outputURL, recordSpecURL: recordSpecURL)
   try validateOutputPath(outputURL, force: force)
 
-  let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-  if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
-    RecordVisionInputLogger.unfinishedRecording(bundleURL)
-  }
-  let videoURL = try LDTXRecordingBundle.mainMediaURL(in: bundleURL)
+  let videoURL = try resolveMatchRecording(
+    recordSpecURL: recordSpecURL, source: source, requireModernBundle: true
+  ).videoURL
   RecordVisionInputLogger.sourceVideo(videoURL)
   let asset = AVURLAsset(url: videoURL)
   let assetDuration = try await asset.load(.duration)

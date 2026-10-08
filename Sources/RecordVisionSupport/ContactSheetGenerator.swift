@@ -340,13 +340,16 @@ public enum ContactSheetGenerator {
   package struct PreparedInput {
     fileprivate let recordSpecURL: URL
     fileprivate let isFinalized: Bool
+    fileprivate let source: MatchVideoInput
     fileprivate let recordSpec: RecordVisionRecordSpec
     fileprivate let asset: AVURLAsset
     fileprivate let videoDuration: CMTime
     fileprivate let video: VideoMetadata
   }
 
-  package static func prepare(recordSpecURL: URL) async throws -> PreparedInput {
+  package static func prepare(recordSpecURL: URL, source: MatchVideoInput = .recordingBundle)
+    async throws -> PreparedInput
+  {
     let recordSpec = try JSONDecoder().decode(
       RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
@@ -354,13 +357,14 @@ public enum ContactSheetGenerator {
       throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
     }
     try validate(duration: recordSpec.duration)
-    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-    let isFinalized = FileManager.default.fileExists(
-      atPath: bundleURL.appendingPathComponent(".finalized").path)
-    if !isFinalized {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
+    let recording = try source.resolve(recordSpecURL: recordSpecURL)
+    let isFinalized =
+      recording.bundleURL.map {
+        FileManager.default.fileExists(atPath: $0.appendingPathComponent(".finalized").path)
+      } ?? true
+    if !isFinalized, let bundle = recording.bundleURL {
+      RecordVisionInputLogger.unfinishedRecording(bundle)
     }
-    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
     RecordVisionInputLogger.sourceVideo(recording.videoURL)
     let asset = AVURLAsset(url: recording.videoURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
@@ -369,7 +373,8 @@ public enum ContactSheetGenerator {
     let naturalSize = try await track.load(.naturalSize)
     let videoDuration = try await asset.load(.duration)
     return PreparedInput(
-      recordSpecURL: recordSpecURL, isFinalized: isFinalized, recordSpec: recordSpec, asset: asset,
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, source: source,
+      recordSpec: recordSpec, asset: asset,
       videoDuration: videoDuration,
       video: VideoMetadata(
         width: Int(naturalSize.width), height: Int(naturalSize.height),
@@ -379,7 +384,7 @@ public enum ContactSheetGenerator {
 
   package static func refreshIfUnfinished(_ prepared: PreparedInput) async throws -> PreparedInput {
     if prepared.isFinalized { return prepared }
-    return try await prepare(recordSpecURL: prepared.recordSpecURL)
+    return try await prepare(recordSpecURL: prepared.recordSpecURL, source: prepared.source)
   }
 
   public static func run(
@@ -402,6 +407,7 @@ public enum ContactSheetGenerator {
   package static func run(
     definitionData: Data, prepared: PreparedInput, outputURL: URL, quality: Double, force: Bool
   ) async throws {
+    try prepared.source.validateOutput(outputURL, recordSpecURL: prepared.recordSpecURL)
     do {
       try OutputFileWriter.validate(outputURL, force: force)
     } catch let error as OutputFileError {

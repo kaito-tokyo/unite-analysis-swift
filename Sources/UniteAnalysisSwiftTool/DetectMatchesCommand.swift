@@ -15,6 +15,8 @@ struct DetectMatches: ParsableCommand {
     discussion: """
       INPUT. --input must be a recording format v2 or v3 .ldtxrecord. A missing .finalized marker is allowed with a warning; results then describe the media range readable when the command runs and may change after recording finishes. Format v2 uses the fixed main.fragmented.mp4 file; format v3 uses LDTXRecordingLandscapeMediaFile. --layout is a fixed UI layout JSON containing the game-screen reference size and match-timer rectangle. The command never reads LDTX Visions. custom_fields.json may contain the String-to-String keys unite-analysis-swift.x, .y, .width, and .height; omitted trailing dimensions extend to the display-oriented video edge.
 
+      STANDALONE MP4. Supply --standalone-mp4 --input video.mp4 --output-dir analysis. The dedicated output directory contains match-detection.json and match-01/record-spec.json for each accepted match; --force replaces the entire directory. The game screen defaults to the display-oriented full video; supply all four --game-screen-* options to crop it. --output is unavailable in this mode.
+
       EXECUTION. AVFoundation decoding and Apple Vision recognition require this command to run outside an application sandbox.
 
       OCR. The main video is decoded sequentially with AVAssetReader at --sample-interval spacing. Only the timer ROI is sent through VNImageRequestHandler using accurate en-US recognition with automatic language detection and language correction disabled. Every sample is handled in this process without JPEG round-trips or image-by-image process launches.
@@ -31,8 +33,9 @@ struct DetectMatches: ParsableCommand {
       """.reflowedHelp()
   )
 
-  @Option(help: "Recording format v2 or v3 .ldtxrecord path.")
+  @Option(help: "Recording format v2/v3 .ldtxrecord, or .mp4 with --standalone-mp4.")
   var input: String
+  @OptionGroup var standalone: StandaloneDetectionOptions
 
   @Option(help: "Fixed match UI layout JSON path.")
   var layout: String
@@ -71,7 +74,21 @@ struct DetectMatches: ParsableCommand {
     commandOutputStream { continuation in continuation.yield(try await self.result()) }
   }
 
-  package func result() async throws -> Output {
+  func validate() throws {
+    try standalone.validate()
+    if standalone.standaloneMP4, output != nil {
+      throw ValidationError("--output cannot be combined with --standalone-mp4; use --output-dir")
+    }
+  }
+
+  package func result(writeStandaloneOutput: Bool = true) async throws -> Output {
+    let protectedInputs = [resolvePath(input), resolvePath(layout)]
+    let destination = try standalone.destination(
+      output: output, force: force, protectedInputs: protectedInputs)
+    let staged = try destination.flatMap {
+      writeStandaloneOutput ? try stageStandaloneDirectory(at: $0) : nil
+    }
+    defer { if let staged { try? FileManager.default.removeItem(at: staged) } }
     try validateOutputPath(output.map(resolvePath), force: force)
     if output != nil, auditId != nil {
       throw UniteAnalysisSwiftToolError.message(
@@ -87,10 +104,17 @@ struct DetectMatches: ParsableCommand {
       validatedAuditId = nil
     }
     let recordingURL = resolvePath(input).standardizedFileURL
-    guard recordingURL.pathExtension == "ldtxrecord" else {
+    guard standalone.standaloneMP4 || recordingURL.pathExtension == "ldtxrecord" else {
       throw UniteAnalysisSwiftToolError.message("--input must be a .ldtxrecord directory")
     }
-    let mediaURL = try resolveDetectMatchesMediaURL(recordingURL)
+    let mediaURL: URL
+    if standalone.standaloneMP4 {
+      mediaURL = try MatchVideoInput.standaloneMP4(recordingURL).resolve(
+        recordSpecURL: recordingURL
+      ).videoURL
+    } else {
+      mediaURL = try resolveDetectMatchesMediaURL(recordingURL)
+    }
     let mainMediaFile = mediaURL.lastPathComponent
     let asset = AVURLAsset(url: mediaURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
@@ -105,7 +129,7 @@ struct DetectMatches: ParsableCommand {
 
     let customURL = recordingURL.appendingPathComponent("custom_fields.json")
     var customFields: [String: String] = [:]
-    if FileManager.default.fileExists(atPath: customURL.path) {
+    if !standalone.standaloneMP4, FileManager.default.fileExists(atPath: customURL.path) {
       do {
         customFields = try JSONDecoder().decode(
           [String: String].self, from: Data(contentsOf: customURL))
@@ -116,8 +140,12 @@ struct DetectMatches: ParsableCommand {
     }
     let gameScreen: GameScreenRectangle
     do {
-      gameScreen = try .resolve(
-        customFields: customFields, videoWidth: videoWidth, videoHeight: videoHeight)
+      if standalone.standaloneMP4 {
+        gameScreen = try standalone.rectangle(videoWidth: videoWidth, videoHeight: videoHeight)
+      } else {
+        gameScreen = try .resolve(
+          customFields: customFields, videoWidth: videoWidth, videoHeight: videoHeight)
+      }
     } catch {
       throw UniteAnalysisSwiftToolError.message(String(describing: error))
     }
@@ -144,7 +172,9 @@ struct DetectMatches: ParsableCommand {
     var stagedAuditDirectory: URL?
     var finalAuditDirectory: URL?
     if let auditId = validatedAuditId {
-      let auditsDirectory = recordingURL.appendingPathComponent("_PokemonUniteAnalysis/audits")
+      let auditsDirectory =
+        staged.map { $0.appendingPathComponent("audits") }
+        ?? recordingURL.appendingPathComponent("_PokemonUniteAnalysis/audits")
       let finalDirectory = auditsDirectory.appendingPathComponent(auditId, isDirectory: true)
       try validateManagedAuditDestination(finalDirectory, force: force)
       try FileManager.default.createDirectory(
@@ -188,6 +218,12 @@ struct DetectMatches: ParsableCommand {
         try? FileManager.default.removeItem(at: stagedAuditDirectory)
         throw UniteAnalysisSwiftToolError.message(String(describing: error))
       }
+    }
+    if let staged, let destination {
+      let specs = result.matches.map { StandaloneMatchSpec($0, gameScreen: gameScreen) }
+      try writeStandaloneDetection(
+        result, specs: specs, staged: staged, destination: destination,
+        force: force, protectedInputs: protectedInputs)
     }
     return result
   }

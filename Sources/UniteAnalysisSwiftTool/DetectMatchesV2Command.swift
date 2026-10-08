@@ -15,6 +15,8 @@ struct DetectMatchesV2: ParsableCommand {
 
       INPUT. --input, --layout, and --sample-interval have the same direct source-video OCR behavior as detect-matches-v1. --end-evidence is a strict match-end-evidence-v1 JSON document containing human- or tool-confirmed visual or audio evidence. The command never reads LDTX Vision metadata or a contact-sheet image.
 
+      STANDALONE MP4. Supply --standalone-mp4 --input video.mp4 --output-dir analysis. The dedicated output directory contains match-detection.json and match-01/record-spec.json for each accepted match; --force replaces the entire directory. The game screen defaults to the display-oriented full video; supply all four --game-screen-* options to crop it. --output is unavailable in this mode.
+
       MODES. v2 initially supports standard10Minute and quick5Minute. A standard ten-minute interval is completed from its corroborated timer countdown. It is shortened only by one unambiguous surrender evidence item. A quick five-minute interval requires one unambiguous matchEnd or surrender evidence item. Other modes remain unsupported and their evidence is excluded.
 
       EVIDENCE. Every item declares a unique evidenceId, source recording PTS, kind (matchEnd or surrender), medium (visual or audio), mode, and a non-empty source description. Missing, conflicting, unsupported, and unused evidence is retained with a machine-readable reason. Timer sequences that cannot be classified are retained as unclassifiedCandidates rather than assigned a guessed end.
@@ -26,7 +28,9 @@ struct DetectMatchesV2: ParsableCommand {
       LIMITS. quick5Minute is the only initially supported nonstandard mode. Timer OCR does not identify a map or ruleset. Evidence for any other mode remains excluded, and ambiguous sequences remain unclassified.
       """.reflowedHelp())
 
-  @Option(help: "Recording format v2 or v3 .ldtxrecord path.") var input: String
+  @Option(help: "Recording format v2/v3 .ldtxrecord, or .mp4 with --standalone-mp4.") var input:
+    String
+  @OptionGroup var standalone: StandaloneDetectionOptions
   @Option(help: "Fixed match UI layout JSON path.") var layout: String
   @Option(help: "Strict declared visual/audio match-end evidence JSON path.")
   var endEvidence: String
@@ -59,7 +63,17 @@ struct DetectMatchesV2: ParsableCommand {
     commandOutputStream { continuation in continuation.yield(try await result()) }
   }
 
+  func validate() throws {
+    try standalone.validate()
+    if standalone.standaloneMP4, output != nil {
+      throw ValidationError("--output cannot be combined with --standalone-mp4; use --output-dir")
+    }
+  }
+
   private func result() async throws -> Output {
+    let protectedInputs = [resolvePath(input), resolvePath(layout), resolvePath(endEvidence)]
+    let destination = try standalone.destination(
+      output: output, force: force, protectedInputs: protectedInputs)
     try validateOutputPath(output.map(resolvePath), force: force)
     let evidence: MatchEndEvidenceDocument
     do {
@@ -75,22 +89,32 @@ struct DetectMatchesV2: ParsableCommand {
     try Self.validateEvidence(evidence)
     var v1 = DetectMatches()
     v1.input = input
+    v1.standalone = standalone
     v1.layout = layout
     v1.sampleInterval = sampleInterval
     v1.output = nil
     v1.auditId = nil
-    v1.force = false
-    let base = try await v1.result()
+    v1.force = force
+    let base = try await v1.result(writeStandaloneOutput: false)
     try Self.validateEvidenceTimestamps(evidence, recordingDuration: base.recordingDuration)
     let detection = MatchIntervalDetectionV2(
       timerDiagnostics: base.diagnostics,
       endEvidence: evidence, recordingDuration: base.recordingDuration)
-    return Output(
+    let result = Output(
       mainMediaFile: base.mainMediaFile, layoutId: base.layoutId,
       gameScreen: base.gameScreen, matches: detection.matches,
       timerDiagnostics: detection.timerDiagnostics,
       endEvidenceDiagnostics: detection.endEvidenceDiagnostics,
       unclassifiedCandidates: detection.unclassifiedCandidates)
+    if let destination {
+      let staged = try stageStandaloneDirectory(at: destination)
+      defer { try? FileManager.default.removeItem(at: staged) }
+      let specs = result.matches.map { StandaloneMatchSpec($0, gameScreen: result.gameScreen) }
+      try writeStandaloneDetection(
+        result, specs: specs, staged: staged, destination: destination,
+        force: force, protectedInputs: protectedInputs)
+    }
+    return result
   }
 
   static func validateEvidence(_ evidence: MatchEndEvidenceDocument) throws {
