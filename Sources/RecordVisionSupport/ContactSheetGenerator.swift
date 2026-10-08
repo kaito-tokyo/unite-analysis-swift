@@ -236,7 +236,8 @@ public enum DrawTextScriptEngine {
     inmatch: Double?,
     beforeStart: Double?,
     afterEnd: Double?,
-    actualInmatch: Double? = nil
+    actualInmatch: Double? = nil,
+    source: MatchVideoInput = .recordingBundle
   ) async throws -> String {
     let values = [inmatch, beforeStart, afterEnd].compactMap { $0 }
     guard values.count == 1, values[0].isFinite else {
@@ -246,18 +247,18 @@ public enum DrawTextScriptEngine {
     let record = try JSONDecoder().decode(
       RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
-    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path)
+    let recording = try source.resolve(recordSpecURL: recordSpecURL)
+    if let bundle = recording.bundleURL,
+      !FileManager.default.fileExists(atPath: bundle.appendingPathComponent(".finalized").path)
     {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
+      RecordVisionInputLogger.unfinishedRecording(bundle)
     }
-    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
     RecordVisionInputLogger.sourceVideo(recording.videoURL)
     let asset = AVURLAsset(url: recording.videoURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
       throw ContactSheetGeneratorError.message("No video track")
     }
-    let size = try await track.load(.naturalSize)
+    let size = try await videoCoordinateSize(track: track, source: source)
     return try evaluate(
       script: script, index: index, inmatch: inmatch, beforeStart: beforeStart, afterEnd: afterEnd,
       actualInmatch: actualInmatch,
@@ -340,13 +341,16 @@ public enum ContactSheetGenerator {
   package struct PreparedInput {
     fileprivate let recordSpecURL: URL
     fileprivate let isFinalized: Bool
+    fileprivate let source: MatchVideoInput
     fileprivate let recordSpec: RecordVisionRecordSpec
     fileprivate let asset: AVURLAsset
     fileprivate let videoDuration: CMTime
     fileprivate let video: VideoMetadata
   }
 
-  package static func prepare(recordSpecURL: URL) async throws -> PreparedInput {
+  package static func prepare(recordSpecURL: URL, source: MatchVideoInput = .recordingBundle)
+    async throws -> PreparedInput
+  {
     let recordSpec = try JSONDecoder().decode(
       RecordVisionRecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
@@ -354,22 +358,24 @@ public enum ContactSheetGenerator {
       throw ContactSheetGeneratorError.message("startPTS.timescale must be positive")
     }
     try validate(duration: recordSpec.duration)
-    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-    let isFinalized = FileManager.default.fileExists(
-      atPath: bundleURL.appendingPathComponent(".finalized").path)
-    if !isFinalized {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
+    let recording = try source.resolve(recordSpecURL: recordSpecURL)
+    let isFinalized =
+      recording.bundleURL.map {
+        FileManager.default.fileExists(atPath: $0.appendingPathComponent(".finalized").path)
+      } ?? true
+    if !isFinalized, let bundle = recording.bundleURL {
+      RecordVisionInputLogger.unfinishedRecording(bundle)
     }
-    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
     RecordVisionInputLogger.sourceVideo(recording.videoURL)
     let asset = AVURLAsset(url: recording.videoURL)
     guard let track = try await asset.loadTracks(withMediaType: .video).first else {
       throw ContactSheetGeneratorError.message("No video track: \(recording.videoURL.path)")
     }
-    let naturalSize = try await track.load(.naturalSize)
+    let naturalSize = try await videoCoordinateSize(track: track, source: source)
     let videoDuration = try await asset.load(.duration)
     return PreparedInput(
-      recordSpecURL: recordSpecURL, isFinalized: isFinalized, recordSpec: recordSpec, asset: asset,
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, source: source,
+      recordSpec: recordSpec, asset: asset,
       videoDuration: videoDuration,
       video: VideoMetadata(
         width: Int(naturalSize.width), height: Int(naturalSize.height),
@@ -379,7 +385,7 @@ public enum ContactSheetGenerator {
 
   package static func refreshIfUnfinished(_ prepared: PreparedInput) async throws -> PreparedInput {
     if prepared.isFinalized { return prepared }
-    return try await prepare(recordSpecURL: prepared.recordSpecURL)
+    return try await prepare(recordSpecURL: prepared.recordSpecURL, source: prepared.source)
   }
 
   public static func run(
@@ -402,6 +408,7 @@ public enum ContactSheetGenerator {
   package static func run(
     definitionData: Data, prepared: PreparedInput, outputURL: URL, quality: Double, force: Bool
   ) async throws {
+    try prepared.source.validateOutput(outputURL, recordSpecURL: prepared.recordSpecURL)
     do {
       try OutputFileWriter.validate(outputURL, force: force)
     } catch let error as OutputFileError {
@@ -440,7 +447,7 @@ public enum ContactSheetGenerator {
       start: start, offsets: frameOffsets, videoDuration: videoDuration)
     let generator = AVAssetImageGenerator(asset: asset)
     generator.apertureMode = .encodedPixels
-    generator.appliesPreferredTrackTransform = false
+    generator.appliesPreferredTrackTransform = prepared.source.isStandaloneMP4
     var renderedIndices = Set<Int>()
 
     for await result in generator.images(for: sourceTimes) {
@@ -710,4 +717,13 @@ public enum ContactSheetGenerator {
     )
   }
 
+}
+
+private func videoCoordinateSize(track: AVAssetTrack, source: MatchVideoInput) async throws
+  -> CGSize
+{
+  let size = try await track.load(.naturalSize)
+  guard source.isStandaloneMP4 else { return size }
+  let display = size.applying(try await track.load(.preferredTransform))
+  return CGSize(width: abs(display.width), height: abs(display.height))
 }

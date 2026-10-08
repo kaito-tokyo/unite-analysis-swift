@@ -17,6 +17,8 @@ package struct UniteAnalysisSwiftCommand: ParsableCommand {
     commandName: "unite-analysis-swift",
     abstract: "Extract and analyze ポケモンユナイト recording and still-image data.",
     discussion: """
+      Standalone MP4 commands use --standalone-mp4 --input video.mp4. Match detection additionally requires --output-dir and generates one record-spec.json per accepted match. Subsequent video commands require --record-spec; loadout recognition also requires --output. File-based ASR, still-image recognition, and candidate merging keep their existing inputs.
+
       Run record-based commands with the .ldtxrecord root as the current directory; this is the caller's responsibility and is not checked separately. Record-based commands require --record-spec for one match's record-spec.json. That file is the physical match-to-recording mapping used to locate the
       enclosing .ldtxrecord and its main video. JSON frame values are seconds relative to match
       start: negative values are before the match, and values above match duration are after it.

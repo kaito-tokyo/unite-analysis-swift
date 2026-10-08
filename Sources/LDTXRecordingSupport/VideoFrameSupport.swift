@@ -23,6 +23,7 @@ public enum VideoFrameSupportError: Error, CustomStringConvertible {
 public final class VideoFrameExtractor {
   private let asset: AVURLAsset
   private let track: AVAssetTrack
+  private let displayOrientedFrames: Bool
   private let transform: CGAffineTransform
   private let context: CIContext
   public let duration: CMTime
@@ -30,12 +31,13 @@ public final class VideoFrameExtractor {
   public let naturalSize: CGSize
   public let nominalFrameRate: Float
 
-  public init(videoURL: URL) async throws {
+  public init(videoURL: URL, displayOrientedFrames: Bool = false) async throws {
     let asset = AVURLAsset(url: videoURL)
     let tracks = try await asset.loadTracks(withMediaType: .video)
     guard let track = tracks.first else {
       throw VideoFrameSupportError.message("No video track: \(videoURL.path)")
     }
+    self.displayOrientedFrames = displayOrientedFrames
     self.asset = asset
     self.track = track
     self.transform = try await track.load(.preferredTransform)
@@ -61,7 +63,7 @@ public final class VideoFrameExtractor {
 
     let generator = AVAssetImageGenerator(asset: asset)
     generator.apertureMode = .encodedPixels
-    generator.appliesPreferredTrackTransform = false
+    generator.appliesPreferredTrackTransform = displayOrientedFrames
     var renderedIndices = Set<Int>()
     for await result in generator.images(for: times) {
       switch result {
@@ -148,9 +150,9 @@ public final class VideoFrameExtractor {
       guard CMTimeCompare(presentationTime, time) >= 0,
         let pixelBuffer = CMSampleBufferGetImageBuffer(sample)
       else { continue }
-      // FrameSource rectangles use encoded-pixel coordinates, matching contact-sheet.
+      // Standalone specs use display coordinates; recording bundles retain encoded coordinates.
       let image = try VideoFrameSupport.normalizedImage(
-        pixelBuffer, transform: .identity, context: context)
+        pixelBuffer, transform: displayOrientedFrames ? transform : .identity, context: context)
       try handler(index, image, presentationTime)
       index += 1
     }
@@ -233,7 +235,13 @@ public enum VideoFrameSupport {
     transform: CGAffineTransform,
     context: CIContext
   ) throws -> CGImage {
-    var image = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: transform)
+    let encoded = CIImage(cvPixelBuffer: pixelBuffer)
+    // AVFoundation transforms use a top-left origin; Core Image uses a bottom-left origin.
+    var image =
+      encoded
+      .transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: encoded.extent.height))
+      .transformed(by: transform)
+      .transformed(by: CGAffineTransform(scaleX: 1, y: -1))
     let extent = image.extent
     if extent.minX != 0 || extent.minY != 0 {
       image = image.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))

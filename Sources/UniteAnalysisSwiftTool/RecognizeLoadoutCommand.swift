@@ -84,7 +84,9 @@ private func loadIconMatcher(from url: URL) throws -> unite_analysis.IconMatcher
 private func loadoutInputs(
   recordSpec recordSpecPath: String?,
   input inputPath: String?,
-  matchTimes: [Double]
+  matchTimes: [Double],
+  standaloneMP4: Bool = false,
+  output: String? = nil
 ) async throws -> (video: URL, outputDirectory: URL, frames: [DecodedLoadoutFrame]) {
   guard matchTimes.allSatisfy(\.isFinite) else {
     throw ValidationError("Recognition times must be finite match-relative seconds")
@@ -92,9 +94,8 @@ private func loadoutInputs(
   for index in matchTimes.indices.dropFirst() where matchTimes[index] <= matchTimes[index - 1] {
     throw ValidationError("Recognition times must be strictly increasing")
   }
-  guard (recordSpecPath == nil) != (inputPath == nil) else {
-    throw ValidationError("Specify exactly one of --record-spec or --input")
-  }
+  try validateLoadoutInput(
+    recordSpec: recordSpecPath, input: inputPath, standaloneMP4: standaloneMP4, output: output)
   let recording: ResolvedRecordingInput
   let outputDirectory: URL
   let component: RecordSpec.VideoComponent?
@@ -108,18 +109,17 @@ private func loadoutInputs(
     guard let gameScreen = spec.videoComponents.first(where: { $0.name == "game-screen" }) else {
       throw ValidationError("record-spec.json has no game-screen video component")
     }
-    let bundle = try LDTXRecordingBundle.containing(recordSpecURL)
-    if !FileManager.default.fileExists(atPath: bundle.appendingPathComponent(".finalized").path) {
-      RecordVisionInputLogger.unfinishedRecording(bundle)
+    let source: MatchVideoInput =
+      standaloneMP4 ? .standaloneMP4(resolvePath(inputPath!)) : .recordingBundle
+    recording = try resolveMatchRecording(recordSpecURL: recordSpecURL, source: source)
+    if standaloneMP4 {
+      outputDirectory = resolvePath(output!).deletingLastPathComponent()
+    } else {
+      outputDirectory = recording.bundleURL!
+        .appendingPathComponent("_PokemonUniteAnalysis/matches", isDirectory: true)
+        .appendingPathComponent(
+          recordSpecURL.deletingLastPathComponent().lastPathComponent, isDirectory: true)
     }
-    recording = try ResolvedRecordingInput.resolve(bundle.path, allowUnfinished: true)
-    outputDirectory =
-      bundle
-      .appendingPathComponent("_PokemonUniteAnalysis/matches", isDirectory: true)
-      .appendingPathComponent(
-        recordSpecURL.deletingLastPathComponent().lastPathComponent,
-        isDirectory: true
-      )
     component = gameScreen
     let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
     times = matchTimes.map {
@@ -411,6 +411,8 @@ struct RecognizeDraftLoadout: ParsableCommand {
     commandName: "recognize-draft-loadout-v1",
     abstract: "Recognize draft final-preparation and versus-screen item loadouts.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 --record-spec record-spec.json --output loadout.json. Times remain match-relative. Diagnostic PNGs are written beside --output; --dump-akaze-inputs is unavailable in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       Select draft mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, times are relative to match start. With --input for a v1 .ldtxrecord, times use the recording timeline. Use the last stable final-preparation frame, not an intermediate edited loadout. The versus frame supplies enemy battle items; enemy held items are never inferred.
@@ -418,10 +420,22 @@ struct RecognizeDraftLoadout: ParsableCommand {
       RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score. A player's held-item names also become null when independently accepted slots select the same item, because duplicate held items are invalid. Candidates and the top score remain available whenever recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
-  @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
+  @Option(help: "record-spec.json path for match-relative times; required with --standalone-mp4.")
   var recordSpec: String?
-  @Option(help: "v1 .ldtxrecord path for recording-relative times; exclusive with --record-spec.")
+  @Option(
+    help: "Standalone MP4, or v1 .ldtxrecord for recording-relative times without --record-spec.")
   var input: String?
+  @Flag(help: "Read --input as a standalone MP4; --record-spec and --output are required.")
+  var standaloneMP4 = false
+
+  func validate() throws {
+    try validateLoadoutInput(
+      recordSpec: recordSpec, input: input, standaloneMP4: standaloneMP4, output: output)
+    if standaloneMP4, dumpAKAZEInputs != nil {
+      throw ValidationError(
+        "Standalone MP4 diagnostics use the --output parent directory; omit --dump-akaze-inputs")
+    }
+  }
   @Option(
     name: .customLong("final-prep-time"),
     help: "Final stable preparation time relative to match start.")
@@ -448,13 +462,20 @@ extension RecognizeDraftLoadout {
       let command = self
       let inputs = try await loadoutInputs(
         recordSpec: command.recordSpec, input: command.input,
-        matchTimes: [command.finalPreparationTime, command.versusTime])
+        matchTimes: [command.finalPreparationTime, command.versusTime],
+        standaloneMP4: command.standaloneMP4, output: command.output)
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
       let outputURL = loadoutOutputURL(
         defaultName: "draft-loadout.json", outputDirectory: inputs.outputDirectory,
         output: command.output)
-      let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      if command.standaloneMP4 {
+        let source = MatchVideoInput.standaloneMP4(resolvePath(command.input!))
+        try source.validateOutput(outputURL, recordSpecURL: resolveRecordSpec(command.recordSpec!))
+      }
+      let diagnosticDirectory =
+        command.standaloneMP4
+        ? outputURL.deletingLastPathComponent() : command.dumpAKAZEInputs.map(resolvePath)
       try validateDistinctLoadoutOutputs(
         outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "draft")
       try validateLoadoutOutputDestination(outputURL, force: command.force)
@@ -491,6 +512,8 @@ struct RecognizeBlindLoadout: ParsableCommand {
     commandName: "recognize-blind-loadout-v1",
     abstract: "Recognize allied loadouts from a blind-selection preparation screen.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 --record-spec record-spec.json --output loadout.json. Times remain match-relative. Diagnostic PNGs are written beside --output; --dump-akaze-inputs is unavailable in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       Select blind mode by visually reviewing the recording or a contact sheet. This command does not guess draft versus blind. With --record-spec, --prep-time is relative to match start. With --input for a v1 .ldtxrecord, it uses the recording timeline. The time must identify the stable five-card selection screen. Enemy loadouts are absent because this screen does not expose them.
@@ -498,10 +521,22 @@ struct RecognizeBlindLoadout: ParsableCommand {
       RECOGNITION. Each candidate score is the unnormalized sum of surviving Lowe-ratio descriptor votes, where each query descriptor contributes 1 - nearestDistance / secondNearestDistance. It orders candidates within one crop, but is not a probability or a calibrated value comparable across crops or database revisions. name is null unless the top score is at least one full-strength vote worth of evidence and at least twice the runner-up score. A player's held-item names also become null when independently accepted slots select the same item, because duplicate held items are invalid. Candidates and the top score remain available whenever recognition abstains. Declared-route HSV classification also abstains for a low-chroma crop or when the median hue is more than 24.5 OpenCV hue units from every route reference. The 24.5 limit is half the smallest circular separation between route reference hues.
       """.reflowedHelp())
 
-  @Option(help: "record-spec.json path for match-relative times; exclusive with --input.")
+  @Option(help: "record-spec.json path for match-relative times; required with --standalone-mp4.")
   var recordSpec: String?
-  @Option(help: "v1 .ldtxrecord path for recording-relative times; exclusive with --record-spec.")
+  @Option(
+    help: "Standalone MP4, or v1 .ldtxrecord for recording-relative times without --record-spec.")
   var input: String?
+  @Flag(help: "Read --input as a standalone MP4; --record-spec and --output are required.")
+  var standaloneMP4 = false
+
+  func validate() throws {
+    try validateLoadoutInput(
+      recordSpec: recordSpec, input: input, standaloneMP4: standaloneMP4, output: output)
+    if standaloneMP4, dumpAKAZEInputs != nil {
+      throw ValidationError(
+        "Standalone MP4 diagnostics use the --output parent directory; omit --dump-akaze-inputs")
+    }
+  }
   @Option(help: "Stable blind-selection screen time relative to match start.") var prepTime: Double
   @Option(help: "Combined descriptor database; defaults to the app bundle resource.")
   var descriptors: String?
@@ -522,13 +557,20 @@ extension RecognizeBlindLoadout {
     commandOutputStream { continuation in
       let command = self
       let inputs = try await loadoutInputs(
-        recordSpec: command.recordSpec, input: command.input, matchTimes: [command.prepTime])
+        recordSpec: command.recordSpec, input: command.input, matchTimes: [command.prepTime],
+        standaloneMP4: command.standaloneMP4, output: command.output)
       let matcher = try loadIconMatcher(
         from: command.descriptors.map(resolvePath) ?? defaultDescriptorDatabaseURL())
       let outputURL = loadoutOutputURL(
         defaultName: "blind-loadout.json", outputDirectory: inputs.outputDirectory,
         output: command.output)
-      let diagnosticDirectory = command.dumpAKAZEInputs.map(resolvePath)
+      if command.standaloneMP4 {
+        let source = MatchVideoInput.standaloneMP4(resolvePath(command.input!))
+        try source.validateOutput(outputURL, recordSpecURL: resolveRecordSpec(command.recordSpec!))
+      }
+      let diagnosticDirectory =
+        command.standaloneMP4
+        ? outputURL.deletingLastPathComponent() : command.dumpAKAZEInputs.map(resolvePath)
       try validateDistinctLoadoutOutputs(
         outputURL: outputURL, diagnosticDirectory: diagnosticDirectory, matchFormat: "blind")
       try validateLoadoutOutputDestination(outputURL, force: command.force)
@@ -555,4 +597,18 @@ extension RecognizeBlindLoadout {
     }
   }
 
+}
+
+func validateLoadoutInput(recordSpec: String?, input: String?, standaloneMP4: Bool, output: String?)
+  throws
+{
+  if standaloneMP4 {
+    guard recordSpec != nil, input != nil, output != nil else {
+      throw ValidationError("--standalone-mp4 requires --input, --record-spec, and --output")
+    }
+  } else {
+    guard (recordSpec == nil) != (input == nil) else {
+      throw ValidationError("Specify exactly one of --record-spec or --input")
+    }
+  }
 }

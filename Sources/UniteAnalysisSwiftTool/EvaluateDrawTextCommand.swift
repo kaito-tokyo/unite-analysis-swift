@@ -25,6 +25,8 @@ struct EvaluateDrawText: ParsableCommand {
 
       unite-analysis-swift eval-draw-text-script '"#" + (FRAME.index + 1) + " / " + MATCH.duration' --record-spec _PokemonUniteMatches/match-01/record-spec.json --index 0 --inmatch 45.5
 
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 with --record-spec. VIDEO dimensions use the same display-oriented coordinates as standalone contact sheets.
+
       INPUT. Pass the expression as the script argument, or pass - to read it from stdin. --record-spec is required. Run from the .ldtxrecord root; this caller responsibility is not checked separately.
 
       TIME. Specify exactly one of --inmatch, --before-start, or --after-end. Values are seconds in the corresponding match-relative domain.
@@ -41,6 +43,7 @@ struct EvaluateDrawText: ParsableCommand {
   var script: String
   @Option(help: "Required record-spec.json path. Run from the .ldtxrecord root.")
   var recordSpec: String
+  @OptionGroup var matchInput: MatchInputOptions
   @Option(help: "Zero-based FRAME.index.") var index = 0
   @Option(help: "Seconds elapsed from the match start.") var inmatch: Double?
   @Option(help: "Seconds before the match start.") var beforeStart: Double?
@@ -48,6 +51,7 @@ struct EvaluateDrawText: ParsableCommand {
   @Option(help: "Decoded timestamp in match-relative seconds.") var actualInmatch: Double?
 
   func validate() throws {
+    try matchInput.validate()
     guard index >= 0 else { throw ValidationError("--index must be non-negative") }
     guard actualInmatch?.isFinite != false else {
       throw ValidationError("--actual-inmatch must be finite")
@@ -73,7 +77,8 @@ extension EvaluateDrawText {
         inmatch: command.inmatch,
         beforeStart: command.beforeStart,
         afterEnd: command.afterEnd,
-        actualInmatch: command.actualInmatch)
+        actualInmatch: command.actualInmatch,
+        source: try command.matchInput.source())
       continuation.yield(.init(text: result))
     }
   }

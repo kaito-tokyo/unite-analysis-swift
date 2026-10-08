@@ -11,9 +11,15 @@ public enum RecordingInputError: Error, CustomStringConvertible {
   case mainMediaNotFound(String)
   case recordingBundleNotFound(String)
   case unsupportedRecordingFormat(String)
+  case invalidStandaloneMP4(String)
+  case outputOverlapsInput(String)
 
   public var description: String {
     switch self {
+    case .invalidStandaloneMP4(let path):
+      return "Expected an existing regular .mp4 file: \(path)"
+    case .outputOverlapsInput(let path):
+      return "Output would overwrite an input: \(path)"
     case .inputNotFound(let path):
       return "Input not found: \(path)"
     case .unfinishedRecording(let path):
@@ -144,5 +150,58 @@ public struct ResolvedRecordingInput: Sendable {
       throw RecordingInputError.mainMediaNotFound(inputURL.path)
     }
     return Self(inputURL: inputURL, videoURL: fallback, bundleURL: inputURL)
+  }
+}
+
+/// Selects the source independently of a match's unchanged record spec.
+public enum MatchVideoInput: Sendable {
+  case recordingBundle
+  case standaloneMP4(URL)
+
+  public var isStandaloneMP4: Bool {
+    if case .standaloneMP4 = self { return true }
+    return false
+  }
+
+  public func resolve(recordSpecURL: URL, requireModernBundle: Bool = false) throws
+    -> ResolvedRecordingInput
+  {
+    switch self {
+    case .recordingBundle:
+      let bundle = try LDTXRecordingBundle.containing(recordSpecURL)
+      if requireModernBundle {
+        let video = try LDTXRecordingBundle.mainMediaURL(in: bundle)
+        return ResolvedRecordingInput(inputURL: bundle, videoURL: video, bundleURL: bundle)
+      }
+      return try ResolvedRecordingInput.resolve(bundle.path, allowUnfinished: true)
+    case .standaloneMP4(let url):
+      let source = url.standardizedFileURL
+      guard source.pathExtension.lowercased() == "mp4",
+        (try? source.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
+      else {
+        throw RecordingInputError.invalidStandaloneMP4(source.path)
+      }
+      return ResolvedRecordingInput(inputURL: source, videoURL: source, bundleURL: nil)
+    }
+  }
+}
+
+extension MatchVideoInput {
+  public func validateOutput(_ output: URL, recordSpecURL: URL) throws {
+    guard case .standaloneMP4(let video) = self else { return }
+    let destination = output.standardizedFileURL.resolvingSymlinksInPath()
+    let attributes = try? FileManager.default.attributesOfItem(atPath: destination.path)
+    for input in [video, recordSpecURL] {
+      let resolved = input.standardizedFileURL.resolvingSymlinksInPath()
+      let inputAttributes = try? FileManager.default.attributesOfItem(atPath: resolved.path)
+      let sameFile =
+        attributes?[.systemFileNumber] as? NSNumber != nil
+        && attributes?[.systemFileNumber] as? NSNumber == inputAttributes?[.systemFileNumber]
+          as? NSNumber
+        && attributes?[.systemNumber] as? NSNumber == inputAttributes?[.systemNumber] as? NSNumber
+      guard destination.path != resolved.path, !sameFile else {
+        throw RecordingInputError.outputOverlapsInput(input.path)
+      }
+    }
   }
 }

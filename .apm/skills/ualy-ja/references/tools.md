@@ -6,6 +6,8 @@
 
 この文書は、不明な事実から次の調査へ進むための手順である。正確な引数、入出力、制約は実行中の`unite-analysis-swift help <subcommand>`を正本とし、実行方法と共通契約は[recording-workflow.md](recording-workflow.md)に従う。
 
+単体MP4では、試合検出に`--standalone-mp4 --input video.mp4 --output-dir analysis`を指定する。動画を読む試合単位のコマンドには`--standalone-mp4 --input video.mp4 --record-spec analysis/match-01/record-spec.json`を指定する。持ち物認識は`--output`も必須。[単体モードの入力・保存契約](recording-workflow.md#単体mp4モード)を参照する。
+
 ## 録画内の試合区間を検出する
 
 - **使うツール**: 完了した標準10分試合だけを扱う場合は`detect-matches-v1`を使う。降参または5分モードの可能性があり、終了を示すソース映像・音声を確認済みの場合だけ`detect-matches-v2`を使う。どちらもLDTX Visionメタデータには依存せず、recording format v2またはv3の主映像を直接順次デコードして試合タイマーをOCRする。

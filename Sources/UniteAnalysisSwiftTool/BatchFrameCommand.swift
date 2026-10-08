@@ -34,6 +34,8 @@ struct BatchFrame: ParsableCommand {
     commandName: "batch-frame",
     abstract: "Write source-video screenshots from JSONL frame jobs.",
     discussion: """
+      STANDALONE MP4. Add --standalone-mp4 --input video.mp4 and supply --record-spec for the same video. The record spec may be outside a .ldtxrecord. No recording metadata is read in this mode.
+
       EXECUTION ENVIRONMENT. This command must run outside a sandbox because AVFoundation source-video decoding is unavailable in the sandboxed execution environment.
 
       INPUT. Supply one jobs.jsonl path, or - for standard input. Each non-empty line is one JSON object requiring jobId, matchTimestamps, source, and outputPrefix. Relative paths use the current working directory. stdin is processed one line at a time without waiting for EOF.
@@ -59,8 +61,9 @@ struct BatchFrame: ParsableCommand {
   )
 
   @Argument(help: "jobs.jsonl path, or - to process standard input line by line.") var jobs: String
-  @Option(help: "Required record-spec.json path. Run from the .ldtxrecord root.")
+  @Option(help: "Required record-spec.json path. With --standalone-mp4, also supply --input.")
   var recordSpec: String
+  @OptionGroup var matchInput: MatchInputOptions
 
   @Option(help: "JPEG quality from 0 through 1.")
   var quality: Double = 0.6
@@ -69,6 +72,7 @@ struct BatchFrame: ParsableCommand {
   var force = false
 
   func validate() throws {
+    try matchInput.validate()
     guard quality.isFinite, (0...1).contains(quality) else {
       throw ValidationError("--quality must be a finite value from 0 through 1")
     }
@@ -86,7 +90,8 @@ extension BatchFrame {
     commandOutputStream { continuation in
       let command = self
       var media = try await RecordingMediaContext.prepare(
-        recordSpecURL: resolveRecordSpec(command.recordSpec))
+        recordSpecURL: resolveRecordSpec(command.recordSpec),
+        source: try command.matchInput.source())
       var jobIds = Set<String>()
       let count = try await forEachJSONLInputLine(command.jobs) { line in
         let recoveredJobId = jsonlJobID(in: line.data)

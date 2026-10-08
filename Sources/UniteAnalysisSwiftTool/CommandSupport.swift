@@ -451,33 +451,36 @@ func canonicalSeconds(_ value: Double) -> String {
 struct RecordingMediaContext {
   let recordSpecURL: URL
   let isFinalized: Bool
+  let source: MatchVideoInput
   let spec: RecordSpec
   let recording: ResolvedRecordingInput
   let extractor: VideoFrameExtractor
 
-  static func prepare(recordSpecURL: URL) async throws -> Self {
+  static func prepare(recordSpecURL: URL, source: MatchVideoInput = .recordingBundle) async throws
+    -> Self
+  {
     let spec = try JSONDecoder().decode(
       RecordSpec.self, from: Data(contentsOf: recordSpecURL))
     RecordVisionInputLogger.recordSpec(recordSpecURL)
     guard spec.startPTS.timescale > 0 else {
       throw UniteAnalysisSwiftToolError.message("startPTS.timescale must be positive")
     }
-    let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-    let isFinalized = FileManager.default.fileExists(
-      atPath: bundleURL.appendingPathComponent(".finalized").path)
-    if !isFinalized {
-      RecordVisionInputLogger.unfinishedRecording(bundleURL)
-    }
-    let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
+    let recording = try resolveMatchRecording(recordSpecURL: recordSpecURL, source: source)
+    let isFinalized =
+      recording.bundleURL.map {
+        FileManager.default.fileExists(atPath: $0.appendingPathComponent(".finalized").path)
+      } ?? true
     RecordVisionInputLogger.sourceVideo(recording.videoURL)
     return try await Self(
-      recordSpecURL: recordSpecURL, isFinalized: isFinalized, spec: spec, recording: recording,
-      extractor: VideoFrameExtractor(videoURL: recording.videoURL))
+      recordSpecURL: recordSpecURL, isFinalized: isFinalized, source: source, spec: spec,
+      recording: recording,
+      extractor: VideoFrameExtractor(
+        videoURL: recording.videoURL, displayOrientedFrames: source.isStandaloneMP4))
   }
 
   func refreshedIfUnfinished() async throws -> Self {
     if isFinalized { return self }
-    return try await Self.prepare(recordSpecURL: recordSpecURL)
+    return try await Self.prepare(recordSpecURL: recordSpecURL, source: source)
   }
 }
 
@@ -548,6 +551,7 @@ func renderFrames(
       throw UniteAnalysisSwiftToolError.message(
         "Output collision: \(request.url.path). Pass --force to overwrite.")
     }
+    try media.source.validateOutput(request.url, recordSpecURL: media.recordSpecURL)
     try validateOutputPath(request.url, force: force)
   }
   let orderedRequests = requests.sorted { CMTimeCompare($0.time, $1.time) < 0 }
@@ -569,6 +573,7 @@ func renderFrames(
 
 func renderSampleFrames(
   recordSpecURL: URL,
+  videoInput videoSource: MatchVideoInput = .recordingBundle,
   request: SampleFramesRequest,
   quality: Double,
   force: Bool
@@ -579,13 +584,10 @@ func renderSampleFrames(
     throw UniteAnalysisSwiftToolError.message(
       "record-spec.json must have a positive startPTS timescale and duration")
   }
-  let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-  if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
-    RecordVisionInputLogger.unfinishedRecording(bundleURL)
-  }
-  let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
+  let recording = try resolveMatchRecording(recordSpecURL: recordSpecURL, source: videoSource)
   RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
+  let extractor = try await VideoFrameExtractor(
+    videoURL: recording.videoURL, displayOrientedFrames: videoSource.isStandaloneMP4)
   let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
 
   struct OutputRequest {
@@ -602,6 +604,7 @@ func renderSampleFrames(
     let outputURL = URL(
       fileURLWithPath: absolutePattern.replacingOccurrences(of: "%06d", with: frameNumber)
     ).standardizedFileURL
+    try videoSource.validateOutput(outputURL, recordSpecURL: recordSpecURL)
     try validateOutputPath(outputURL, force: force)
     requests.append(OutputRequest(outputURL: outputURL, requestedInmatch: offset))
   }
@@ -627,12 +630,14 @@ func renderSampleFrames(
 
 func renderPreciseFrame(
   recordSpecURL: URL,
+  videoInput videoSource: MatchVideoInput = .recordingBundle,
   scene: Scene,
   source: FrameSource,
   outputURL: URL,
   quality: Double,
   force: Bool
 ) async throws -> String {
+  try videoSource.validateOutput(outputURL, recordSpecURL: recordSpecURL)
   try validateOutputPath(outputURL, force: force)
   let spec = try JSONDecoder().decode(RecordSpec.self, from: Data(contentsOf: recordSpecURL))
   RecordVisionInputLogger.recordSpec(recordSpecURL)
@@ -650,13 +655,10 @@ func renderPreciseFrame(
   let requestedTime = CMTimeAdd(
     CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale),
     CMTime(seconds: offset, preferredTimescale: spec.startPTS.timescale))
-  let bundleURL = try LDTXRecordingBundle.containing(recordSpecURL)
-  if !FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent(".finalized").path) {
-    RecordVisionInputLogger.unfinishedRecording(bundleURL)
-  }
-  let recording = try ResolvedRecordingInput.resolve(bundleURL.path, allowUnfinished: true)
+  let recording = try resolveMatchRecording(recordSpecURL: recordSpecURL, source: videoSource)
   RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
+  let extractor = try await VideoFrameExtractor(
+    videoURL: recording.videoURL, displayOrientedFrames: videoSource.isStandaloneMP4)
   guard CMTimeCompare(requestedTime, .zero) >= 0,
     CMTimeCompare(requestedTime, extractor.duration) < 0
   else {
