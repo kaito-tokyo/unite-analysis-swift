@@ -52,6 +52,8 @@ unite-analysis-swift extract-clip --standalone-mp4 --input video.mp4 --record-sp
 
 出力ディレクトリには`match-detection.json`と、確定した各試合の`match-<NN>/record-spec.json`が生成される。未分類候補にはspecを作らない。試合ゼロの場合は検出JSONだけを生成する。v1の`--audit-id`は`<analysis-dir>/audits/<id>/`へ保存する。単体モードの試合検出で`--output`は使わない。`--force`は指定ディレクトリ全体を置換するため、既存の分析成果物が必要なら別ディレクトリを指定する。入力ファイルを含むディレクトリや作業ディレクトリ自体は置換先に指定できない。
 
+`eval-draw-text-script`も単体モードに対応し、`--standalone-mp4 --input <video.mp4> --record-spec <生成したspec>`を指定する。単体モードのゲーム画面矩形、抽出の切り抜き座標、`VIDEO.width`と`VIDEO.height`は、回転を反映した表示方向の座標で統一する。
+
 後続の動画を読む試合単位のコマンドには`--standalone-mp4 --input <同じvideo.mp4> --record-spec <生成したspec>`を指定する。specの内容と試合相対時刻の意味は通常モードと同じであり、動画パスはspecに保存されない。specと動画の組合せは呼び出し側が一致させる。持ち物認識では`--output`も必須で、診断PNGはその親ディレクトリへ保存するため`--dump-akaze-inputs`を指定しない。成果物とレポートは明示した分析ディレクトリの試合別ディレクトリへ保存する。
 
 ASR、静止画OCR・リザルト認識、画像列の色差検出、イベント候補の統合は既存のファイル入力を使い、単体MP4フラグもrecord-spec指定も追加しない。この節の単体モードでは、後述の`.ldtxrecord`ルートやバンドル内保存先の規定を、明示したMP4と分析ディレクトリに読み替える。

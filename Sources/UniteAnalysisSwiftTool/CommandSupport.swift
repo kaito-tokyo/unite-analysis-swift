@@ -474,7 +474,8 @@ struct RecordingMediaContext {
     return try await Self(
       recordSpecURL: recordSpecURL, isFinalized: isFinalized, source: source, spec: spec,
       recording: recording,
-      extractor: VideoFrameExtractor(videoURL: recording.videoURL))
+      extractor: VideoFrameExtractor(
+        videoURL: recording.videoURL, displayOrientedFrames: source.isStandaloneMP4))
   }
 
   func refreshedIfUnfinished() async throws -> Self {
@@ -585,7 +586,8 @@ func renderSampleFrames(
   }
   let recording = try resolveMatchRecording(recordSpecURL: recordSpecURL, source: videoSource)
   RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
+  let extractor = try await VideoFrameExtractor(
+    videoURL: recording.videoURL, displayOrientedFrames: videoSource.isStandaloneMP4)
   let start = CMTime(value: spec.startPTS.value, timescale: spec.startPTS.timescale)
 
   struct OutputRequest {
@@ -655,7 +657,8 @@ func renderPreciseFrame(
     CMTime(seconds: offset, preferredTimescale: spec.startPTS.timescale))
   let recording = try resolveMatchRecording(recordSpecURL: recordSpecURL, source: videoSource)
   RecordVisionInputLogger.sourceVideo(recording.videoURL)
-  let extractor = try await VideoFrameExtractor(videoURL: recording.videoURL)
+  let extractor = try await VideoFrameExtractor(
+    videoURL: recording.videoURL, displayOrientedFrames: videoSource.isStandaloneMP4)
   guard CMTimeCompare(requestedTime, .zero) >= 0,
     CMTimeCompare(requestedTime, extractor.duration) < 0
   else {

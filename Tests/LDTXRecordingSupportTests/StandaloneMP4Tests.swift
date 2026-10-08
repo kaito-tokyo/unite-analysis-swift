@@ -4,8 +4,10 @@
 
 import AVFoundation
 import ArgumentParser
+import CoreGraphics
 import CoreMedia
 import Foundation
+import ImageIO
 import LDTXRecordingSupport
 import RecordVisionSupport
 import Testing
@@ -37,6 +39,7 @@ import Testing
     ["contact-sheet", "jobs.jsonl"],
     ["frame-burst", "jobs.jsonl"],
     ["audio-peaks-v1"],
+    ["eval-draw-text-script", "VIDEO.width", "--inmatch", "0"],
     ["extract-clip", "--output", "clip.mp4"],
     [
       "precise-frame", "--match-timestamp", "1", "--x", "0", "--y", "0", "--width", "16",
@@ -263,28 +266,42 @@ import Testing
   #expect(try Data(contentsOf: video) == Data(contentsOf: bundledVideo))
 }
 
-private func writeStandaloneFixtureVideo(to url: URL) async throws {
+private func writeStandaloneFixtureVideo(
+  to url: URL, width: Int = 16, height: Int = 16, transform: CGAffineTransform = .identity
+) async throws {
   let writer = try AVAssetWriter(url: url, fileType: .mp4)
   let input = AVAssetWriterInput(
     mediaType: .video,
     outputSettings: [
-      AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 16, AVVideoHeightKey: 16,
+      AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
     ])
   let adaptor = AVAssetWriterInputPixelBufferAdaptor(
     assetWriterInput: input,
     sourcePixelBufferAttributes: [
       kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-      kCVPixelBufferWidthKey as String: 16, kCVPixelBufferHeightKey as String: 16,
+      kCVPixelBufferWidthKey as String: width, kCVPixelBufferHeightKey as String: height,
     ])
+  input.transform = transform
   writer.add(input)
   try #require(writer.startWriting())
   writer.startSession(atSourceTime: .zero)
   var buffer: CVPixelBuffer?
   try #require(
-    CVPixelBufferCreate(nil, 16, 16, kCVPixelFormatType_32BGRA, nil, &buffer) == kCVReturnSuccess)
+    CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, nil, &buffer)
+      == kCVReturnSuccess)
   let pixels = try #require(buffer)
   CVPixelBufferLockBaseAddress(pixels, [])
-  memset(CVPixelBufferGetBaseAddress(pixels), 0, CVPixelBufferGetDataSize(pixels))
+  let address = try #require(CVPixelBufferGetBaseAddress(pixels)).assumingMemoryBound(
+    to: UInt8.self)
+  for y in 0..<height {
+    for x in 0..<width {
+      let offset = y * CVPixelBufferGetBytesPerRow(pixels) + x * 4
+      address[offset] = x < width / 2 ? 0 : 255
+      address[offset + 1] = 0
+      address[offset + 2] = x < width / 2 ? 255 : 0
+      address[offset + 3] = 255
+    }
+  }
   CVPixelBufferUnlockBaseAddress(pixels, [])
   let deadline = ContinuousClock.now.advanced(by: .seconds(10))
   for index in 0..<90 {
@@ -322,4 +339,100 @@ private func writeStandaloneFixtureVideo(to url: URL) async throws {
   #expect(v2Specs.count == 1 && v2Specs[0].duration == 330)
   #expect(v2Specs[0].startPTS.value == 60_000_000)
   #expect(v2.unclassifiedCandidates.count == 1)
+}
+
+@Test func rotatedStandaloneConsumersUseDisplayCoordinates() async throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+  let video = root.appendingPathComponent("rotated.mp4")
+  try await writeStandaloneFixtureVideo(
+    to: video, width: 32, height: 16, transform: .init(a: 0, b: 1, c: -1, d: 0, tx: 16, ty: 0))
+  let source = MatchVideoInput.standaloneMP4(video)
+  let spec = root.appendingPathComponent("record-spec.json")
+  let rectangle = GameScreenRectangle(x: 0, y: 0, width: 16, height: 32)
+  try prettyPrintedJSONData(
+    StandaloneMatchSpec(matchId: "match-01", start: 0, duration: 1, gameScreen: rectangle)
+  ).write(to: spec)
+  let media = try await RecordingMediaContext.prepare(recordSpecURL: spec, source: source)
+  let fullFrame = root.appendingPathComponent("full.jpg")
+  _ = try await renderFrames(
+    context: media,
+    requests: [
+      .init(
+        scene: .matchRelative(0), source: .init(x: 0, y: 0, width: 16, height: 32),
+        outputURL: fullFrame)
+    ], quality: 1, force: false)
+  let imageSource = try #require(CGImageSourceCreateWithURL(fullFrame as CFURL, nil))
+  let image = try #require(CGImageSourceCreateImageAtIndex(imageSource, 0, nil))
+  #expect(image.width == 16 && image.height == 32)
+  let crop = FrameSource(x: 0, y: 0, width: 16, height: 16)
+  let precise = root.appendingPathComponent("precise.jpg")
+  _ = try await renderPreciseFrame(
+    recordSpecURL: spec, videoInput: source, scene: .matchRelative(0), source: crop,
+    outputURL: precise, quality: 1, force: false)
+  let batch = root.appendingPathComponent("batch.jpg")
+  _ = try await renderFrames(
+    context: media, requests: [.init(scene: .matchRelative(0), source: crop, outputURL: batch)],
+    quality: 1, force: false)
+  _ = try await renderSampleFrames(
+    recordSpecURL: spec, videoInput: source,
+    request: .init(
+      source: crop, fps: 1, scaleX: 16, scaleY: 16,
+      outputPattern: root.appendingPathComponent("sample-%06d.jpg").path), quality: 1, force: false)
+  let prepared = try await ContactSheetGenerator.prepare(recordSpecURL: spec, source: source)
+  let definition = Data(
+    #"{"cell":{"width":16,"height":16},"columns":1,"placements":[{"source":{"x":0,"y":0,"width":16,"height":16},"destination":{"x":0,"y":0,"width":16,"height":16}}],"matchTimestamps":[0]}"#
+      .utf8)
+  let sheet = root.appendingPathComponent("sheet.jpg")
+  try await ContactSheetGenerator.run(
+    definitionData: definition, prepared: prepared, outputURL: sheet, quality: 1, force: false)
+  let expected = try meanRGB(precise)
+  #expect(expected[0] > 200 && expected[2] < 30)
+  for url in [batch, sheet, root.appendingPathComponent("sample-000001.jpg")] {
+    let actual = try meanRGB(url)
+    #expect(zip(actual, expected).allSatisfy { abs($0 - $1) < 20 })
+  }
+  let extractor = try await LDTXRecordingSupport.VideoFrameExtractor(
+    videoURL: video, displayOrientedFrames: true)
+  var frames = 0
+  try extractor.extractConsecutiveFrames(startingAt: .zero, count: 60) { _, image, _ in
+    #expect(image.width == 16 && image.height == 32)
+    if frames == 0 {
+      let first = root.appendingPathComponent("consecutive.jpg")
+      try VideoFrameSupport.writeBaselineJPEG(
+        VideoFrameSupport.cropped(image, rect: crop.rect), to: first, quality: 1, force: false)
+      let actual = try meanRGB(first)
+      #expect(zip(actual, expected).allSatisfy { abs($0 - $1) < 20 })
+    }
+    frames += 1
+  }
+  #expect(frames == 60)
+  let command = try EvaluateDrawText.parse([
+    "VIDEO.width + 'x' + VIDEO.height", "--standalone-mp4", "--input", video.path, "--record-spec",
+    spec.path, "--inmatch", "0",
+  ])
+  for try await record in command.outputRecords() { #expect(record.text == "16x32") }
+  let text = try await DrawTextScriptEngine.evaluate(
+    script: "VIDEO.width + 'x' + VIDEO.height", recordSpecURL: spec, index: 0, inmatch: 0,
+    beforeStart: nil, afterEnd: nil, source: source)
+  #expect(text == "16x32")
+}
+
+private func meanRGB(_ url: URL) throws -> [Double] {
+  let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+  let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+  var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+  return try pixels.withUnsafeMutableBytes { bytes in
+    let context = try #require(
+      CGContext(
+        data: bytes.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
+        bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return (0..<3).map { channel in
+      stride(from: channel, to: bytes.count, by: 4).reduce(0.0) { $0 + Double(bytes[$1]) }
+        / Double(image.width * image.height)
+    }
+  }
 }

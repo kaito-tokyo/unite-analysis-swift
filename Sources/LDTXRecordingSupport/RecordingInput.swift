@@ -158,6 +158,11 @@ public enum MatchVideoInput: Sendable {
   case recordingBundle
   case standaloneMP4(URL)
 
+  public var isStandaloneMP4: Bool {
+    if case .standaloneMP4 = self { return true }
+    return false
+  }
+
   public func resolve(recordSpecURL: URL, requireModernBundle: Bool = false) throws
     -> ResolvedRecordingInput
   {
