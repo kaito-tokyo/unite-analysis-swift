@@ -15,7 +15,9 @@ let package = Package(
     .target(
       name: "OpenCVCore",
       path: "Vendor",
-      exclude: ["opencv/samples"],
+      exclude: [
+        "opencv/samples", "opencv/platforms/ios/PrivacyInfo.xcprivacy", "nanopb/spm_resources",
+      ],
       sources: [
         "opencv/modules/core/src/algorithm.cpp",
         "opencv/modules/core/src/alloc.cpp",
@@ -101,7 +103,9 @@ let package = Package(
       name: "OpenCVAKAZE",
       dependencies: ["OpenCVCore"],
       path: "Vendor",
-      exclude: ["opencv/samples"],
+      exclude: [
+        "opencv/samples", "opencv/platforms/ios/PrivacyInfo.xcprivacy", "nanopb/spm_resources",
+      ],
       sources: [
         "opencv/modules/imgproc/src/box_filter.dispatch.cpp",
         "opencv/modules/imgproc/src/color.cpp",
@@ -149,7 +153,10 @@ let package = Package(
       name: "IconMatcherNative",
       dependencies: ["OpenCVAKAZE", "Nanopb"],
       path: ".",
-      exclude: ["Vendor/opencv/samples"],
+      exclude: [
+        "Vendor/opencv/samples", "Vendor/opencv/platforms/ios/PrivacyInfo.xcprivacy",
+        "Vendor/nanopb/spm_resources",
+      ],
       sources: ["Sources/IconMatcherNative"],
       publicHeadersPath: "Sources/IconMatcherNative/include",
       cSettings: [
