@@ -230,7 +230,6 @@ let package = Package(
         "UniteAnalysisModelCommands",
         "IconMatcherNative",
       ],
-      resources: [.process("Fixtures")],
       swiftSettings: [.interoperabilityMode(.Cxx)]),
   ],
   cxxLanguageStandard: .cxx17
