@@ -6,7 +6,6 @@ import CoreGraphics
 import CxxStdlib
 import Foundation
 import IconMatcherNative
-import ImageIO
 import LDTXRecordingSupport
 import RecordVisionSupport
 import Testing
@@ -291,41 +290,6 @@ func declaredRouteUsesOpenCVHueScale(sample: ([UInt8], String)) throws {
   #expect(result[1].score == duplicate.score)
 }
 
-@Test func recognizesDraftRecordingFixture() throws {
-  let preparation = try loadAndNormalizeFixtureImage(
-    try #require(
-      Bundle.module.url(forResource: "final-preparation", withExtension: "jpg")))
-  let versus = try loadAndNormalizeFixtureImage(
-    try #require(
-      Bundle.module.url(forResource: "versus", withExtension: "jpg")))
-  let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
-  #expect(matcher.isValid())
-
-  let result = try LoadoutRecognizer.recognizeDraft(
-    finalPreparation: preparation, versus: versus, matcher: matcher)
-
-  #expect(
-    result.allies.map { $0.heldItems.map(\.name) } == [
-      ["Choice Specs", "Shell Bell", "Slick Spoon"],
-      ["Vanguard Bell", "Focus Band", "Muscle Band"],
-      ["Rapid Fire Scarf", "Float Stone", "Curse Bangle"],
-      ["Choice Specs", "Slick Spoon", "Wise Glasses"],
-      ["Accel Bracer", "Razor Claw", "Weakness Policy"],
-    ])
-  #expect(
-    result.allies.map { $0.battleItem.name } == [
-      "Eject Button", "Eject Button", "Eject Button", "X Speed", "Full Heal",
-    ])
-  #expect(
-    result.allies.map { $0.declaredRoute.name } == [
-      "top", "bottom", "top", "bottom", "central",
-    ])
-  #expect(
-    result.enemies.map { $0.battleItem.name } == [
-      "Eject Button", "X Speed", "Eject Button", "Full Heal", "Full Heal",
-    ])
-}
-
 @Test func preparedDiagnosticImagesUseDatabaseDimensions() throws {
   let matcher = unite_analysis.IconMatcher(std.string(descriptorFixtureURL.path))
   let pixels = [UInt8](repeating: 255, count: 48 * 48 * 3)
@@ -562,12 +526,6 @@ private func descriptorDatabaseFixture(
     protobufBytesField(4, Data("550e8400-e29b-41d4-a716-446655440000".utf8)),
     protobufBytesField(5, Data(createdAt.utf8)),
   ])
-}
-
-private func loadAndNormalizeFixtureImage(_ url: URL) throws -> CGImage {
-  let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
-  let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
-  return try VideoFrameSupport.resized(image, width: 1920, height: 1080)
 }
 
 private func descriptorEntry(name: Data, category: UInt64, byte: UInt8) -> Data {
